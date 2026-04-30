@@ -101,6 +101,10 @@ function alternateMocId(alternate: RebrickableAlternate) {
   return alternate.moc_id ?? null;
 }
 
+function partAssetId(item: RebrickableInventoryPart) {
+  return item.element_id?.trim() || `${item.part.part_num}-${item.color.id}`;
+}
+
 const imageFileExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"];
 
 function imageExtensionFromUrl(url: string) {
@@ -437,7 +441,7 @@ async function runSetDownload(
       const localImageUrl =
         (await downloadImage(
           item.part.part_img_url,
-          ["sets", set.set_num, "parts", item.part.part_num],
+          ["parts", partAssetId(item)],
           "part",
           signal,
         )) ??
@@ -586,6 +590,7 @@ async function runSetDownload(
             partNum: item.part.part_num,
             colorId: item.color.id,
             elementId: item.element_id,
+            imageUrl,
             quantity: item.quantity,
             isSpare: item.is_spare,
             rawJson: JSON.stringify(item),
@@ -601,6 +606,7 @@ async function runSetDownload(
             ],
             set: {
               elementId: item.element_id,
+              imageUrl,
               quantity: item.quantity,
               rawJson: JSON.stringify(item),
               updatedAt: now,
@@ -861,7 +867,7 @@ export function getSetDetailData(setNum: string) {
     return null;
   }
 
-  const inventory = db
+  const inventoryRows = db
     .select({
       partNum: setParts.partNum,
       partName: parts.name,
@@ -871,7 +877,8 @@ export function getSetDetailData(setNum: string) {
       elementId: setParts.elementId,
       quantity: setParts.quantity,
       isSpare: setParts.isSpare,
-      imageUrl: parts.imageUrl,
+      imageUrl: setParts.imageUrl,
+      partImageUrl: parts.imageUrl,
     })
     .from(setParts)
     .innerJoin(parts, eq(setParts.partNum, parts.partNum))
@@ -879,6 +886,10 @@ export function getSetDetailData(setNum: string) {
     .where(eq(setParts.setNum, setNum))
     .orderBy(asc(setParts.isSpare), desc(setParts.quantity), asc(parts.name))
     .all();
+  const inventory = inventoryRows.map(({ partImageUrl, ...item }) => ({
+    ...item,
+    imageUrl: item.imageUrl ?? partImageUrl,
+  }));
 
   const [setCount] = db.select({ value: count() }).from(sets).all();
   const alternateWhere =

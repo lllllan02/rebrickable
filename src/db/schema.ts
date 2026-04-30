@@ -80,6 +80,7 @@ export const setParts = sqliteTable(
       .notNull()
       .references(() => colors.id),
     elementId: text("element_id"),
+    imageUrl: text("image_url"),
     quantity: integer("quantity").notNull(),
     isSpare: integer("is_spare", { mode: "boolean" }).notNull().default(false),
     rawJson: text("raw_json"),

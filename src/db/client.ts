@@ -57,5 +57,22 @@ if (hasMocsTable) {
   }
 }
 
+const hasSetPartsTable = Boolean(
+  sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'set_parts'")
+    .get(),
+);
+
+if (hasSetPartsTable) {
+  const setPartColumns = sqlite
+    .prepare("PRAGMA table_info(set_parts)")
+    .all()
+    .map((column) => (column as { name: string }).name);
+
+  if (!setPartColumns.includes("image_url")) {
+    sqlite.exec("ALTER TABLE set_parts ADD COLUMN image_url text");
+  }
+}
+
 export const db = drizzle(sqlite, { schema });
 export const dbPath = databasePath;
