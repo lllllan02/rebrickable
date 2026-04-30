@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { defineConfig } from "drizzle-kit";
 
@@ -9,6 +8,6 @@ export default defineConfig({
   dbCredentials: {
     url:
       process.env.REBRICKABLE_DB_PATH ??
-      join(homedir(), ".rebrickable-manager", "rebrickable.db"),
+      join(process.cwd(), "data", "rebrickable.db"),
   },
 });

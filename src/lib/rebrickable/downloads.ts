@@ -78,6 +78,23 @@ export function saveRebrickableApiKey(apiKey: string): ActionResult {
   return { ok: true, message: "Rebrickable API Key 已保存到本地数据库。" };
 }
 
+export function getApiKeySettings() {
+  const apiKeyFromEnv = process.env.REBRICKABLE_API_KEY?.trim();
+  const apiKeyFromDb = db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, "rebrickable_api_key"))
+    .get();
+  const apiKeyFromDatabase = apiKeyFromDb?.value.trim();
+  const value = apiKeyFromEnv || apiKeyFromDatabase || "";
+
+  return {
+    isConfigured: Boolean(value),
+    source: apiKeyFromEnv ? "env" : apiKeyFromDatabase ? "database" : null,
+    value,
+  };
+}
+
 export async function downloadSetById(rawSetNum: string): Promise<ActionResult> {
   const setNum = normalizeSetNum(rawSetNum);
 

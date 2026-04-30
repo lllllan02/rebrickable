@@ -1,9 +1,9 @@
+import Link from "next/link";
 import { Box, Database, Download, Settings } from "lucide-react";
 
 import {
   downloadMocAction,
   downloadSetAction,
-  saveApiKeyAction,
 } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,9 +31,18 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
       <header className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-8 text-white">
-        <div className="flex items-center gap-3 text-sm text-slate-300">
-          <Database className="h-4 w-4" />
-          <span>SQLite: {dbPath}</span>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-sm text-slate-300">
+            <Database className="h-4 w-4" />
+            <span>SQLite: {dbPath}</span>
+          </div>
+          <Link
+            href="/settings"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20"
+          >
+            <Settings className="h-4 w-4" />
+            设置
+          </Link>
         </div>
         <div>
           <p className="text-sm font-medium text-slate-300">本地优先</p>
@@ -62,21 +71,7 @@ export default function Home() {
         </Card>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            <CardTitle>API 设置</CardTitle>
-          </div>
-          <CardDescription>
-            API Key 会保存在本地 SQLite，也可以使用环境变量 REBRICKABLE_API_KEY。
-          </CardDescription>
-          <form action={saveApiKeyAction} className="mt-5 flex flex-col gap-3">
-            <Input name="apiKey" type="password" placeholder="Rebrickable API Key" />
-            <Button type="submit">保存 API Key</Button>
-          </form>
-        </Card>
-
+      <section className="grid gap-6 lg:grid-cols-2">
         <Card>
           <div className="flex items-center gap-2">
             <Download className="h-5 w-5" />

@@ -30,7 +30,7 @@ REBRICKABLE_API_KEY=your_key pnpm dev
 默认数据库路径是：
 
 ```text
-~/.rebrickable-manager/rebrickable.db
+data/rebrickable.db
 ```
 
 可以用 `REBRICKABLE_DB_PATH` 覆盖：
@@ -38,6 +38,8 @@ REBRICKABLE_API_KEY=your_key pnpm dev
 ```bash
 REBRICKABLE_DB_PATH=/path/to/rebrickable.db pnpm dev
 ```
+
+如果需要把数据库内容同步到 GitHub，可以提交 `data/rebrickable.db`。提交前建议停止开发服务器，避免 SQLite 临时日志文件还没写回主数据库；不要把包含 Rebrickable API Key 的数据库提交到公开仓库，推荐用环境变量提供 API Key。
 
 ## Scripts
 

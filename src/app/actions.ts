@@ -37,6 +37,7 @@ export async function saveApiKeyAction(formData: FormData) {
 
   saveRebrickableApiKey(parsed.data.apiKey);
   revalidatePath("/");
+  revalidatePath("/settings");
 }
 
 export async function downloadSetAction(formData: FormData) {
