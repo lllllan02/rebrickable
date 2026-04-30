@@ -55,7 +55,17 @@ export function DownloadJobsPanel({ initialJobs }: DownloadJobsPanelProps) {
   }, []);
 
   useEffect(() => {
-    setJobs(initialJobs);
+    const controller = new AbortController();
+
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        setJobs(initialJobs);
+      }
+    });
+
+    return () => {
+      controller.abort();
+    };
   }, [initialJobs]);
 
   useEffect(() => {

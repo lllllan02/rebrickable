@@ -34,7 +34,8 @@ export type RebrickableInventoryPart = {
 };
 
 export type RebrickableAlternate = {
-  moc_id: number;
+  moc_id?: number;
+  set_num?: string;
   name: string;
   designer_name?: string;
   num_parts?: number;

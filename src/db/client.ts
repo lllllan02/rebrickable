@@ -40,5 +40,22 @@ if (hasDownloadJobsTable) {
   }
 }
 
+const hasMocsTable = Boolean(
+  sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mocs'")
+    .get(),
+);
+
+if (hasMocsTable) {
+  const mocColumns = sqlite
+    .prepare("PRAGMA table_info(mocs)")
+    .all()
+    .map((column) => (column as { name: string }).name);
+
+  if (!mocColumns.includes("source_set_num")) {
+    sqlite.exec("ALTER TABLE mocs ADD COLUMN source_set_num text");
+  }
+}
+
 export const db = drizzle(sqlite, { schema });
 export const dbPath = databasePath;

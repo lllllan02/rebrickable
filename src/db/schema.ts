@@ -98,6 +98,7 @@ export const mocs = sqliteTable(
     mocId: integer("moc_id").primaryKey(),
     name: text("name").notNull(),
     designerName: text("designer_name"),
+    sourceSetNum: text("source_set_num"),
     numParts: integer("num_parts"),
     imageUrl: text("image_url"),
     rebrickableUrl: text("rebrickable_url"),
@@ -107,7 +108,10 @@ export const mocs = sqliteTable(
     downloadedAt: integer("downloaded_at", { mode: "timestamp" }),
     ...timestamps,
   },
-  (table) => [index("mocs_name_idx").on(table.name)],
+  (table) => [
+    index("mocs_name_idx").on(table.name),
+    index("mocs_source_set_idx").on(table.sourceSetNum),
+  ],
 );
 
 export const mocParts = sqliteTable(

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
@@ -84,6 +84,21 @@ function throwIfCancelled(signal: AbortSignal) {
 
 function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function alternateMocCode(alternate: RebrickableAlternate) {
+  return alternate.set_num ?? (alternate.moc_id ? `MOC-${alternate.moc_id}` : null);
+}
+
+function alternateMocId(alternate: RebrickableAlternate) {
+  const code = alternateMocCode(alternate);
+  const match = code?.match(/^MOC-(\d+)$/i);
+
+  if (match) {
+    return Number(match[1]);
+  }
+
+  return alternate.moc_id ?? null;
 }
 
 const imageFileExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"];
@@ -446,10 +461,11 @@ async function runSetDownload(
 
     for (const alternate of alternates) {
       throwIfCancelled(signal);
+      const mocCode = alternateMocCode(alternate) ?? "unknown";
       const localImageUrl =
         (await downloadImage(
           alternate.moc_img_url,
-          ["sets", set.set_num, "mocs", String(alternate.moc_id)],
+          ["sets", set.set_num, "mocs", mocCode],
           "moc",
           signal,
         )) ??
@@ -462,7 +478,7 @@ async function runSetDownload(
         stage: "处理图片",
         current: processedImages,
         total: totalImages,
-        detail: `Alternate MOC-${alternate.moc_id}：${alternate.name}`,
+        detail: `Alternate ${mocCode}：${alternate.name}`,
       });
     }
 
@@ -594,11 +610,18 @@ async function runSetDownload(
       }
 
       for (const { alternate, imageUrl } of alternatesWithImages) {
+        const mocId = alternateMocId(alternate);
+
+        if (!mocId) {
+          continue;
+        }
+
         tx.insert(mocs)
           .values({
-            mocId: alternate.moc_id,
+            mocId,
             name: alternate.name,
             designerName: alternate.designer_name,
+            sourceSetNum: set.set_num,
             numParts: alternate.num_parts,
             imageUrl,
             rebrickableUrl: alternate.moc_url,
@@ -612,6 +635,7 @@ async function runSetDownload(
             set: {
               name: alternate.name,
               designerName: alternate.designer_name,
+            sourceSetNum: set.set_num,
               numParts: alternate.num_parts,
               imageUrl,
               rebrickableUrl: alternate.moc_url,
@@ -790,10 +814,43 @@ export function getSetListData() {
     .from(sets)
     .orderBy(desc(sets.updatedAt))
     .all();
+  const inventoryRows = db
+    .select({
+      setNum: setParts.setNum,
+      quantity: setParts.quantity,
+      isSpare: setParts.isSpare,
+    })
+    .from(setParts)
+    .all();
+  const inventoryBySet = new Map<
+    string,
+    { rowCount: number; quantity: number; spareRows: number }
+  >();
+
+  for (const row of inventoryRows) {
+    const current = inventoryBySet.get(row.setNum) ?? {
+      rowCount: 0,
+      quantity: 0,
+      spareRows: 0,
+    };
+
+    current.rowCount += 1;
+    current.quantity += row.quantity;
+    current.spareRows += row.isSpare ? 1 : 0;
+    inventoryBySet.set(row.setNum, current);
+  }
 
   return {
     count: setCount.value,
-    sets: allSets,
+    sets: allSets.map((set) => ({
+      ...set,
+      inventory: inventoryBySet.get(set.setNum) ?? {
+        rowCount: 0,
+        quantity: 0,
+        spareRows: 0,
+      },
+      assetBaseUrl: `/rebrickable-assets/sets/${set.setNum}`,
+    })),
   };
 }
 
@@ -808,6 +865,7 @@ export function getSetDetailData(setNum: string) {
     .select({
       partNum: setParts.partNum,
       partName: parts.name,
+      partCategoryName: parts.categoryName,
       colorName: colors.name,
       colorRgb: colors.rgb,
       elementId: setParts.elementId,
@@ -822,6 +880,17 @@ export function getSetDetailData(setNum: string) {
     .orderBy(asc(setParts.isSpare), desc(setParts.quantity), asc(parts.name))
     .all();
 
+  const [setCount] = db.select({ value: count() }).from(sets).all();
+  const alternateWhere =
+    setCount.value === 1
+      ? or(eq(mocs.sourceSetNum, setNum), isNull(mocs.sourceSetNum))
+      : eq(mocs.sourceSetNum, setNum);
+  const alternates = db
+    .select()
+    .from(mocs)
+    .where(alternateWhere)
+    .orderBy(desc(mocs.numParts), asc(mocs.name))
+    .all();
   const latestJob = db
     .select()
     .from(downloadJobs)
@@ -833,6 +902,18 @@ export function getSetDetailData(setNum: string) {
   return {
     set,
     inventory,
+    alternates,
+    assetBaseUrl: `/rebrickable-assets/sets/${setNum}`,
+    inventoryFiles: [
+      {
+        name: "inventory.json",
+        href: `/rebrickable-assets/sets/${setNum}/inventory.json`,
+      },
+      {
+        name: "inventory.csv",
+        href: `/rebrickable-assets/sets/${setNum}/inventory.csv`,
+      },
+    ],
     latestJob,
   };
 }
