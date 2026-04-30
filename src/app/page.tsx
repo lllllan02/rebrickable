@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { Box, Database, Download, List, Settings } from "lucide-react";
+import { Box, Database, Download } from "lucide-react";
 
 import { downloadMocAction } from "./actions";
 import { Badge } from "@/components/ui/badge";
@@ -42,27 +41,9 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
       <header className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-8 text-white">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 text-sm text-slate-300">
-            <Database className="h-4 w-4" />
-            <span>SQLite: {dbPath}</span>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href="/sets"
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20"
-            >
-              <List className="h-4 w-4" />
-              套装列表
-            </Link>
-            <Link
-              href="/settings"
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20"
-            >
-              <Settings className="h-4 w-4" />
-              设置
-            </Link>
-          </div>
+        <div className="flex items-center gap-3 text-sm text-slate-300">
+          <Database className="h-4 w-4" />
+          <span>SQLite: {dbPath}</span>
         </div>
         <div>
           <p className="text-sm font-medium text-slate-300">本地优先</p>

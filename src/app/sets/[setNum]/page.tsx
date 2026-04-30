@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Box, ExternalLink, FileText } from "lucide-react";
+import { Box, ExternalLink, FileText } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -241,13 +241,6 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
       <header className="flex flex-col gap-4">
-        <Link
-          href="/sets"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          返回套装列表
-        </Link>
         <div className="grid overflow-hidden rounded-3xl bg-slate-950 text-white lg:grid-cols-[360px_1fr]">
           <div className="flex min-h-80 items-center justify-center bg-white p-8">
             {data.set.imageUrl ? (

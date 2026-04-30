@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 
 import { saveApiKeyAction } from "../actions";
 import { Badge } from "@/components/ui/badge";
@@ -24,14 +23,7 @@ export default function SettingsPage() {
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-8">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回首页
-          </Link>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">设置</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-950">设置</h1>
           <p className="mt-2 text-sm text-slate-500">
             管理 Rebrickable 下载所需的基础配置。
           </p>

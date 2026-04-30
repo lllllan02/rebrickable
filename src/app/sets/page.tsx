@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Box, ExternalLink, FileText } from "lucide-react";
+import { Box, ExternalLink, FileText } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -29,13 +29,6 @@ export default function SetsPage() {
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
       <header className="flex flex-col gap-4">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          返回首页
-        </Link>
         <div className="flex flex-col justify-between gap-4 rounded-3xl bg-slate-950 p-8 text-white md:flex-row md:items-end">
           <div>
             <p className="text-sm font-medium text-slate-300">本地数据库</p>
