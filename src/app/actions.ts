@@ -5,8 +5,9 @@ import { z } from "zod";
 
 import {
   downloadMocById,
-  downloadSetById,
   saveRebrickableApiKey,
+  startDownloadSetById,
+  type ActionResult,
 } from "@/lib/rebrickable/downloads";
 
 const apiKeySchema = z.object({
@@ -49,8 +50,28 @@ export async function downloadSetAction(formData: FormData) {
     return;
   }
 
-  await downloadSetById(parsed.data.setNum);
+  startDownloadSetById(parsed.data.setNum);
   revalidatePath("/");
+  revalidatePath("/sets");
+}
+
+export async function downloadSetFormAction(
+  _prevState: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = setDownloadSchema.safeParse({
+    setNum: formValue(formData, "setNum"),
+  });
+
+  if (!parsed.success) {
+    return { ok: false, message: "Set ID 不能为空。" };
+  }
+
+  const result = startDownloadSetById(parsed.data.setNum);
+  revalidatePath("/");
+  revalidatePath("/sets");
+
+  return result;
 }
 
 export async function downloadMocAction(formData: FormData) {

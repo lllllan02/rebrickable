@@ -141,11 +141,15 @@ export const downloadJobs = sqliteTable(
     sourceType: text("source_type", { enum: ["set", "moc"] }).notNull(),
     sourceId: text("source_id").notNull(),
     status: text("status", {
-      enum: ["pending", "running", "completed", "failed"],
+      enum: ["pending", "running", "completed", "failed", "cancelled"],
     })
       .notNull()
       .default("pending"),
     message: text("message"),
+    progressStage: text("progress_stage"),
+    progressCurrent: integer("progress_current"),
+    progressTotal: integer("progress_total"),
+    progressDetail: text("progress_detail"),
     ...timestamps,
   },
   (table) => [index("download_jobs_source_idx").on(table.sourceType, table.sourceId)],

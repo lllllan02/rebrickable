@@ -1,16 +1,15 @@
 import Link from "next/link";
-import { Box, Database, Download, Settings } from "lucide-react";
+import { Box, Database, Download, List, Settings } from "lucide-react";
 
-import {
-  downloadMocAction,
-  downloadSetAction,
-} from "./actions";
+import { downloadMocAction } from "./actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { dbPath } from "@/db/client";
 import { getDashboardData } from "@/lib/rebrickable/downloads";
+import { DownloadSubmitButton } from "./download-submit-button";
+import { DownloadJobsPanel, type DownloadJobItem } from "./download-jobs-panel";
+import { SetDownloadForm } from "./set-download-form";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +26,18 @@ function formatDate(value: Date | null) {
 
 export default function Home() {
   const { counts, latestJobs, latestMocs, latestSets } = getDashboardData();
+  const downloadJobs: DownloadJobItem[] = latestJobs.map((job) => ({
+    id: job.id,
+    sourceType: job.sourceType,
+    sourceId: job.sourceId,
+    status: job.status,
+    message: job.message,
+    progressStage: job.progressStage,
+    progressCurrent: job.progressCurrent,
+    progressTotal: job.progressTotal,
+    progressDetail: job.progressDetail,
+    updatedAt: job.updatedAt.toISOString(),
+  }));
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
@@ -36,13 +47,22 @@ export default function Home() {
             <Database className="h-4 w-4" />
             <span>SQLite: {dbPath}</span>
           </div>
-          <Link
-            href="/settings"
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20"
-          >
-            <Settings className="h-4 w-4" />
-            设置
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/sets"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20"
+            >
+              <List className="h-4 w-4" />
+              套装列表
+            </Link>
+            <Link
+              href="/settings"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20"
+            >
+              <Settings className="h-4 w-4" />
+              设置
+            </Link>
+          </div>
         </div>
         <div>
           <p className="text-sm font-medium text-slate-300">本地优先</p>
@@ -80,10 +100,7 @@ export default function Home() {
           <CardDescription>
             支持 10316-1 这种完整 Set ID；如果只输入数字，会自动补为 -1。
           </CardDescription>
-          <form action={downloadSetAction} className="mt-5 flex flex-col gap-3">
-            <Input name="setNum" placeholder="例如 10316-1" />
-            <Button type="submit">下载 Set 数据</Button>
-          </form>
+          <SetDownloadForm />
         </Card>
 
         <Card>
@@ -95,10 +112,10 @@ export default function Home() {
             Rebrickable API v3 不支持按 MOC ID 下载零件清单；这里会记录失败任务和原因。
           </CardDescription>
           <form action={downloadMocAction} className="mt-5 flex flex-col gap-3">
-            <Input name="mocId" placeholder="例如 123456" />
-            <Button type="submit" variant="secondary">
+            <Input name="mocId" placeholder="例如 123456" required />
+            <DownloadSubmitButton variant="secondary" pendingLabel="正在检查 MOC ID...">
               检查 MOC ID
-            </Button>
+            </DownloadSubmitButton>
           </form>
         </Card>
       </section>
@@ -151,24 +168,7 @@ export default function Home() {
         </Card>
       </section>
 
-      <Card>
-        <CardTitle>下载记录</CardTitle>
-        <div className="mt-4 divide-y divide-slate-100">
-          {latestJobs.length === 0 ? (
-            <p className="py-6 text-sm text-slate-500">还没有下载记录。</p>
-          ) : (
-            latestJobs.map((job) => (
-              <div key={job.id} className="grid gap-2 py-3 md:grid-cols-[160px_120px_1fr]">
-                <div className="text-sm font-medium">
-                  {job.sourceType.toUpperCase()} {job.sourceId}
-                </div>
-                <Badge tone={job.status}>{job.status}</Badge>
-                <p className="text-sm text-slate-600">{job.message}</p>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+      <DownloadJobsPanel initialJobs={downloadJobs} />
     </main>
   );
 }

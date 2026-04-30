@@ -40,7 +40,7 @@ async function getApiKey() {
   return row?.value;
 }
 
-async function request<T>(path: string): Promise<T> {
+async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   const apiKey = await getApiKey();
 
   if (!apiKey) {
@@ -53,6 +53,7 @@ async function request<T>(path: string): Promise<T> {
       Accept: "application/json",
     },
     cache: "no-store",
+    signal,
   });
 
   if (!response.ok) {
@@ -66,12 +67,12 @@ async function request<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function requestAllPages<T>(path: string) {
+async function requestAllPages<T>(path: string, signal?: AbortSignal) {
   const items: T[] = [];
   let url = `${path}${path.includes("?") ? "&" : "?"}page_size=1000`;
 
   while (url) {
-    const page = await request<PaginatedResponse<T>>(url);
+    const page = await request<PaginatedResponse<T>>(url, signal);
     items.push(...page.results);
     url = page.next ? page.next.replace(baseUrl, "") : "";
   }
@@ -80,19 +81,21 @@ async function requestAllPages<T>(path: string) {
 }
 
 export const rebrickableClient = {
-  getSet(setNum: string) {
-    return request<RebrickableSet>(`/lego/sets/${encodeURIComponent(setNum)}/`);
+  getSet(setNum: string, signal?: AbortSignal) {
+    return request<RebrickableSet>(`/lego/sets/${encodeURIComponent(setNum)}/`, signal);
   },
 
-  getSetParts(setNum: string) {
+  getSetParts(setNum: string, signal?: AbortSignal) {
     return requestAllPages<RebrickableInventoryPart>(
       `/lego/sets/${encodeURIComponent(setNum)}/parts/`,
+      signal,
     );
   },
 
-  getSetAlternates(setNum: string) {
+  getSetAlternates(setNum: string, signal?: AbortSignal) {
     return requestAllPages<RebrickableAlternate>(
       `/lego/sets/${encodeURIComponent(setNum)}/alternates/`,
+      signal,
     );
   },
 };

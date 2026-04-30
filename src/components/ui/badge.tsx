@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 const styles = {
   completed: "bg-emerald-50 text-emerald-700",
   failed: "bg-red-50 text-red-700",
+  cancelled: "bg-slate-100 text-slate-600",
   running: "bg-blue-50 text-blue-700",
   pending: "bg-amber-50 text-amber-700",
   default: "bg-slate-100 text-slate-700",
