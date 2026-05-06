@@ -67,6 +67,30 @@ export const colors = sqliteTable("colors", {
   ...timestamps,
 });
 
+export const partColorOptions = sqliteTable(
+  "part_color_options",
+  {
+    partNum: text("part_num")
+      .notNull()
+      .references(() => parts.partNum),
+    colorId: integer("color_id")
+      .notNull()
+      .references(() => colors.id),
+    imageUrl: text("image_url"),
+    elementIds: text("element_ids"),
+    numSets: integer("num_sets"),
+    rawJson: text("raw_json"),
+    downloadedAt: integer("downloaded_at", { mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.partNum, table.colorId],
+    }),
+    index("part_color_options_color_idx").on(table.colorId),
+  ],
+);
+
 export const setParts = sqliteTable(
   "set_parts",
   {
@@ -143,7 +167,7 @@ export const downloadJobs = sqliteTable(
   "download_jobs",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    sourceType: text("source_type", { enum: ["set", "moc"] }).notNull(),
+    sourceType: text("source_type", { enum: ["set", "moc", "catalog"] }).notNull(),
     sourceId: text("source_id").notNull(),
     status: text("status", {
       enum: ["pending", "running", "completed", "failed", "cancelled"],
@@ -167,11 +191,24 @@ export const setRelations = relations(sets, ({ many }) => ({
 export const partRelations = relations(parts, ({ many }) => ({
   setInventories: many(setParts),
   mocInventories: many(mocParts),
+  colorOptions: many(partColorOptions),
 }));
 
 export const colorRelations = relations(colors, ({ many }) => ({
   setParts: many(setParts),
   mocParts: many(mocParts),
+  partOptions: many(partColorOptions),
+}));
+
+export const partColorOptionRelations = relations(partColorOptions, ({ one }) => ({
+  part: one(parts, {
+    fields: [partColorOptions.partNum],
+    references: [parts.partNum],
+  }),
+  color: one(colors, {
+    fields: [partColorOptions.colorId],
+    references: [colors.id],
+  }),
 }));
 
 export const setPartRelations = relations(setParts, ({ one }) => ({

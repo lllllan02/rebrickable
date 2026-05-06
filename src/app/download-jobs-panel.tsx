@@ -9,7 +9,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 
 export type DownloadJobItem = {
   id: number;
-  sourceType: "set" | "moc";
+  sourceType: "set" | "moc" | "catalog";
   sourceId: string;
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
   message: string | null;

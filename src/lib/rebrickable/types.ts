@@ -23,6 +23,14 @@ export type RebrickableColor = {
   is_trans?: boolean;
 };
 
+export type RebrickablePartColor = {
+  color_id: number;
+  color_name: string;
+  num_sets?: number;
+  part_img_url?: string | null;
+  elements?: string[];
+};
+
 export type RebrickableInventoryPart = {
   id?: number;
   inv_part_id?: number;

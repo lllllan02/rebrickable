@@ -7,6 +7,7 @@ import {
   colors,
   downloadJobs,
   mocs,
+  partColorOptions,
   parts,
   setParts,
   sets,
@@ -17,6 +18,7 @@ import { RebrickableApiError, rebrickableClient } from "./client";
 import type {
   RebrickableAlternate,
   RebrickableInventoryPart,
+  RebrickablePartColor,
   RebrickableSet,
 } from "./types";
 
@@ -26,6 +28,7 @@ export type ActionResult = {
 };
 
 type DownloadJobStatus = "completed" | "failed" | "cancelled";
+type DownloadSourceType = "set" | "moc" | "catalog";
 
 type DownloadProgress = {
   stage: string;
@@ -72,7 +75,7 @@ function isCancellation(error: unknown) {
   );
 }
 
-function targetKey(sourceType: "set" | "moc", sourceId: string) {
+function targetKey(sourceType: DownloadSourceType, sourceId: string) {
   return `${sourceType}:${sourceId}`;
 }
 
@@ -103,6 +106,10 @@ function alternateMocId(alternate: RebrickableAlternate) {
 
 function partAssetId(item: RebrickableInventoryPart) {
   return item.element_id?.trim() || `${item.part.part_num}-${item.color.id}`;
+}
+
+function partColorImageUrl(option: RebrickablePartColor) {
+  return option.part_img_url ?? null;
 }
 
 const imageFileExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"];
@@ -270,7 +277,7 @@ async function writeSetInventoryFiles(
   ]);
 }
 
-function createJob(sourceType: "set" | "moc", sourceId: string) {
+function createJob(sourceType: DownloadSourceType, sourceId: string) {
   return db
     .insert(downloadJobs)
     .values({
@@ -286,7 +293,7 @@ function createJob(sourceType: "set" | "moc", sourceId: string) {
     .get();
 }
 
-function getActiveDownloadJob(sourceType: "set" | "moc", sourceId: string) {
+function getActiveDownloadJob(sourceType: DownloadSourceType, sourceId: string) {
   return db
     .select({ id: downloadJobs.id })
     .from(downloadJobs)
@@ -389,6 +396,185 @@ export function getApiKeySettings() {
     source: apiKeyFromEnv ? "env" : apiKeyFromDatabase ? "database" : null,
     value,
   };
+}
+
+async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promise<ActionResult> {
+  updateJobProgress(jobId, {
+    stage: "获取零件索引",
+    current: 0,
+    detail: "正在读取 Rebrickable 全量零件和颜色列表",
+  });
+
+  try {
+    throwIfCancelled(signal);
+    const [allParts, allColors] = await Promise.all([
+      rebrickableClient.getAllParts(signal),
+      rebrickableClient.getColors(signal),
+    ]);
+    const now = new Date();
+
+    updateJobProgress(jobId, {
+      stage: "写入基础数据",
+      current: 0,
+      total: allParts.length,
+      detail: `正在写入 ${allParts.length} 个零件和 ${allColors.length} 个颜色`,
+    });
+
+    throwIfCancelled(signal);
+    db.transaction((tx) => {
+      for (const color of allColors) {
+        tx.insert(colors)
+          .values({
+            id: color.id,
+            name: color.name,
+            rgb: color.rgb,
+            isTransparent: color.is_trans ?? false,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: colors.id,
+            set: {
+              name: color.name,
+              rgb: color.rgb,
+              isTransparent: color.is_trans ?? false,
+              updatedAt: now,
+            },
+          })
+          .run();
+      }
+
+      for (const part of allParts) {
+        tx.insert(parts)
+          .values({
+            partNum: part.part_num,
+            name: part.name,
+            categoryId: part.part_cat_id,
+            imageUrl: part.part_img_url,
+            rawJson: JSON.stringify(part),
+            downloadedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: parts.partNum,
+            set: {
+              name: part.name,
+              categoryId: part.part_cat_id,
+              imageUrl: part.part_img_url,
+              rawJson: JSON.stringify(part),
+              downloadedAt: now,
+              updatedAt: now,
+            },
+          })
+          .run();
+      }
+    });
+
+    let processedParts = 0;
+    let optionCount = 0;
+
+    for (const part of allParts) {
+      throwIfCancelled(signal);
+      const existingOptions = db
+        .select({ value: count() })
+        .from(partColorOptions)
+        .where(eq(partColorOptions.partNum, part.part_num))
+        .get();
+
+      if (existingOptions && existingOptions.value > 0) {
+        processedParts += 1;
+        optionCount += existingOptions.value;
+        updateJobProgress(jobId, {
+          stage: "复用零件配色",
+          current: processedParts,
+          total: allParts.length,
+          detail: `${part.part_num}：已存在 ${existingOptions.value} 个可用配色`,
+        });
+        continue;
+      }
+
+      const options = await rebrickableClient.getPartColors(part.part_num, signal);
+
+      db.transaction((tx) => {
+        tx.delete(partColorOptions).where(eq(partColorOptions.partNum, part.part_num)).run();
+
+        for (const option of options) {
+          tx.insert(colors)
+            .values({
+              id: option.color_id,
+              name: option.color_name,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: colors.id,
+              set: {
+                name: option.color_name,
+                updatedAt: now,
+              },
+            })
+            .run();
+
+          tx.insert(partColorOptions)
+            .values({
+              partNum: part.part_num,
+              colorId: option.color_id,
+              imageUrl: partColorImageUrl(option),
+              elementIds: JSON.stringify(option.elements ?? []),
+              numSets: option.num_sets,
+              rawJson: JSON.stringify(option),
+              downloadedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .onConflictDoUpdate({
+              target: [partColorOptions.partNum, partColorOptions.colorId],
+              set: {
+                imageUrl: partColorImageUrl(option),
+                elementIds: JSON.stringify(option.elements ?? []),
+                numSets: option.num_sets,
+                rawJson: JSON.stringify(option),
+                downloadedAt: now,
+                updatedAt: now,
+              },
+            })
+            .run();
+        }
+      });
+
+      processedParts += 1;
+      optionCount += options.length;
+      updateJobProgress(jobId, {
+        stage: "获取零件配色",
+        current: processedParts,
+        total: allParts.length,
+        detail: `${part.part_num}：${options.length} 个可用配色`,
+      });
+    }
+
+    finishJob(
+      jobId,
+      "completed",
+      `已缓存 ${allParts.length} 个零件和 ${optionCount} 条零件配色。`,
+      {
+        stage: "完成",
+        current: allParts.length,
+        total: allParts.length,
+        detail: `${optionCount} 条零件配色可用于过滤 MOC 清单`,
+      },
+    );
+
+    return { ok: true, message: "全量零件配色索引已下载到本地。" };
+  } catch (error) {
+    const message = errorMessage(error);
+    const cancelled = isCancellation(error);
+    finishJob(jobId, cancelled ? "cancelled" : "failed", message, {
+      stage: cancelled ? "已取消" : "失败",
+      detail: message,
+    });
+    return { ok: false, message };
+  }
 }
 
 async function runSetDownload(
@@ -712,6 +898,34 @@ export function startDownloadSetById(rawSetNum: string): ActionResult {
   return { ok: true, message: `Set ${setNum} 下载任务已启动。` };
 }
 
+export function startDownloadPartCatalog(): ActionResult {
+  const sourceId = "parts-colors";
+  const key = targetKey("catalog", sourceId);
+  const activeJob = activeDownloads.get(key);
+  const existingJobId = activeJob?.jobId ?? getActiveDownloadJob("catalog", sourceId)?.id;
+
+  if (existingJobId) {
+    return {
+      ok: false,
+      message: `全量零件配色索引已有下载任务正在运行，请等待完成或先取消任务 #${existingJobId}。`,
+    };
+  }
+
+  const controller = new AbortController();
+  const job = createJob("catalog", sourceId);
+  activeDownloads.set(key, { controller, jobId: job.id });
+
+  void runPartCatalogDownload(job.id, controller.signal).finally(() => {
+    const activeJob = activeDownloads.get(key);
+
+    if (activeJob?.jobId === job.id) {
+      activeDownloads.delete(key);
+    }
+  });
+
+  return { ok: true, message: "全量零件配色索引下载任务已启动。" };
+}
+
 export async function downloadSetById(rawSetNum: string): Promise<ActionResult> {
   const setNum = normalizeSetNum(rawSetNum);
 
@@ -783,6 +997,7 @@ export function getLatestDownloadJobs(limit = 8) {
 export function getDashboardData() {
   const [setCount] = db.select({ value: count() }).from(sets).all();
   const [partCount] = db.select({ value: count() }).from(parts).all();
+  const [partColorCount] = db.select({ value: count() }).from(partColorOptions).all();
   const [mocCount] = db.select({ value: count() }).from(mocs).all();
 
   const latestSets = db
@@ -805,11 +1020,32 @@ export function getDashboardData() {
     counts: {
       sets: setCount.value,
       parts: partCount.value,
+      partColors: partColorCount.value,
       mocs: mocCount.value,
     },
     latestSets,
     latestMocs,
     latestJobs,
+  };
+}
+
+export function getPartCatalogSummary() {
+  const [partCount] = db.select({ value: count() }).from(parts).all();
+  const [colorCount] = db.select({ value: count() }).from(colors).all();
+  const [partColorCount] = db.select({ value: count() }).from(partColorOptions).all();
+  const latestCatalogJob = db
+    .select()
+    .from(downloadJobs)
+    .where(and(eq(downloadJobs.sourceType, "catalog"), eq(downloadJobs.sourceId, "parts-colors")))
+    .orderBy(desc(downloadJobs.updatedAt))
+    .limit(1)
+    .get();
+
+  return {
+    partCount: partCount.value,
+    colorCount: colorCount.value,
+    partColorCount: partColorCount.value,
+    latestCatalogJob,
   };
 }
 
