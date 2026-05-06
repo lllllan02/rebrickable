@@ -16,6 +16,11 @@ export type RebrickablePart = {
   part_img_url?: string | null;
 };
 
+export type RebrickablePartCategory = {
+  id: number;
+  name: string;
+};
+
 export type RebrickableColor = {
   id: number;
   name: string;

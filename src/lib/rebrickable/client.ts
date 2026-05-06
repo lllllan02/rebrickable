@@ -11,6 +11,7 @@ import type {
   RebrickableColor,
   RebrickableInventoryPart,
   RebrickablePart,
+  RebrickablePartCategory,
   RebrickablePartColor,
   RebrickableSet,
 } from "./types";
@@ -229,6 +230,10 @@ async function requestAllPages<T>(path: string, signal?: AbortSignal) {
 export const rebrickableClient = {
   getAllParts(signal?: AbortSignal) {
     return requestAllPages<RebrickablePart>("/lego/parts/", signal);
+  },
+
+  getPartCategories(signal?: AbortSignal) {
+    return requestAllPages<RebrickablePartCategory>("/lego/part_categories/", signal);
   },
 
   getColors(signal?: AbortSignal) {

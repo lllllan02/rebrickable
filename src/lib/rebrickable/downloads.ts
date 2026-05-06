@@ -1,6 +1,18 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  like,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import { db } from "@/db/client";
 import {
@@ -36,6 +48,14 @@ type DownloadProgress = {
   total?: number | null;
   detail?: string | null;
   message?: string;
+};
+
+export type PartExplorerFilters = {
+  query?: string;
+  categoryId?: number;
+  colorId?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 const activeDownloads = new Map<string, { controller: AbortController; jobId: number }>();
@@ -166,6 +186,10 @@ async function findExistingImageFile(assetDirectory: string, safeFileNameBase: s
 
 function csvValue(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function escapeLikeValue(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
 async function downloadImage(
@@ -407,17 +431,19 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
 
   try {
     throwIfCancelled(signal);
-    const [allParts, allColors] = await Promise.all([
+    const [allParts, allColors, partCategories] = await Promise.all([
       rebrickableClient.getAllParts(signal),
       rebrickableClient.getColors(signal),
+      rebrickableClient.getPartCategories(signal),
     ]);
+    const categoryNames = new Map(partCategories.map((category) => [category.id, category.name]));
     const now = new Date();
 
     updateJobProgress(jobId, {
       stage: "写入基础数据",
       current: 0,
       total: allParts.length,
-      detail: `正在写入 ${allParts.length} 个零件和 ${allColors.length} 个颜色`,
+      detail: `正在写入 ${allParts.length} 个零件、${partCategories.length} 个分类和 ${allColors.length} 个颜色`,
     });
 
     throwIfCancelled(signal);
@@ -445,11 +471,15 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
       }
 
       for (const part of allParts) {
+        const categoryName =
+          part.part_cat_id === undefined ? null : (categoryNames.get(part.part_cat_id) ?? null);
+
         tx.insert(parts)
           .values({
             partNum: part.part_num,
             name: part.name,
             categoryId: part.part_cat_id,
+            categoryName,
             imageUrl: part.part_img_url,
             rawJson: JSON.stringify(part),
             downloadedAt: now,
@@ -461,6 +491,7 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
             set: {
               name: part.name,
               categoryId: part.part_cat_id,
+              categoryName,
               imageUrl: part.part_img_url,
               rawJson: JSON.stringify(part),
               downloadedAt: now,
@@ -1046,6 +1077,146 @@ export function getPartCatalogSummary() {
     colorCount: colorCount.value,
     partColorCount: partColorCount.value,
     latestCatalogJob,
+  };
+}
+
+export function getPartExplorerData(filters: PartExplorerFilters = {}) {
+  const pageSize = Math.min(Math.max(filters.pageSize ?? 48, 12), 96);
+  const conditions: SQL[] = [];
+  const searchQuery = filters.query?.trim();
+
+  if (searchQuery) {
+    const pattern = `%${escapeLikeValue(searchQuery)}%`;
+    const searchCondition = or(
+      like(parts.partNum, pattern),
+      like(parts.name, pattern),
+      like(parts.categoryName, pattern),
+    );
+
+    if (searchCondition) {
+      conditions.push(searchCondition);
+    }
+  }
+
+  if (filters.categoryId !== undefined) {
+    conditions.push(eq(parts.categoryId, filters.categoryId));
+  }
+
+  const partWhere = conditions.length > 0 ? and(...conditions) : undefined;
+  const colorWhere =
+    filters.colorId !== undefined ? eq(partColorOptions.colorId, filters.colorId) : undefined;
+  const whereClause = partWhere && colorWhere ? and(partWhere, colorWhere) : partWhere ?? colorWhere;
+  const [totalRow] =
+    filters.colorId !== undefined
+      ? db
+          .select({ value: sql<number>`count(distinct ${parts.partNum})` })
+          .from(parts)
+          .innerJoin(partColorOptions, eq(parts.partNum, partColorOptions.partNum))
+          .where(whereClause)
+          .all()
+      : db.select({ value: count() }).from(parts).where(whereClause).all();
+  const total = totalRow.value;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const currentPage = Math.min(Math.max(filters.page ?? 1, 1), totalPages);
+  const offset = (currentPage - 1) * pageSize;
+  const partRows =
+    filters.colorId !== undefined
+      ? db
+          .select({ part: parts })
+          .from(parts)
+          .innerJoin(partColorOptions, eq(parts.partNum, partColorOptions.partNum))
+          .where(whereClause)
+          .orderBy(asc(parts.name), asc(parts.partNum))
+          .limit(pageSize)
+          .offset(offset)
+          .all()
+          .map((row) => row.part)
+      : db
+          .select()
+          .from(parts)
+          .where(whereClause)
+          .orderBy(asc(parts.name), asc(parts.partNum))
+          .limit(pageSize)
+          .offset(offset)
+          .all();
+  const partNums = partRows.map((part) => part.partNum);
+  const colorRows =
+    partNums.length === 0
+      ? []
+      : db
+          .select({
+            partNum: partColorOptions.partNum,
+            colorId: partColorOptions.colorId,
+            colorName: colors.name,
+            colorRgb: colors.rgb,
+            imageUrl: partColorOptions.imageUrl,
+            numSets: partColorOptions.numSets,
+            elementIds: partColorOptions.elementIds,
+          })
+          .from(partColorOptions)
+          .innerJoin(colors, eq(partColorOptions.colorId, colors.id))
+          .where(inArray(partColorOptions.partNum, partNums))
+          .orderBy(asc(partColorOptions.partNum), desc(partColorOptions.numSets), asc(colors.name))
+          .all();
+  const colorsByPart = new Map<string, typeof colorRows>();
+
+  for (const row of colorRows) {
+    colorsByPart.set(row.partNum, [...(colorsByPart.get(row.partNum) ?? []), row]);
+  }
+
+  const categories = db
+    .select({
+      id: parts.categoryId,
+      name: parts.categoryName,
+      count: count(),
+    })
+    .from(parts)
+    .where(sql`${parts.categoryId} is not null`)
+    .groupBy(parts.categoryId, parts.categoryName)
+    .orderBy(asc(parts.categoryName))
+    .all()
+    .flatMap((category) =>
+      category.id === null
+        ? []
+        : [
+            {
+              id: category.id,
+              name: category.name ?? `分类 ${category.id}`,
+              count: category.count,
+            },
+          ],
+    );
+  const availableColors = db
+    .select({
+      id: colors.id,
+      name: colors.name,
+      rgb: colors.rgb,
+      count: sql<number>`count(distinct ${partColorOptions.partNum})`,
+    })
+    .from(colors)
+    .innerJoin(partColorOptions, eq(colors.id, partColorOptions.colorId))
+    .groupBy(colors.id, colors.name, colors.rgb)
+    .orderBy(asc(colors.name))
+    .all();
+
+  return {
+    filters: {
+      query: searchQuery ?? "",
+      categoryId: filters.categoryId,
+      colorId: filters.colorId,
+    },
+    parts: partRows.map((part) => ({
+      ...part,
+      colors: colorsByPart.get(part.partNum) ?? [],
+    })),
+    categories,
+    colors: availableColors,
+    pagination: {
+      page: currentPage,
+      pageSize,
+      total,
+      totalPages,
+    },
   };
 }
 

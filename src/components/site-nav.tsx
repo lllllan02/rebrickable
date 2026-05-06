@@ -18,6 +18,11 @@ const navItems = [
     icon: List,
   },
   {
+    href: "/parts",
+    label: "零件查询",
+    icon: Box,
+  },
+  {
     href: "/moc-import",
     label: "MOC 过滤",
     icon: FileSpreadsheet,
