@@ -19,6 +19,7 @@ import {
   colors,
   downloadJobs,
   mocs,
+  partCategories,
   partColorOptions,
   parts,
   setParts,
@@ -124,64 +125,12 @@ function alternateMocId(alternate: RebrickableAlternate) {
   return alternate.moc_id ?? null;
 }
 
-function partAssetId(item: RebrickableInventoryPart) {
-  return item.element_id?.trim() || `${item.part.part_num}-${item.color.id}`;
+function partColorKey(partNum: string, colorId: number) {
+  return `${partNum}:${colorId}`;
 }
 
 function partColorImageUrl(option: RebrickablePartColor) {
   return option.part_img_url ?? null;
-}
-
-const imageFileExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"];
-
-function imageExtensionFromUrl(url: string) {
-  return new URL(url).pathname.match(/\.(jpe?g|png|webp|gif|svg)$/i)?.[0]?.toLowerCase();
-}
-
-function imageExtension(url: string, contentType: string | null) {
-  if (contentType?.includes("png")) {
-    return ".png";
-  }
-
-  if (contentType?.includes("webp")) {
-    return ".webp";
-  }
-
-  if (contentType?.includes("gif")) {
-    return ".gif";
-  }
-
-  if (contentType?.includes("svg")) {
-    return ".svg";
-  }
-
-  return imageExtensionFromUrl(url) ?? ".jpg";
-}
-
-function isNotFoundError(error: unknown) {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
-async function findExistingImageFile(assetDirectory: string, safeFileNameBase: string) {
-  const { readdir } = await import("node:fs/promises");
-
-  try {
-    const fileNames = await readdir(assetDirectory);
-    const lowerBase = safeFileNameBase.toLowerCase();
-
-    return (
-      fileNames.find((fileName) => {
-        const lowerFileName = fileName.toLowerCase();
-        return imageFileExtensions.some((extension) => lowerFileName === `${lowerBase}${extension}`);
-      }) ?? null
-    );
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return null;
-    }
-
-    throw error;
-  }
 }
 
 function csvValue(value: unknown) {
@@ -190,52 +139,6 @@ function csvValue(value: unknown) {
 
 function escapeLikeValue(value: string) {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
-}
-
-async function downloadImage(
-  url: string | null | undefined,
-  pathSegments: string[],
-  fileName: string,
-  signal: AbortSignal,
-) {
-  if (!url) {
-    return null;
-  }
-
-  const safeSegments = pathSegments.map(sanitizePathSegment);
-  const safeFileNameBase = sanitizePathSegment(fileName);
-  const [{ mkdir, writeFile }, { join }] = await Promise.all([
-    import("node:fs/promises"),
-    import("node:path"),
-  ]);
-  const assetDirectory = join(
-    process.cwd(),
-    "public",
-    "rebrickable-assets",
-    ...safeSegments,
-  );
-
-  throwIfCancelled(signal);
-  const existingFileName = await findExistingImageFile(assetDirectory, safeFileNameBase);
-
-  if (existingFileName) {
-    return ["", "rebrickable-assets", ...safeSegments, existingFileName].join("/");
-  }
-
-  const response = await fetch(url, { cache: "no-store", signal });
-
-  if (!response.ok) {
-    throw new RebrickableApiError(`图片下载失败：${response.status} ${url}`, response.status);
-  }
-
-  const extension = imageExtension(url, response.headers.get("content-type"));
-  const safeFileName = `${safeFileNameBase}${extension}`;
-
-  throwIfCancelled(signal);
-  await mkdir(assetDirectory, { recursive: true });
-  await writeFile(join(assetDirectory, safeFileName), Buffer.from(await response.arrayBuffer()));
-
-  return ["", "rebrickable-assets", ...safeSegments, safeFileName].join("/");
 }
 
 async function writeSetInventoryFiles(
@@ -431,23 +334,45 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
 
   try {
     throwIfCancelled(signal);
-    const [allParts, allColors, partCategories] = await Promise.all([
+    const [allParts, allColors, allPartCategories] = await Promise.all([
       rebrickableClient.getAllParts(signal),
       rebrickableClient.getColors(signal),
       rebrickableClient.getPartCategories(signal),
     ]);
-    const categoryNames = new Map(partCategories.map((category) => [category.id, category.name]));
+    const categoryNames = new Map(allPartCategories.map((category) => [category.id, category.name]));
     const now = new Date();
 
     updateJobProgress(jobId, {
       stage: "写入基础数据",
       current: 0,
       total: allParts.length,
-      detail: `正在写入 ${allParts.length} 个零件、${partCategories.length} 个分类和 ${allColors.length} 个颜色`,
+      detail: `正在写入 ${allParts.length} 个零件、${allPartCategories.length} 个分类和 ${allColors.length} 个颜色`,
     });
 
     throwIfCancelled(signal);
     db.transaction((tx) => {
+      for (const category of allPartCategories) {
+        tx.insert(partCategories)
+          .values({
+            id: category.id,
+            name: category.name,
+            rawJson: JSON.stringify(category),
+            downloadedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: partCategories.id,
+            set: {
+              name: category.name,
+              rawJson: JSON.stringify(category),
+              downloadedAt: now,
+              updatedAt: now,
+            },
+          })
+          .run();
+      }
+
       for (const color of allColors) {
         tx.insert(colors)
           .values({
@@ -481,6 +406,7 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
             categoryId: part.part_cat_id,
             categoryName,
             imageUrl: part.part_img_url,
+            rebrickableUrl: part.part_url,
             rawJson: JSON.stringify(part),
             downloadedAt: now,
             createdAt: now,
@@ -493,6 +419,7 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
               categoryId: part.part_cat_id,
               categoryName,
               imageUrl: part.part_img_url,
+              rebrickableUrl: part.part_url,
               rawJson: JSON.stringify(part),
               downloadedAt: now,
               updatedAt: now,
@@ -507,24 +434,6 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
 
     for (const part of allParts) {
       throwIfCancelled(signal);
-      const existingOptions = db
-        .select({ value: count() })
-        .from(partColorOptions)
-        .where(eq(partColorOptions.partNum, part.part_num))
-        .get();
-
-      if (existingOptions && existingOptions.value > 0) {
-        processedParts += 1;
-        optionCount += existingOptions.value;
-        updateJobProgress(jobId, {
-          stage: "复用零件配色",
-          current: processedParts,
-          total: allParts.length,
-          detail: `${part.part_num}：已存在 ${existingOptions.value} 个可用配色`,
-        });
-        continue;
-      }
-
       const options = await rebrickableClient.getPartColors(part.part_num, signal);
 
       db.transaction((tx) => {
@@ -587,16 +496,16 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
     finishJob(
       jobId,
       "completed",
-      `已缓存 ${allParts.length} 个零件和 ${optionCount} 条零件配色。`,
+      `已缓存 ${allParts.length} 个零件、${allPartCategories.length} 个分类和 ${optionCount} 条零件配色。`,
       {
         stage: "完成",
         current: allParts.length,
         total: allParts.length,
-        detail: `${optionCount} 条零件配色可用于过滤 MOC 清单`,
+        detail: `${optionCount} 条零件配色可用于零件查询和套装清单`,
       },
     );
 
-    return { ok: true, message: "全量零件配色索引已下载到本地。" };
+    return { ok: true, message: "全量零件目录已下载到本地。" };
   } catch (error) {
     const message = errorMessage(error);
     const cancelled = isCancellation(error);
@@ -626,27 +535,32 @@ async function runSetDownload(
       rebrickableClient.getSetParts(setNum, signal),
       rebrickableClient.getSetAlternates(setNum, signal),
     ]);
-    const totalImages = 1 + inventory.length + alternates.length;
-    let processedImages = 0;
+    const inventoryPartNums = Array.from(new Set(inventory.map((item) => item.part.part_num)));
+    const catalogParts =
+      inventoryPartNums.length === 0
+        ? []
+        : db.select().from(parts).where(inArray(parts.partNum, inventoryPartNums)).all();
+    const catalogPartColors =
+      inventoryPartNums.length === 0
+        ? []
+        : db
+            .select()
+            .from(partColorOptions)
+            .where(inArray(partColorOptions.partNum, inventoryPartNums))
+            .all();
+    const catalogPartsByNum = new Map(catalogParts.map((part) => [part.partNum, part]));
+    const catalogPartColorsByKey = new Map(
+      catalogPartColors.map((option) => [partColorKey(option.partNum, option.colorId), option]),
+    );
 
     updateJobProgress(jobId, {
-      stage: "处理图片",
-      current: processedImages,
-      total: totalImages,
-      detail: `准备处理 1 张套装图、${inventory.length} 张零件图、${alternates.length} 张 Alternate MOC 图`,
+      stage: "整理图片 URL",
+      current: 0,
+      total: inventory.length,
+      detail: `正在为 ${inventory.length} 条零件清单匹配本地目录中的图片 URL`,
     });
 
-    const setImageUrl =
-      (await downloadImage(set.set_img_url, ["sets", set.set_num], "set", signal)) ??
-      set.set_img_url;
-
-    processedImages += 1;
-    updateJobProgress(jobId, {
-      stage: "处理图片",
-      current: processedImages,
-      total: totalImages,
-      detail: `已处理套装图：${set.name}`,
-    });
+    const setImageUrl = set.set_img_url ?? null;
 
     const inventoryWithImages: Array<{
       item: RebrickableInventoryPart;
@@ -655,22 +569,18 @@ async function runSetDownload(
 
     for (const item of inventory) {
       throwIfCancelled(signal);
-      const localImageUrl =
-        (await downloadImage(
-          item.part.part_img_url,
-          ["parts", partAssetId(item)],
-          "part",
-          signal,
-        )) ??
-        item.part.part_img_url ??
-        null;
+      const catalogPart = catalogPartsByNum.get(item.part.part_num);
+      const catalogPartColor = catalogPartColorsByKey.get(
+        partColorKey(item.part.part_num, item.color.id),
+      );
+      const imageUrl =
+        catalogPartColor?.imageUrl ?? catalogPart?.imageUrl ?? item.part.part_img_url ?? null;
 
-      processedImages += 1;
-      inventoryWithImages.push({ item, imageUrl: localImageUrl });
+      inventoryWithImages.push({ item, imageUrl });
       updateJobProgress(jobId, {
-        stage: "处理图片",
-        current: processedImages,
-        total: totalImages,
+        stage: "整理图片 URL",
+        current: inventoryWithImages.length,
+        total: inventory.length,
         detail: `零件 ${item.part.part_num}：${item.part.name}`,
       });
     }
@@ -682,31 +592,16 @@ async function runSetDownload(
 
     for (const alternate of alternates) {
       throwIfCancelled(signal);
-      const mocCode = alternateMocCode(alternate) ?? "unknown";
-      const localImageUrl =
-        (await downloadImage(
-          alternate.moc_img_url,
-          ["sets", set.set_num, "mocs", mocCode],
-          "moc",
-          signal,
-        )) ??
-        alternate.moc_img_url ??
-        null;
-
-      processedImages += 1;
-      alternatesWithImages.push({ alternate, imageUrl: localImageUrl });
-      updateJobProgress(jobId, {
-        stage: "处理图片",
-        current: processedImages,
-        total: totalImages,
-        detail: `Alternate ${mocCode}：${alternate.name}`,
+      alternatesWithImages.push({
+        alternate,
+        imageUrl: alternate.moc_img_url ?? null,
       });
     }
 
     updateJobProgress(jobId, {
       stage: "写入文件",
-      current: processedImages,
-      total: totalImages,
+      current: inventory.length,
+      total: inventory.length,
       detail: `正在保存 ${inventory.length} 条零件清单 JSON/CSV`,
     });
 
@@ -715,8 +610,8 @@ async function runSetDownload(
 
     updateJobProgress(jobId, {
       stage: "写入数据库",
-      current: processedImages,
-      total: totalImages,
+      current: inventory.length,
+      total: inventory.length,
       detail: `正在写入套装、${inventory.length} 条零件记录和 ${alternates.length} 个 Alternate MOC`,
     });
 
@@ -757,29 +652,24 @@ async function runSetDownload(
       tx.delete(setParts).where(eq(setParts.setNum, set.set_num)).run();
 
       for (const { item, imageUrl } of inventoryWithImages) {
-        tx.insert(parts)
-          .values({
-            partNum: item.part.part_num,
-            name: item.part.name,
-            categoryId: item.part.part_cat_id,
-            imageUrl,
-            rawJson: JSON.stringify(item.part),
-            downloadedAt: now,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: parts.partNum,
-            set: {
+        const catalogPart = catalogPartsByNum.get(item.part.part_num);
+
+        if (!catalogPart) {
+          tx.insert(parts)
+            .values({
+              partNum: item.part.part_num,
               name: item.part.name,
               categoryId: item.part.part_cat_id,
               imageUrl,
+              rebrickableUrl: item.part.part_url,
               rawJson: JSON.stringify(item.part),
               downloadedAt: now,
+              createdAt: now,
               updatedAt: now,
-            },
-          })
-          .run();
+            })
+            .onConflictDoNothing()
+            .run();
+        }
 
         tx.insert(colors)
           .values({
@@ -796,6 +686,32 @@ async function runSetDownload(
               name: item.color.name,
               rgb: item.color.rgb,
               isTransparent: item.color.is_trans ?? false,
+              updatedAt: now,
+            },
+          })
+          .run();
+
+        tx.insert(partColorOptions)
+          .values({
+            partNum: item.part.part_num,
+            colorId: item.color.id,
+            imageUrl,
+            elementIds: JSON.stringify(item.element_id ? [item.element_id] : []),
+            rawJson: JSON.stringify({
+              part_num: item.part.part_num,
+              color_id: item.color.id,
+              color_name: item.color.name,
+              element_id: item.element_id ?? null,
+              source: "set_inventory",
+            }),
+            downloadedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [partColorOptions.partNum, partColorOptions.colorId],
+            set: {
+              imageUrl,
               updatedAt: now,
             },
           })
@@ -875,11 +791,11 @@ async function runSetDownload(
     finishJob(
       jobId,
       "completed",
-      `已下载 ${set.name}，包含 ${inventory.length} 条零件记录和 ${alternates.length} 个 Alternate MOC；下载内容已保存到 public/rebrickable-assets/sets/${set.set_num}/。`,
+      `已下载 ${set.name}，包含 ${inventory.length} 条零件记录和 ${alternates.length} 个 Alternate MOC；图片保留为 Rebrickable URL。`,
       {
         stage: "完成",
-        current: totalImages,
-        total: totalImages,
+        current: inventory.length,
+        total: inventory.length,
         detail: `${inventory.length} 条零件记录，${alternates.length} 个 Alternate MOC`,
       },
     );
@@ -1062,6 +978,7 @@ export function getDashboardData() {
 
 export function getPartCatalogSummary() {
   const [partCount] = db.select({ value: count() }).from(parts).all();
+  const [partCategoryCount] = db.select({ value: count() }).from(partCategories).all();
   const [colorCount] = db.select({ value: count() }).from(colors).all();
   const [partColorCount] = db.select({ value: count() }).from(partColorOptions).all();
   const latestCatalogJob = db
@@ -1074,6 +991,7 @@ export function getPartCatalogSummary() {
 
   return {
     partCount: partCount.value,
+    partCategoryCount: partCategoryCount.value,
     colorCount: colorCount.value,
     partColorCount: partColorCount.value,
     latestCatalogJob,
@@ -1166,26 +1084,20 @@ export function getPartExplorerData(filters: PartExplorerFilters = {}) {
 
   const categories = db
     .select({
-      id: parts.categoryId,
-      name: parts.categoryName,
-      count: count(),
+      id: partCategories.id,
+      name: partCategories.name,
+      count: sql<number>`count(${parts.partNum})`,
     })
-    .from(parts)
-    .where(sql`${parts.categoryId} is not null`)
-    .groupBy(parts.categoryId, parts.categoryName)
-    .orderBy(asc(parts.categoryName))
+    .from(partCategories)
+    .leftJoin(parts, eq(partCategories.id, parts.categoryId))
+    .groupBy(partCategories.id, partCategories.name)
+    .orderBy(asc(partCategories.name))
     .all()
-    .flatMap((category) =>
-      category.id === null
-        ? []
-        : [
-            {
-              id: category.id,
-              name: category.name ?? `分类 ${category.id}`,
-              count: category.count,
-            },
-          ],
-    );
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      count: category.count,
+    }));
   const availableColors = db
     .select({
       id: colors.id,

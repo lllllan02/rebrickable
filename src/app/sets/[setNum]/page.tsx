@@ -225,11 +225,11 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
   const activeSection = selectedSection(query.section);
   const totalParts = data.inventory.reduce((sum, item) => sum + item.quantity, 0);
   const spareRows = data.inventory.filter((item) => item.isSpare).length;
-  const localImageCount = [
+  const imageUrlCount = [
     data.set.imageUrl,
     ...data.inventory.map((item) => item.imageUrl),
     ...data.alternates.map((moc) => moc.imageUrl),
-  ].filter((url) => url?.startsWith("/rebrickable-assets/")).length;
+  ].filter(Boolean).length;
   const setRawJson = formatRawJson(data.set.rawJson);
   const partTotalPages = Math.max(Math.ceil(data.inventory.length / partPageSize), 1);
   const mocTotalPages = Math.max(Math.ceil(data.alternates.length / mocPageSize), 1);
@@ -262,7 +262,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
               <p className="text-sm font-medium text-slate-300">{data.set.setNum}</p>
               <h1 className="mt-2 text-4xl font-bold tracking-tight">{data.set.name}</h1>
               <p className="mt-3 max-w-2xl text-slate-300">
-                已下载的套装资料、清单文件、零件图片和 Alternate MOC 摘要都集中在这里。
+                已下载的套装资料、清单文件、图片 URL 和 Alternate MOC 摘要都集中在这里。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -307,8 +307,8 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
               <p className="mt-3 text-4xl font-bold">{formatNumber(data.alternates.length)}</p>
             </Card>
             <Card>
-              <CardDescription>本地图片</CardDescription>
-              <p className="mt-3 text-4xl font-bold">{formatNumber(localImageCount)}</p>
+              <CardDescription>图片 URL</CardDescription>
+              <p className="mt-3 text-4xl font-bold">{formatNumber(imageUrlCount)}</p>
             </Card>
           </div>
 

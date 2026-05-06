@@ -1,11 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Box, Palette } from "lucide-react";
+import { Box, ExternalLink, Palette } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getPartExplorerData } from "@/lib/rebrickable/downloads";
+import {
+  getLatestDownloadJobs,
+  getPartCatalogSummary,
+  getPartExplorerData,
+} from "@/lib/rebrickable/downloads";
+import { DownloadJobsPanel, type DownloadJobItem } from "../download-jobs-panel";
+import { CatalogDownloadForm } from "./catalog-download-form";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +38,31 @@ function numberSearchValue(value: string | string[] | undefined) {
 
 function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat("zh-CN").format(value ?? 0);
+}
+
+function formatDate(value: Date | null) {
+  if (!value) {
+    return "未下载";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(value);
+}
+
+function formatElementIds(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed) ? parsed.join(", ") : "";
+  } catch {
+    return "";
+  }
 }
 
 function partsHref(
@@ -130,6 +161,7 @@ function Pagination({
 
 export default async function PartsPage({ searchParams }: PartsPageProps) {
   const query = await searchParams;
+  const summary = getPartCatalogSummary();
   const data = getPartExplorerData({
     query: firstSearchValue(query.q),
     categoryId: numberSearchValue(query.category),
@@ -137,6 +169,18 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
     page: numberSearchValue(query.page),
     pageSize,
   });
+  const downloadJobs: DownloadJobItem[] = getLatestDownloadJobs().map((job) => ({
+    id: job.id,
+    sourceType: job.sourceType,
+    sourceId: job.sourceId,
+    status: job.status,
+    message: job.message,
+    progressStage: job.progressStage,
+    progressCurrent: job.progressCurrent,
+    progressTotal: job.progressTotal,
+    progressDetail: job.progressDetail,
+    updatedAt: job.updatedAt.toISOString(),
+  }));
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
@@ -154,20 +198,40 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardDescription>匹配零件</CardDescription>
-          <p className="mt-3 text-4xl font-bold">{formatNumber(data.pagination.total)}</p>
+          <CardDescription>本地零件</CardDescription>
+          <p className="mt-3 text-4xl font-bold">{formatNumber(summary.partCount)}</p>
         </Card>
         <Card>
-          <CardDescription>分类</CardDescription>
-          <p className="mt-3 text-4xl font-bold">{formatNumber(data.categories.length)}</p>
+          <CardDescription>零件分类</CardDescription>
+          <p className="mt-3 text-4xl font-bold">
+            {formatNumber(summary.partCategoryCount)}
+          </p>
         </Card>
         <Card>
-          <CardDescription>可筛选颜色</CardDescription>
-          <p className="mt-3 text-4xl font-bold">{formatNumber(data.colors.length)}</p>
+          <CardDescription>颜色</CardDescription>
+          <p className="mt-3 text-4xl font-bold">{formatNumber(summary.colorCount)}</p>
+        </Card>
+        <Card>
+          <CardDescription>零件配色</CardDescription>
+          <p className="mt-3 text-4xl font-bold">{formatNumber(summary.partColorCount)}</p>
         </Card>
       </section>
+
+      <Card>
+        <div className="flex items-center gap-2">
+          <Palette className="h-5 w-5" />
+          <CardTitle>全量零件目录下载</CardTitle>
+        </div>
+        <CardDescription>
+          下载 Rebrickable 零件、分类、颜色和所有出现过的配色，供零件查询和后续套装下载复用。
+        </CardDescription>
+        <p className="mt-4 text-sm text-slate-500">
+          最近目录任务：{formatDate(summary.latestCatalogJob?.updatedAt ?? null)}
+        </p>
+        <CatalogDownloadForm />
+      </Card>
 
       <Card>
         <div className="flex items-center gap-2">
@@ -175,7 +239,7 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
           <CardTitle>筛选零件</CardTitle>
         </div>
         <CardDescription>
-          关键词会匹配零件编号、零件名称和分类；颜色筛选依赖已下载的全量零件配色索引。
+          关键词会匹配零件编号、零件名称和分类；颜色筛选依赖已下载的全量零件目录。
         </CardDescription>
         <form action="/parts" className="mt-5 grid gap-3 lg:grid-cols-[1.3fr_1fr_1fr_auto_auto]">
           <Input
@@ -230,14 +294,8 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
             <CardTitle>没有匹配零件</CardTitle>
           </div>
           <CardDescription>
-            如果本地目录为空，请先到 MOC 过滤页面下载全量零件配色索引。
+            如果本地目录为空，请先在本页下载全量零件目录。
           </CardDescription>
-          <Link
-            href="/moc-import"
-            className="mt-5 inline-flex h-10 items-center rounded-lg bg-slate-950 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-700"
-          >
-            去下载索引
-          </Link>
         </Card>
       ) : (
         <section className="flex flex-col gap-5">
@@ -260,6 +318,7 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
               );
               const imageUrl = selectedColor?.imageUrl ?? part.imageUrl;
               const previewColors = part.colors.slice(0, 8);
+              const selectedElementIds = formatElementIds(selectedColor?.elementIds ?? null);
 
               return (
                 <Card key={part.partNum} className="flex flex-col gap-5">
@@ -314,7 +373,25 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
                         ))
                       )}
                     </div>
+                    {selectedColor ? (
+                      <p className="mt-3 text-xs text-slate-500">
+                        当前配色出现于 {formatNumber(selectedColor.numSets)} 个套装
+                        {selectedElementIds ? ` · Element IDs ${selectedElementIds}` : ""}
+                      </p>
+                    ) : null}
                   </div>
+
+                  {part.rebrickableUrl ? (
+                    <Link
+                      href={part.rebrickableUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600 transition-colors hover:text-slate-950"
+                    >
+                      Rebrickable
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  ) : null}
                 </Card>
               );
             })}
@@ -327,6 +404,8 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
           />
         </section>
       )}
+
+      <DownloadJobsPanel initialJobs={downloadJobs} />
     </main>
   );
 }

@@ -21,8 +21,8 @@ export function CatalogDownloadForm() {
 
   return (
     <form action={formAction} className="mt-5 flex flex-col gap-3">
-      <DownloadSubmitButton pendingLabel="正在创建索引下载任务...">
-        下载全量零件配色索引
+      <DownloadSubmitButton pendingLabel="正在创建目录下载任务...">
+        下载全量零件目录
       </DownloadSubmitButton>
       {state.message ? (
         <p

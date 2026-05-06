@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "87cf9431-beca-4ba3-94f3-671d1b52c9b7",
+  "id": "fb9ef3da-ef9d-4a52-aa28-bc6584cddc21",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "colors": {
@@ -91,6 +91,34 @@
         },
         "message": {
           "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "progress_stage": {
+          "name": "progress_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "progress_current": {
+          "name": "progress_current",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "progress_total": {
+          "name": "progress_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "progress_detail": {
+          "name": "progress_detail",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -267,6 +295,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "source_set_num": {
+          "name": "source_set_num",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "num_parts": {
           "name": "num_parts",
           "type": "integer",
@@ -339,10 +374,185 @@
             "name"
           ],
           "isUnique": false
+        },
+        "mocs_source_set_idx": {
+          "name": "mocs_source_set_idx",
+          "columns": [
+            "source_set_num"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "part_categories": {
+      "name": "part_categories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_json": {
+          "name": "raw_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "downloaded_at": {
+          "name": "downloaded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "part_color_options": {
+      "name": "part_color_options",
+      "columns": {
+        "part_num": {
+          "name": "part_num",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "color_id": {
+          "name": "color_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "element_ids": {
+          "name": "element_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "num_sets": {
+          "name": "num_sets",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "raw_json": {
+          "name": "raw_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "downloaded_at": {
+          "name": "downloaded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "part_color_options_color_idx": {
+          "name": "part_color_options_color_idx",
+          "columns": [
+            "color_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "part_color_options_part_num_parts_part_num_fk": {
+          "name": "part_color_options_part_num_parts_part_num_fk",
+          "tableFrom": "part_color_options",
+          "tableTo": "parts",
+          "columnsFrom": [
+            "part_num"
+          ],
+          "columnsTo": [
+            "part_num"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "part_color_options_color_id_colors_id_fk": {
+          "name": "part_color_options_color_id_colors_id_fk",
+          "tableFrom": "part_color_options",
+          "tableTo": "colors",
+          "columnsFrom": [
+            "color_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "part_color_options_part_num_color_id_pk": {
+          "columns": [
+            "part_num",
+            "color_id"
+          ],
+          "name": "part_color_options_part_num_color_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -379,6 +589,13 @@
         },
         "image_url": {
           "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rebrickable_url": {
+          "name": "rebrickable_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -453,6 +670,13 @@
         },
         "element_id": {
           "name": "element_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "image_url": {
+          "name": "image_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

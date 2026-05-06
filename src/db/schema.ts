@@ -50,12 +50,21 @@ export const parts = sqliteTable(
     categoryId: integer("category_id"),
     categoryName: text("category_name"),
     imageUrl: text("image_url"),
+    rebrickableUrl: text("rebrickable_url"),
     rawJson: text("raw_json"),
     downloadedAt: integer("downloaded_at", { mode: "timestamp" }),
     ...timestamps,
   },
   (table) => [index("parts_name_idx").on(table.name)],
 );
+
+export const partCategories = sqliteTable("part_categories", {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull(),
+  rawJson: text("raw_json"),
+  downloadedAt: integer("downloaded_at", { mode: "timestamp" }),
+  ...timestamps,
+});
 
 export const colors = sqliteTable("colors", {
   id: integer("id").primaryKey(),
@@ -192,6 +201,10 @@ export const partRelations = relations(parts, ({ many }) => ({
   setInventories: many(setParts),
   mocInventories: many(mocParts),
   colorOptions: many(partColorOptions),
+}));
+
+export const partCategoryRelations = relations(partCategories, ({ many }) => ({
+  parts: many(parts),
 }));
 
 export const colorRelations = relations(colors, ({ many }) => ({
