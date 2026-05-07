@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { Box, ExternalLink, Layers } from "lucide-react";
 
-import { MocDownloadForm } from "@/app/moc-download-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { getMocListData } from "@/lib/rebrickable/downloads";
@@ -34,10 +33,9 @@ export default function MocsPage() {
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start sm:gap-6">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-slate-300">本地数据库</p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">MOC 摘要列表</h1>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">MOC 列表</h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                当前条目主要来自已下载套装的 Alternate MOC 摘要。Rebrickable API v3
-                不支持按 MOC ID 拉取零件清单；下方「检查」会在下载记录中留下失败说明。
+                条目由「MOC 导入」从网页导出的 CSV / JSON 写入。可在套装详情中填写来源 Set ID，以便在对应套装下展示关联 MOC。
               </p>
             </div>
             <div className="shrink-0 rounded-2xl bg-white/10 px-4 py-3 md:px-5 md:py-4">
@@ -46,7 +44,12 @@ export default function MocsPage() {
             </div>
           </div>
           <div className="border-t border-white/10 pt-4 md:pt-5">
-            <MocDownloadForm layout="toolbar" />
+            <Link
+              href="/moc-import"
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-white px-4 text-sm font-semibold text-slate-950 transition-colors hover:bg-slate-100"
+            >
+              打开 MOC 导入
+            </Link>
           </div>
         </div>
       </header>
@@ -55,11 +58,10 @@ export default function MocsPage() {
         <Card>
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5" />
-            <CardTitle>还没有 MOC 摘要</CardTitle>
+            <CardTitle>还没有 MOC</CardTitle>
           </div>
           <CardDescription>
-            请先在「套装列表」下载任意套装；套装的 Alternate MOC 会写入本表。也可使用页头表单验证
-            MOC ID（会记录 API 限制说明）。
+            请前往「MOC 导入」上传从 Rebrickable 等站点导出的零件清单（CSV 或 JSON）。
           </CardDescription>
         </Card>
       ) : (
@@ -100,7 +102,7 @@ export default function MocsPage() {
                       </div>
                       <p className="mt-2 text-sm text-slate-500">
                         {moc.designerName ? `${moc.designerName} · ` : null}
-                        官方摘要 {formatNumber(moc.numParts)} parts
+                        摘要零件数 {formatNumber(moc.numParts)} parts
                         {moc.sourceSetNum ? ` · 来源套装 ${moc.sourceSetNum}` : null}
                       </p>
                     </div>
@@ -133,8 +135,8 @@ export default function MocsPage() {
                   <div className="flex flex-col justify-between gap-4 border-t border-slate-100 pt-5 md:flex-row md:items-center">
                     <p className="text-sm text-slate-500">
                       {moc.inventory.rowCount === 0
-                        ? "尚无本地 MOC 零件清单（API 不提供按 MOC 下载）。"
-                        : "已缓存部分零件清单，可在详情页查看。"}
+                        ? "尚无本地零件清单，请使用 MOC 导入上传。"
+                        : "已缓存零件清单，可在详情页查看。"}
                     </p>
                     <div className="flex flex-wrap gap-3">
                       <Link

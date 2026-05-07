@@ -7,7 +7,6 @@ import {
   desc,
   eq,
   inArray,
-  isNull,
   like,
   or,
   sql,
@@ -18,6 +17,7 @@ import { db } from "@/db/client";
 import {
   colors,
   downloadJobs,
+  mocAttachments,
   mocParts,
   mocs,
   partCategories,
@@ -30,7 +30,6 @@ import {
 
 import { RebrickableApiError, rebrickableClient } from "./client";
 import type {
-  RebrickableAlternate,
   RebrickableInventoryPart,
   RebrickablePart,
   RebrickablePartColor,
@@ -140,21 +139,6 @@ function watchDownloadCancellation(jobId: number, controller: AbortController) {
 
 function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-function alternateMocCode(alternate: RebrickableAlternate) {
-  return alternate.set_num ?? (alternate.moc_id ? `MOC-${alternate.moc_id}` : null);
-}
-
-function alternateMocId(alternate: RebrickableAlternate) {
-  const code = alternateMocCode(alternate);
-  const match = code?.match(/^MOC-(\d+)$/i);
-
-  if (match) {
-    return Number(match[1]);
-  }
-
-  return alternate.moc_id ?? null;
 }
 
 function partColorKey(partNum: string, colorId: number) {
@@ -632,15 +616,14 @@ async function runSetDownload(
   updateJobProgress(jobId, {
     stage: "获取 API 数据",
     current: 0,
-    detail: `正在读取 ${setNum} 的套装、零件清单和 Alternate MOC`,
+    detail: `正在读取 ${setNum} 的套装与零件清单`,
   });
 
   try {
     throwIfCancelled(signal, jobId);
-    const [set, inventory, alternates] = await Promise.all([
+    const [set, inventory] = await Promise.all([
       rebrickableClient.getSet(setNum, signal),
       rebrickableClient.getSetParts(setNum, signal),
-      rebrickableClient.getSetAlternates(setNum, signal),
     ]);
     const inventoryPartNums = Array.from(new Set(inventory.map((item) => item.part.part_num)));
     const catalogParts =
@@ -692,19 +675,6 @@ async function runSetDownload(
       });
     }
 
-    const alternatesWithImages: Array<{
-      alternate: RebrickableAlternate;
-      imageUrl: string | null;
-    }> = [];
-
-    for (const alternate of alternates) {
-      throwIfCancelled(signal, jobId);
-      alternatesWithImages.push({
-        alternate,
-        imageUrl: alternate.moc_img_url ?? null,
-      });
-    }
-
     updateJobProgress(jobId, {
       stage: "写入文件",
       current: inventory.length,
@@ -719,7 +689,7 @@ async function runSetDownload(
       stage: "写入数据库",
       current: inventory.length,
       total: inventory.length,
-      detail: `正在写入套装、${inventory.length} 条零件记录和 ${alternates.length} 个 Alternate MOC`,
+      detail: `正在写入套装与 ${inventory.length} 条零件记录`,
     });
 
     throwIfCancelled(signal, jobId);
@@ -854,56 +824,18 @@ async function runSetDownload(
           })
           .run();
       }
-
-      for (const { alternate, imageUrl } of alternatesWithImages) {
-        const mocId = alternateMocId(alternate);
-
-        if (!mocId) {
-          continue;
-        }
-
-        tx.insert(mocs)
-          .values({
-            mocId,
-            name: alternate.name,
-            designerName: alternate.designer_name,
-            sourceSetNum: set.set_num,
-            numParts: alternate.num_parts,
-            imageUrl,
-            rebrickableUrl: alternate.moc_url,
-            rawJson: JSON.stringify(alternate),
-            downloadedAt: now,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: mocs.mocId,
-            set: {
-              name: alternate.name,
-              designerName: alternate.designer_name,
-            sourceSetNum: set.set_num,
-              numParts: alternate.num_parts,
-              imageUrl,
-              rebrickableUrl: alternate.moc_url,
-              rawJson: JSON.stringify(alternate),
-              downloadedAt: now,
-              updatedAt: now,
-            },
-          })
-          .run();
-      }
     });
 
     throwIfCancelled(signal, jobId);
     finishJob(
       jobId,
       "completed",
-      `已下载 ${set.name}，包含 ${inventory.length} 条零件记录和 ${alternates.length} 个 Alternate MOC；图片保留为 Rebrickable URL。`,
+      `已下载 ${set.name}，包含 ${inventory.length} 条零件记录；图片保留为 Rebrickable URL。`,
       {
         stage: "完成",
         current: inventory.length,
         total: inventory.length,
-        detail: `${inventory.length} 条零件记录，${alternates.length} 个 Alternate MOC`,
+        detail: `${inventory.length} 条零件记录`,
       },
     );
 
@@ -1000,32 +932,6 @@ export async function downloadSetById(rawSetNum: string): Promise<ActionResult> 
   } finally {
     stopWatchingCancellation();
   }
-}
-
-export function downloadMocById(rawMocId: string): ActionResult {
-  const mocId = Number(rawMocId.trim().replace(/^MOC-/i, ""));
-
-  if (!Number.isInteger(mocId) || mocId <= 0) {
-    return { ok: false, message: "MOC ID 必须是正整数。" };
-  }
-
-  const job = createJob("moc", String(mocId));
-  const message =
-    "Rebrickable API v3 不提供按 MOC ID 下载 MOC 或 MOC 零件清单的官方端点。当前只能通过 Set ID 下载套装及其 Alternate MOC 摘要。";
-
-  finishJob(job.id, "failed", message, {
-    stage: "无法下载",
-    current: 0,
-    total: 0,
-    detail: "Rebrickable API v3 没有对应官方端点",
-  });
-
-  return { ok: false, message };
-}
-
-/** 与套装下载入口对称：当前仍会立即记录失败任务并返回 API 限制说明。 */
-export function startDownloadMocById(rawMocId: string): ActionResult {
-  return downloadMocById(rawMocId);
 }
 
 export function cancelDownloadJob(jobId: number): ActionResult {
@@ -1350,15 +1256,10 @@ export function getSetDetailData(setNum: string) {
     imageUrl: item.imageUrl ?? partImageUrl,
   }));
 
-  const [setCount] = db.select({ value: count() }).from(sets).all();
-  const alternateWhere =
-    setCount.value === 1
-      ? or(eq(mocs.sourceSetNum, setNum), isNull(mocs.sourceSetNum))
-      : eq(mocs.sourceSetNum, setNum);
   const alternates = db
     .select()
     .from(mocs)
-    .where(alternateWhere)
+    .where(eq(mocs.sourceSetNum, setNum))
     .orderBy(desc(mocs.numParts), asc(mocs.name))
     .all();
   const latestJob = db
@@ -1473,17 +1374,16 @@ export function getMocDetailData(mocIdSegment: string) {
     .orderBy(asc(mocParts.isSpare), desc(mocParts.quantity), asc(parts.name))
     .all();
 
-  const latestJob = db
+  const attachments = db
     .select()
-    .from(downloadJobs)
-    .where(and(eq(downloadJobs.sourceType, "moc"), eq(downloadJobs.sourceId, String(mocId))))
-    .orderBy(desc(downloadJobs.updatedAt))
-    .limit(1)
-    .get();
+    .from(mocAttachments)
+    .where(eq(mocAttachments.mocId, mocId))
+    .orderBy(desc(mocAttachments.createdAt))
+    .all();
 
   return {
     moc,
     inventory: inventoryRows,
-    latestJob,
+    attachments,
   };
 }

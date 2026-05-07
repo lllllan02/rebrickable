@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { Box, Database } from "lucide-react";
+import { Database } from "lucide-react";
 
-import { MocDownloadForm } from "@/app/moc-download-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { dbPath } from "@/db/client";
@@ -36,8 +35,8 @@ export default function Home() {
             LEGO 套装与 MOC 管理
           </h1>
           <p className="mt-3 max-w-2xl text-slate-300">
-            在已下载套装的详情页可重新拉取官方数据、零件清单与 Alternate MOC 摘要；MOC
-            摘要另有「MOC 列表」与详情页。下方入口会明确提示 Rebrickable API 的官方限制。
+            在已下载套装的详情页可重新拉取官方数据与零件清单；MOC 数据请在网页导出后通过「MOC
+            导入」上传至本地数据库。
           </p>
         </div>
       </header>
@@ -52,24 +51,16 @@ export default function Home() {
           <p className="mt-3 text-4xl font-bold">{counts.parts}</p>
         </Card>
         <Card>
-          <CardDescription>MOC 摘要</CardDescription>
+          <CardDescription>MOC</CardDescription>
           <p className="mt-3 text-4xl font-bold">{counts.mocs}</p>
-          <Link href="/mocs" className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline">
-            打开 MOC 列表
-          </Link>
-        </Card>
-      </section>
-
-      <section className="mx-auto w-full max-w-2xl">
-        <Card>
-          <div className="flex items-center gap-2">
-            <Box className="h-5 w-5" />
-            <CardTitle>下载 MOC</CardTitle>
+          <div className="mt-3 flex flex-col gap-1 text-sm font-medium text-blue-700">
+            <Link href="/mocs" className="hover:underline">
+              打开 MOC 列表
+            </Link>
+            <Link href="/moc-import" className="hover:underline">
+              导入 MOC 清单
+            </Link>
           </div>
-          <CardDescription>
-            Rebrickable API v3 不支持按 MOC ID 下载零件清单；这里会记录失败任务和原因。
-          </CardDescription>
-          <MocDownloadForm />
         </Card>
       </section>
 
@@ -98,11 +89,11 @@ export default function Home() {
         </Card>
 
         <Card>
-          <CardTitle>最近 MOC 摘要</CardTitle>
+          <CardTitle>最近 MOC</CardTitle>
           <div className="mt-4 divide-y divide-slate-100">
             {latestMocs.length === 0 ? (
               <p className="py-6 text-sm text-slate-500">
-                通过下载 Set 可缓存它的 Alternate MOC 摘要。
+                尚无 MOC。请使用「MOC 导入」从网页导出文件后写入本地。
               </p>
             ) : (
               latestMocs.map((moc) => (

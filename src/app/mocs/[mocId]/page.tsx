@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Box, Download, ExternalLink, Layers } from "lucide-react";
+import { Box, ExternalLink, FileStack, Layers, Upload } from "lucide-react";
 
-import { MocDownloadForm } from "@/app/moc-download-form";
+import { MocAppendAttachmentsForm } from "@/app/moc-append-attachments-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { mocAttachmentTypeLabel } from "@/lib/moc-attachment-kind";
 import { getMocDetailData } from "@/lib/rebrickable/downloads";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ type MocDetailPageProps = {
   }>;
 };
 
-type DetailSection = "overview" | "parts" | "raw";
+type DetailSection = "overview" | "parts" | "files" | "raw";
 
 const partPageSize = 40;
 
@@ -30,7 +31,7 @@ const detailSections: Array<{
   {
     id: "overview",
     title: "概要",
-    description: "元数据与下载说明",
+    description: "元数据与导入说明",
   },
   {
     id: "parts",
@@ -38,9 +39,14 @@ const detailSections: Array<{
     description: "本地已缓存的 MOC 零件",
   },
   {
+    id: "files",
+    title: "文档与附件",
+    description: "说明书、Stud.io、压缩包等",
+  },
+  {
     id: "raw",
     title: "原始 JSON",
-    description: "Alternate 摘要原始数据",
+    description: "附加元数据（若有）",
   },
 ];
 
@@ -57,6 +63,22 @@ function formatDate(value: Date | null) {
 
 function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat("zh-CN").format(value ?? 0);
+}
+
+function formatBytes(n: number) {
+  if (!Number.isFinite(n) || n < 0) {
+    return "—";
+  }
+
+  if (n < 1024) {
+    return `${n} B`;
+  }
+
+  if (n < 1048576) {
+    return `${(n / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(n / 1048576).toFixed(1)} MB`;
 }
 
 function formatRawJson(value: string | null) {
@@ -125,7 +147,7 @@ function detailHref(
     search.set("section", params.section);
   }
 
-  if (params.partPage && params.partPage > 1) {
+  if (params.section === "parts" && params.partPage && params.partPage > 1) {
     search.set("partPage", String(params.partPage));
   }
 
@@ -247,8 +269,8 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
               <p className="text-sm font-medium text-slate-300">{mocCode(moc)}</p>
               <h1 className="mt-2 text-4xl font-bold tracking-tight">{moc.name}</h1>
               <p className="mt-3 max-w-2xl text-slate-300">
-                本地缓存的 Alternate MOC 摘要与零件记录（若有）。按 MOC ID 的远程下载受 Rebrickable
-                API 限制。
+                本地 MOC 元数据与零件清单（若有）。清单通过「MOC 导入」上传；使用相同 MOC ID
+                再次导入可覆盖零件表。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -322,12 +344,6 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
                   <dt className="text-slate-500">数据库 ID</dt>
                   <dd className="font-medium text-slate-950">{moc.mocId}</dd>
                 </div>
-                {data.latestJob?.message ? (
-                  <div className="md:col-span-2">
-                    <dt className="text-slate-500">最近 MOC 下载任务</dt>
-                    <dd className="font-medium text-slate-950">{data.latestJob.message}</dd>
-                  </div>
-                ) : null}
               </dl>
 
               <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
@@ -364,14 +380,21 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
 
           <Card>
             <div className="flex items-center gap-2">
-              <Download className="h-5 w-5" />
-              <CardTitle>下载 / 校验</CardTitle>
+              <Upload className="h-5 w-5" />
+              <CardTitle>更新零件清单</CardTitle>
             </div>
             <CardDescription>
-              按 MOC ID 创建任务时，会在「下载记录」中标记失败并说明原因（官方 API 不提供 MOC
-              零件端点）。与首页行为一致。
+              在「MOC 导入」页上传新的 CSV / JSON，填写与本页相同的 MOC ID（{moc.mocId}
+              ）即可覆盖本地 moc_parts。
             </CardDescription>
-            <MocDownloadForm presetMocId={String(moc.mocId)} lockMocId />
+            <div className="mt-4">
+              <Link
+                href="/moc-import"
+                className="inline-flex h-10 items-center rounded-lg bg-slate-950 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+              >
+                前往 MOC 导入
+              </Link>
+            </div>
           </Card>
         </section>
       ) : null}
@@ -392,8 +415,7 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
           </div>
           {data.inventory.length === 0 ? (
             <p className="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
-              当前 MOC 没有本地零件清单。Rebrickable API v3 不支持按 MOC ID 下载清单；若未来扩展管道写入
-              moc_parts 表，将在此展示。
+              当前 MOC 没有本地零件清单。请使用「MOC 导入」上传从网页导出的 CSV 或 JSON。
             </p>
           ) : (
             <>
@@ -466,10 +488,67 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
         </Card>
       ) : null}
 
+      {activeSection === "files" ? (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileStack className="h-5 w-5" />
+                  <CardTitle>已保存的附件</CardTitle>
+                </div>
+                <CardDescription>
+                  文件位于本地 <code className="rounded bg-slate-100 px-1">public/lego-assets/mocs/</code>
+                  ，可通过下方链接下载。
+                </CardDescription>
+              </div>
+              <Badge>{formatNumber(data.attachments.length)} 个文件</Badge>
+            </div>
+            {data.attachments.length === 0 ? (
+              <p className="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
+                尚无附件。可在下方表单继续上传说明书 PDF、Stud.io（.io）、LDraw、压缩包等。
+              </p>
+            ) : (
+              <ul className="mt-5 divide-y divide-slate-100">
+                {data.attachments.map((att) => (
+                  <li
+                    key={att.id}
+                    className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-950">{att.originalFileName}</p>
+                      <p className="text-xs text-slate-500">
+                        {mocAttachmentTypeLabel(att.attachmentType)} · {formatBytes(att.fileSize)} ·{" "}
+                        {formatDate(att.createdAt)}
+                      </p>
+                    </div>
+                    <a
+                      href={att.publicPath}
+                      download={att.originalFileName}
+                      className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+                    >
+                      下载
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card>
+            <CardTitle>继续添加附件</CardTitle>
+            <CardDescription>与「MOC 导入」页相同规则；不会覆盖已有零件清单。</CardDescription>
+            <div className="mt-5">
+              <MocAppendAttachmentsForm mocId={mocId} />
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
       {activeSection === "raw" ? (
         <Card>
           <CardTitle>原始 JSON</CardTitle>
-          <CardDescription>保存到 SQLite 的 Alternate 摘要字段，便于核对来源数据。</CardDescription>
+          <CardDescription>保存到 SQLite 的 raw_json 字段（若有），便于核对来源数据。</CardDescription>
           <pre className="mt-5 max-h-[640px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100">
             {mocRawJson}
           </pre>

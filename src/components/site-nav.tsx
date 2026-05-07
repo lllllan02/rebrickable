@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Box, Download, Home, Layers, List, Settings } from "lucide-react";
+import { Box, Download, Home, Layers, List, Settings, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,11 @@ const navItems = [
     href: "/mocs",
     label: "MOC 列表",
     icon: Layers,
+  },
+  {
+    href: "/moc-import",
+    label: "MOC 导入",
+    icon: Upload,
   },
   {
     href: "/parts",

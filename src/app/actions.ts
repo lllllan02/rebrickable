@@ -5,11 +5,16 @@ import { z } from "zod";
 
 import {
   saveRebrickableApiKey,
-  startDownloadMocById,
   startDownloadPartCatalog,
   startDownloadSetById,
   type ActionResult,
 } from "@/lib/rebrickable/downloads";
+import { db } from "@/db/client";
+import { mocs } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+import { appendMocAttachments } from "@/lib/moc-attachments";
+import { importMocInventory } from "@/lib/moc-import";
 
 const apiKeySchema = z.object({
   apiKey: z.string().trim().min(1, "API Key 不能为空。"),
@@ -17,10 +22,6 @@ const apiKeySchema = z.object({
 
 const setDownloadSchema = z.object({
   setNum: z.string().trim().min(1, "Set ID 不能为空。"),
-});
-
-const mocDownloadSchema = z.object({
-  mocId: z.string().trim().min(1, "MOC ID 不能为空。"),
 });
 
 function formValue(formData: FormData, key: string) {
@@ -75,44 +76,134 @@ export async function downloadSetFormAction(
   return result;
 }
 
-function revalidateMocPaths(rawMocId: string) {
+function revalidateMocPaths(mocId: number) {
   revalidatePath("/");
   revalidatePath("/mocs");
-  const mocId = Number(rawMocId.trim().replace(/^MOC-/i, ""));
-  if (Number.isInteger(mocId) && mocId > 0) {
-    revalidatePath(`/mocs/${mocId}`);
+  revalidatePath(`/mocs/${mocId}`);
+}
+
+function revalidateSetForMoc(mocId: number) {
+  const row = db.select({ sourceSetNum: mocs.sourceSetNum }).from(mocs).where(eq(mocs.mocId, mocId)).get();
+
+  if (row?.sourceSetNum) {
+    revalidatePath(`/sets/${encodeURIComponent(row.sourceSetNum)}`);
   }
 }
 
-export async function downloadMocAction(formData: FormData) {
-  const parsed = mocDownloadSchema.safeParse({
-    mocId: formValue(formData, "mocId"),
-  });
-
-  if (!parsed.success) {
-    return;
-  }
-
-  startDownloadMocById(parsed.data.mocId);
-  revalidateMocPaths(parsed.data.mocId);
-}
-
-export async function downloadMocFormAction(
+export async function importMocInventoryFormAction(
   _prevState: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = mocDownloadSchema.safeParse({
-    mocId: formValue(formData, "mocId"),
-  });
+  void _prevState;
 
-  if (!parsed.success) {
-    return { ok: false, message: "MOC ID 不能为空。" };
+  const inventoryFile = formData.get("inventory");
+
+  if (!(inventoryFile instanceof File)) {
+    return { ok: false, message: "请选择清单文件（.csv 或 .json）。" };
   }
 
-  const result = startDownloadMocById(parsed.data.mocId);
-  revalidateMocPaths(parsed.data.mocId);
+  if (inventoryFile.size === 0) {
+    return { ok: false, message: "清单文件不能为空。" };
+  }
+
+  const mocIdRaw = formValue(formData, "mocId").trim().replace(/^MOC-/i, "");
+  const mocId = Number(mocIdRaw);
+
+  if (!Number.isInteger(mocId) || mocId <= 0) {
+    return { ok: false, message: "MOC ID 须为正整数（可与 Rebrickable 上 MOC 编号一致）。" };
+  }
+
+  const name = formValue(formData, "name");
+  const designerName = formValue(formData, "designerName");
+  const sourceSetNumRaw = formValue(formData, "sourceSetNum");
+  const rebrickableUrl = formValue(formData, "rebrickableUrl");
+  const imageUrl = formValue(formData, "imageUrl");
+  const notes = formValue(formData, "notes");
+
+  let text: string;
+
+  try {
+    text = await inventoryFile.text();
+  } catch {
+    return { ok: false, message: "无法读取上传文件。" };
+  }
+
+  const result = importMocInventory({
+    mocId,
+    name,
+    designerName: designerName || null,
+    sourceSetNum: sourceSetNumRaw || null,
+    rebrickableUrl: rebrickableUrl || null,
+    imageUrl: imageUrl || null,
+    notes: notes || null,
+    inventoryText: text,
+    inventoryFilename: inventoryFile.name || "inventory.csv",
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const attachmentFiles = formData
+    .getAll("attachments")
+    .filter((item): item is File => item instanceof File && item.size > 0);
+  const attachmentKind = formValue(formData, "attachmentKind") || "auto";
+
+  if (attachmentFiles.length > 0) {
+    const att = await appendMocAttachments(mocId, attachmentFiles, attachmentKind);
+
+    if (!att.ok) {
+      revalidateMocPaths(mocId);
+      revalidateSetForMoc(mocId);
+
+      return {
+        ok: true,
+        message: `${result.message}（附件未保存：${att.message}）`,
+      };
+    }
+
+    revalidateMocPaths(mocId);
+    revalidateSetForMoc(mocId);
+
+    return { ok: true, message: `${result.message} ${att.message}`.trim() };
+  }
+
+  revalidateMocPaths(mocId);
+  revalidateSetForMoc(mocId);
 
   return result;
+}
+
+export async function appendMocAttachmentsFormAction(
+  _prevState: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  void _prevState;
+
+  const mocIdRaw = formValue(formData, "mocId").trim().replace(/^MOC-/i, "");
+  const mocId = Number(mocIdRaw);
+
+  if (!Number.isInteger(mocId) || mocId <= 0) {
+    return { ok: false, message: "MOC ID 无效。" };
+  }
+
+  const attachmentFiles = formData
+    .getAll("attachments")
+    .filter((item): item is File => item instanceof File && item.size > 0);
+
+  if (attachmentFiles.length === 0) {
+    return { ok: false, message: "请选择至少一个附件文件。" };
+  }
+
+  const attachmentKind = formValue(formData, "attachmentKind") || "auto";
+  const att = await appendMocAttachments(mocId, attachmentFiles, attachmentKind);
+
+  if (att.ok) {
+    revalidateMocPaths(mocId);
+    revalidateSetForMoc(mocId);
+  }
+
+  return { ok: att.ok, message: att.ok ? att.message || "已保存附件。" : att.message };
 }
 
 export async function downloadPartCatalogFormAction(

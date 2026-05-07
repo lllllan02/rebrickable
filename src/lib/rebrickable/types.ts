@@ -46,16 +46,6 @@ export type RebrickableInventoryPart = {
   element_id?: string | null;
 };
 
-export type RebrickableAlternate = {
-  moc_id?: number;
-  set_num?: string;
-  name: string;
-  designer_name?: string;
-  num_parts?: number;
-  moc_img_url?: string | null;
-  moc_url?: string | null;
-};
-
 export type PaginatedResponse<T> = {
   count: number;
   next: string | null;

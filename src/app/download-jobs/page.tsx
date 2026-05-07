@@ -137,7 +137,7 @@ export default async function DownloadJobsPage({ searchParams }: DownloadJobsPag
           <p className="text-sm font-medium text-slate-300">历史与进度</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight">下载记录</h1>
           <p className="mt-3 max-w-2xl text-slate-300">
-            查看套装、MOC 与零件目录相关的后台下载任务，包含状态、进度条摘要与时间戳；进行中的任务会每秒自动刷新本页数据。
+            查看套装与零件目录相关的后台下载任务，包含状态、进度条摘要与时间戳；进行中的任务会每秒自动刷新本页数据。
           </p>
         </div>
       </header>

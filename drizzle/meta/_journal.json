@@ -8,6 +8,13 @@
       "when": 1778061596435,
       "tag": "0000_initial_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778062000000,
+      "tag": "0001_moc_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,6 @@ import { settings } from "@/db/schema";
 
 import type {
   PaginatedResponse,
-  RebrickableAlternate,
   RebrickableColor,
   RebrickableInventoryPart,
   RebrickablePart,
@@ -254,13 +253,6 @@ export const rebrickableClient = {
   getSetParts(setNum: string, signal?: AbortSignal) {
     return requestAllPages<RebrickableInventoryPart>(
       `/lego/sets/${encodeURIComponent(setNum)}/parts/`,
-      signal,
-    );
-  },
-
-  getSetAlternates(setNum: string, signal?: AbortSignal) {
-    return requestAllPages<RebrickableAlternate>(
-      `/lego/sets/${encodeURIComponent(setNum)}/alternates/`,
       signal,
     );
   },

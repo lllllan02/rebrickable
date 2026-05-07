@@ -7,6 +7,8 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
+import { mocAttachmentTypes } from "@/lib/moc-attachment-kind";
+
 const timestamps = {
   createdAt: integer("created_at", { mode: "timestamp" })
     .$defaultFn(() => new Date())
@@ -172,6 +174,25 @@ export const mocParts = sqliteTable(
   ],
 );
 
+export const mocAttachments = sqliteTable(
+  "moc_attachments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    mocId: integer("moc_id")
+      .notNull()
+      .references(() => mocs.mocId, { onDelete: "cascade" }),
+    attachmentType: text("attachment_type", {
+      enum: mocAttachmentTypes,
+    }).notNull(),
+    originalFileName: text("original_file_name").notNull(),
+    publicPath: text("public_path").notNull(),
+    mimeType: text("mime_type"),
+    fileSize: integer("file_size").notNull(),
+    ...timestamps,
+  },
+  (table) => [index("moc_attachments_moc_idx").on(table.mocId)],
+);
+
 export const downloadJobs = sqliteTable(
   "download_jobs",
   {
@@ -241,6 +262,14 @@ export const setPartRelations = relations(setParts, ({ one }) => ({
 
 export const mocRelations = relations(mocs, ({ many }) => ({
   inventory: many(mocParts),
+  attachments: many(mocAttachments),
+}));
+
+export const mocAttachmentRelations = relations(mocAttachments, ({ one }) => ({
+  moc: one(mocs, {
+    fields: [mocAttachments.mocId],
+    references: [mocs.mocId],
+  }),
 }));
 
 export const mocPartRelations = relations(mocParts, ({ one }) => ({

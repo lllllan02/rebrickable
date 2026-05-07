@@ -40,7 +40,7 @@ const detailSections: Array<{
   },
   {
     id: "mocs",
-    title: "Alternate MOC",
+    title: "关联 MOC",
     description: "分页查看可替换拼搭方案",
   },
   {
@@ -264,7 +264,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
               <p className="text-sm font-medium text-slate-300">{data.set.setNum}</p>
               <h1 className="mt-2 text-4xl font-bold tracking-tight">{data.set.name}</h1>
               <p className="mt-3 max-w-2xl text-slate-300">
-                已下载的套装资料、清单文件、图片 URL 和 Alternate MOC 摘要都集中在这里。
+                已下载的套装资料、清单文件、图片 URL，以及手动导入并关联到本套装的 MOC 都集中在这里。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -306,7 +306,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                 <p className="mt-3 text-4xl font-bold">{formatNumber(totalParts)}</p>
               </Card>
               <Card>
-                <CardDescription>Alternate MOC</CardDescription>
+                <CardDescription>关联 MOC</CardDescription>
                 <p className="mt-3 text-4xl font-bold">{formatNumber(data.alternates.length)}</p>
               </Card>
               <Card>
@@ -383,7 +383,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                 scroll={false}
                 className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600 transition-colors hover:text-slate-950"
               >
-                查看 Alternate MOC
+                查看关联 MOC
               </Link>
               {data.set.rebrickableUrl ? (
                 <Link
@@ -406,7 +406,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
               <CardTitle>下载 / 更新数据</CardTitle>
             </div>
             <CardDescription>
-              为此套装创建下载任务，拉取最新套装信息、零件清单与 Alternate MOC 摘要（与首页原入口行为一致）。
+              为此套装创建下载任务，拉取最新套装信息与零件清单（与首页入口行为一致）。
             </CardDescription>
             <SetDownloadForm presetSetNum={data.set.setNum} lockSetNum />
           </Card>
@@ -501,9 +501,10 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
         <Card>
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
             <div>
-              <CardTitle>Alternate MOC 摘要</CardTitle>
+              <CardTitle>关联 MOC</CardTitle>
               <CardDescription>
-                共 {formatNumber(data.alternates.length)} 条摘要，每页 {formatNumber(mocPageSize)} 条。
+                共 {formatNumber(data.alternates.length)} 条，每页 {formatNumber(mocPageSize)} 条。导入时填写来源
+                Set ID 为本套装即可在此展示。
               </CardDescription>
             </div>
             <Badge>
@@ -512,7 +513,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
           </div>
           {data.alternates.length === 0 ? (
             <p className="mt-6 rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">
-              当前套装还没有缓存 Alternate MOC 摘要。
+              当前套装还没有关联 MOC。请在「MOC 导入」上传清单并填写来源 Set ID 为本套装编号。
             </p>
           ) : (
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
