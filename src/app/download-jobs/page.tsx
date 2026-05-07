@@ -169,7 +169,7 @@ export default async function DownloadJobsPage({ searchParams }: DownloadJobsPag
             href="/"
             className="text-sm font-medium text-blue-700 underline-offset-2 hover:underline"
           >
-            返回首页下载
+            返回首页
           </Link>
         </div>
 

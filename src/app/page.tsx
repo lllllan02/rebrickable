@@ -1,4 +1,4 @@
-import { Box, Database, Download } from "lucide-react";
+import { Box, Database } from "lucide-react";
 
 import { downloadMocAction } from "./actions";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { dbPath } from "@/db/client";
 import { getDashboardData } from "@/lib/rebrickable/downloads";
 import { DownloadSubmitButton } from "./download-submit-button";
-import { SetDownloadForm } from "./set-download-form";
 
 export const dynamic = "force-dynamic";
 
@@ -38,8 +37,8 @@ export default function Home() {
             LEGO 套装与 MOC 管理
           </h1>
           <p className="mt-3 max-w-2xl text-slate-300">
-            输入 Set ID 下载官方套装、零件清单和 Alternate MOC 摘要到本地数据库。
-            MOC ID 入口会明确提示 Rebrickable API 的官方限制。
+            在已下载套装的详情页可重新拉取官方数据、零件清单与 Alternate MOC 摘要。
+            下方 MOC ID 入口会明确提示 Rebrickable API 的官方限制。
           </p>
         </div>
       </header>
@@ -59,18 +58,7 @@ export default function Home() {
         </Card>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <div className="flex items-center gap-2">
-            <Download className="h-5 w-5" />
-            <CardTitle>下载套装</CardTitle>
-          </div>
-          <CardDescription>
-            支持 10316-1 这种完整 Set ID；如果只输入数字，会自动补为 -1。
-          </CardDescription>
-          <SetDownloadForm />
-        </Card>
-
+      <section className="mx-auto w-full max-w-2xl">
         <Card>
           <div className="flex items-center gap-2">
             <Box className="h-5 w-5" />

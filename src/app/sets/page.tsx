@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Box, ExternalLink, FileText } from "lucide-react";
 
+import { SetDownloadForm } from "@/app/set-download-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { getSetListData } from "@/lib/rebrickable/downloads";
@@ -28,18 +29,23 @@ export default function SetsPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
-      <header className="flex flex-col gap-4">
-        <div className="flex flex-col justify-between gap-4 rounded-3xl bg-slate-950 p-8 text-white md:flex-row md:items-end">
-          <div>
-            <p className="text-sm font-medium text-slate-300">本地数据库</p>
-            <h1 className="mt-2 text-4xl font-bold tracking-tight">套装列表</h1>
-            <p className="mt-3 max-w-2xl text-slate-300">
-              查看已经下载到本地 SQLite 和 public 资源目录的 LEGO 套装内容。
-            </p>
+      <header className="rounded-3xl bg-slate-950 p-6 text-white md:p-8">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-300">本地数据库</p>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">套装列表</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                支持完整 Set ID（如 10316-1），纯数字会自动补 -1；进度在「下载记录」。下列表为已入库套装。
+              </p>
+            </div>
+            <div className="shrink-0 rounded-2xl bg-white/10 px-4 py-3 md:px-5 md:py-4">
+              <p className="text-sm text-slate-300">已下载套装</p>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums md:text-3xl">{formatNumber(count)}</p>
+            </div>
           </div>
-          <div className="rounded-2xl bg-white/10 px-5 py-4">
-            <p className="text-sm text-slate-300">已下载套装</p>
-            <p className="mt-1 text-3xl font-bold">{formatNumber(count)}</p>
+          <div className="border-t border-white/10 pt-4 md:pt-5">
+            <SetDownloadForm layout="toolbar" />
           </div>
         </div>
       </header>
@@ -51,12 +57,12 @@ export default function SetsPage() {
             <CardTitle>还没有套装</CardTitle>
           </div>
           <CardDescription>
-            回到首页输入 Set ID 下载数据后，这里会显示完整套装列表。
+            使用页头中的下载表单创建任务，完成后刷新本页即可看到列表与详情入口。
           </CardDescription>
         </Card>
       ) : (
         <section className="grid gap-5">
-          {sets.map((set) => (
+          {sets.map((set, index) => (
             <Card
               key={set.setNum}
               className="overflow-hidden p-0 transition-shadow hover:shadow-md"
@@ -72,6 +78,7 @@ export default function SetsPage() {
                         src={set.imageUrl}
                         alt={set.name}
                         fill
+                        priority={index === 0}
                         sizes="280px"
                         className="object-contain"
                       />

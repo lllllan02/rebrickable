@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Box, ExternalLink, FileText } from "lucide-react";
+import { Box, Download, ExternalLink, FileText } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { getSetDetailData } from "@/lib/rebrickable/downloads";
+import { SetDownloadForm } from "@/app/set-download-form";
 
 export const dynamic = "force-dynamic";
 
@@ -249,6 +250,7 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                   src={data.set.imageUrl}
                   alt={data.set.name}
                   fill
+                  priority
                   sizes="360px"
                   className="object-contain"
                 />
@@ -292,27 +294,28 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
       </nav>
 
       {activeSection === "overview" ? (
-        <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <div className="grid gap-4">
-            <Card>
-              <CardDescription>零件记录</CardDescription>
-              <p className="mt-3 text-4xl font-bold">{formatNumber(data.inventory.length)}</p>
-            </Card>
-            <Card>
-              <CardDescription>零件总数</CardDescription>
-              <p className="mt-3 text-4xl font-bold">{formatNumber(totalParts)}</p>
-            </Card>
-            <Card>
-              <CardDescription>Alternate MOC</CardDescription>
-              <p className="mt-3 text-4xl font-bold">{formatNumber(data.alternates.length)}</p>
-            </Card>
-            <Card>
-              <CardDescription>图片 URL</CardDescription>
-              <p className="mt-3 text-4xl font-bold">{formatNumber(imageUrlCount)}</p>
-            </Card>
-          </div>
+        <section className="flex flex-col gap-6">
+          <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+            <div className="grid gap-4">
+              <Card>
+                <CardDescription>零件记录</CardDescription>
+                <p className="mt-3 text-4xl font-bold">{formatNumber(data.inventory.length)}</p>
+              </Card>
+              <Card>
+                <CardDescription>零件总数</CardDescription>
+                <p className="mt-3 text-4xl font-bold">{formatNumber(totalParts)}</p>
+              </Card>
+              <Card>
+                <CardDescription>Alternate MOC</CardDescription>
+                <p className="mt-3 text-4xl font-bold">{formatNumber(data.alternates.length)}</p>
+              </Card>
+              <Card>
+                <CardDescription>图片 URL</CardDescription>
+                <p className="mt-3 text-4xl font-bold">{formatNumber(imageUrlCount)}</p>
+              </Card>
+            </div>
 
-          <Card>
+            <Card>
             <div className="flex items-center gap-2">
               <Box className="h-5 w-5" />
               <CardTitle>下载内容</CardTitle>
@@ -394,6 +397,18 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                 </Link>
               ) : null}
             </div>
+          </Card>
+          </div>
+
+          <Card>
+            <div className="flex items-center gap-2">
+              <Download className="h-5 w-5" />
+              <CardTitle>下载 / 更新数据</CardTitle>
+            </div>
+            <CardDescription>
+              为此套装创建下载任务，拉取最新套装信息、零件清单与 Alternate MOC 摘要（与首页原入口行为一致）。
+            </CardDescription>
+            <SetDownloadForm presetSetNum={data.set.setNum} lockSetNum />
           </Card>
         </section>
       ) : null}
