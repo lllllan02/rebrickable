@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Box, Home, List, Settings } from "lucide-react";
+import { Box, Download, Home, List, Settings } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,11 @@ const navItems = [
     href: "/parts",
     label: "零件目录",
     icon: Box,
+  },
+  {
+    href: "/download-jobs",
+    label: "下载记录",
+    icon: Download,
   },
   {
     href: "/settings",

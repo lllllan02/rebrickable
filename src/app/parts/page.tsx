@@ -5,12 +5,7 @@ import { Box, ExternalLink, Palette } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  getLatestDownloadJobs,
-  getPartCatalogSummary,
-  getPartExplorerData,
-} from "@/lib/rebrickable/downloads";
-import { DownloadJobsPanel, type DownloadJobItem } from "../download-jobs-panel";
+import { getPartCatalogSummary, getPartExplorerData } from "@/lib/rebrickable/downloads";
 import { CatalogDownloadForm } from "./catalog-download-form";
 
 export const dynamic = "force-dynamic";
@@ -169,18 +164,6 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
     page: numberSearchValue(query.page),
     pageSize,
   });
-  const downloadJobs: DownloadJobItem[] = getLatestDownloadJobs().map((job) => ({
-    id: job.id,
-    sourceType: job.sourceType,
-    sourceId: job.sourceId,
-    status: job.status,
-    message: job.message,
-    progressStage: job.progressStage,
-    progressCurrent: job.progressCurrent,
-    progressTotal: job.progressTotal,
-    progressDetail: job.progressDetail,
-    updatedAt: job.updatedAt.toISOString(),
-  }));
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
@@ -404,8 +387,6 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
           />
         </section>
       )}
-
-      <DownloadJobsPanel initialJobs={downloadJobs} />
     </main>
   );
 }

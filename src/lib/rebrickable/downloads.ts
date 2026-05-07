@@ -1057,6 +1057,27 @@ export function getLatestDownloadJobs(limit = 8) {
     .all();
 }
 
+export function getDownloadJobsTotalCount() {
+  const [row] = db.select({ value: count() }).from(downloadJobs).all();
+
+  return row?.value ?? 0;
+}
+
+/** 按更新时间倒序分页，用于下载记录列表页。 */
+export function getDownloadJobsPaginated(page: number, pageSize: number) {
+  const safePageSize = Math.min(Math.max(pageSize, 10), 100);
+  const safePage = Math.max(page, 1);
+  const offset = (safePage - 1) * safePageSize;
+
+  return db
+    .select()
+    .from(downloadJobs)
+    .orderBy(desc(downloadJobs.updatedAt))
+    .limit(safePageSize)
+    .offset(offset)
+    .all();
+}
+
 export function getDashboardData() {
   const [setCount] = db.select({ value: count() }).from(sets).all();
   const [partCount] = db.select({ value: count() }).from(parts).all();
@@ -1077,8 +1098,6 @@ export function getDashboardData() {
     .limit(6)
     .all();
 
-  const latestJobs = getLatestDownloadJobs();
-
   return {
     counts: {
       sets: setCount.value,
@@ -1088,7 +1107,6 @@ export function getDashboardData() {
     },
     latestSets,
     latestMocs,
-    latestJobs,
   };
 }
 

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { dbPath } from "@/db/client";
 import { getDashboardData } from "@/lib/rebrickable/downloads";
 import { DownloadSubmitButton } from "./download-submit-button";
-import { DownloadJobsPanel, type DownloadJobItem } from "./download-jobs-panel";
 import { SetDownloadForm } from "./set-download-form";
 
 export const dynamic = "force-dynamic";
@@ -24,19 +23,7 @@ function formatDate(value: Date | null) {
 }
 
 export default function Home() {
-  const { counts, latestJobs, latestMocs, latestSets } = getDashboardData();
-  const downloadJobs: DownloadJobItem[] = latestJobs.map((job) => ({
-    id: job.id,
-    sourceType: job.sourceType,
-    sourceId: job.sourceId,
-    status: job.status,
-    message: job.message,
-    progressStage: job.progressStage,
-    progressCurrent: job.progressCurrent,
-    progressTotal: job.progressTotal,
-    progressDetail: job.progressDetail,
-    updatedAt: job.updatedAt.toISOString(),
-  }));
+  const { counts, latestMocs, latestSets } = getDashboardData();
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8">
@@ -148,8 +135,6 @@ export default function Home() {
           </div>
         </Card>
       </section>
-
-      <DownloadJobsPanel initialJobs={downloadJobs} />
     </main>
   );
 }

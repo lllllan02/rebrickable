@@ -1,8 +1,36 @@
-import { cancelDownloadJob, getLatestDownloadJobs } from "@/lib/rebrickable/downloads";
+import {
+  cancelDownloadJob,
+  getDownloadJobsPaginated,
+  getDownloadJobsTotalCount,
+  getLatestDownloadJobs,
+} from "@/lib/rebrickable/downloads";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
+function parsePositiveInt(value: string | null, fallback: number) {
+  const n = Number(value);
+
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+export function GET(request: Request) {
+  const url = new URL(request.url);
+  const pageParam = url.searchParams.get("page");
+
+  if (pageParam !== null) {
+    const page = parsePositiveInt(pageParam, 1);
+    const pageSize = parsePositiveInt(url.searchParams.get("pageSize"), 20);
+    const total = getDownloadJobsTotalCount();
+    const jobs = getDownloadJobsPaginated(page, pageSize);
+
+    return Response.json({
+      jobs,
+      total,
+      page,
+      pageSize: Math.min(Math.max(pageSize, 10), 100),
+    });
+  }
+
   return Response.json({
     jobs: getLatestDownloadJobs(),
   });
