@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
-  downloadMocById,
   saveRebrickableApiKey,
+  startDownloadMocById,
   startDownloadPartCatalog,
   startDownloadSetById,
   type ActionResult,
@@ -75,6 +75,15 @@ export async function downloadSetFormAction(
   return result;
 }
 
+function revalidateMocPaths(rawMocId: string) {
+  revalidatePath("/");
+  revalidatePath("/mocs");
+  const mocId = Number(rawMocId.trim().replace(/^MOC-/i, ""));
+  if (Number.isInteger(mocId) && mocId > 0) {
+    revalidatePath(`/mocs/${mocId}`);
+  }
+}
+
 export async function downloadMocAction(formData: FormData) {
   const parsed = mocDownloadSchema.safeParse({
     mocId: formValue(formData, "mocId"),
@@ -84,8 +93,26 @@ export async function downloadMocAction(formData: FormData) {
     return;
   }
 
-  downloadMocById(parsed.data.mocId);
-  revalidatePath("/");
+  startDownloadMocById(parsed.data.mocId);
+  revalidateMocPaths(parsed.data.mocId);
+}
+
+export async function downloadMocFormAction(
+  _prevState: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = mocDownloadSchema.safeParse({
+    mocId: formValue(formData, "mocId"),
+  });
+
+  if (!parsed.success) {
+    return { ok: false, message: "MOC ID 不能为空。" };
+  }
+
+  const result = startDownloadMocById(parsed.data.mocId);
+  revalidateMocPaths(parsed.data.mocId);
+
+  return result;
 }
 
 export async function downloadPartCatalogFormAction(

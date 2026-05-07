@@ -1,12 +1,11 @@
+import Link from "next/link";
 import { Box, Database } from "lucide-react";
 
-import { downloadMocAction } from "./actions";
+import { MocDownloadForm } from "@/app/moc-download-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { dbPath } from "@/db/client";
 import { getDashboardData } from "@/lib/rebrickable/downloads";
-import { DownloadSubmitButton } from "./download-submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -37,8 +36,8 @@ export default function Home() {
             LEGO 套装与 MOC 管理
           </h1>
           <p className="mt-3 max-w-2xl text-slate-300">
-            在已下载套装的详情页可重新拉取官方数据、零件清单与 Alternate MOC 摘要。
-            下方 MOC ID 入口会明确提示 Rebrickable API 的官方限制。
+            在已下载套装的详情页可重新拉取官方数据、零件清单与 Alternate MOC 摘要；MOC
+            摘要另有「MOC 列表」与详情页。下方入口会明确提示 Rebrickable API 的官方限制。
           </p>
         </div>
       </header>
@@ -55,6 +54,9 @@ export default function Home() {
         <Card>
           <CardDescription>MOC 摘要</CardDescription>
           <p className="mt-3 text-4xl font-bold">{counts.mocs}</p>
+          <Link href="/mocs" className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline">
+            打开 MOC 列表
+          </Link>
         </Card>
       </section>
 
@@ -67,12 +69,7 @@ export default function Home() {
           <CardDescription>
             Rebrickable API v3 不支持按 MOC ID 下载零件清单；这里会记录失败任务和原因。
           </CardDescription>
-          <form action={downloadMocAction} className="mt-5 flex flex-col gap-3">
-            <Input name="mocId" placeholder="例如 123456" required />
-            <DownloadSubmitButton variant="secondary" pendingLabel="正在检查 MOC ID...">
-              检查 MOC ID
-            </DownloadSubmitButton>
-          </form>
+          <MocDownloadForm />
         </Card>
       </section>
 
@@ -109,9 +106,14 @@ export default function Home() {
               </p>
             ) : (
               latestMocs.map((moc) => (
-                <div key={moc.mocId} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-medium">{moc.name}</p>
+                <div key={moc.mocId} className="flex items-center justify-between gap-4 py-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/mocs/${moc.mocId}`}
+                      className="font-medium text-slate-950 hover:underline"
+                    >
+                      {moc.name}
+                    </Link>
                     <p className="text-sm text-slate-500">
                       MOC-{moc.mocId} · {moc.numParts ?? 0} parts
                     </p>

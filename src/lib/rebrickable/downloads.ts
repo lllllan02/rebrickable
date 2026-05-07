@@ -18,6 +18,7 @@ import { db } from "@/db/client";
 import {
   colors,
   downloadJobs,
+  mocParts,
   mocs,
   partCategories,
   partColorOptions,
@@ -1022,6 +1023,11 @@ export function downloadMocById(rawMocId: string): ActionResult {
   return { ok: false, message };
 }
 
+/** 与套装下载入口对称：当前仍会立即记录失败任务并返回 API 限制说明。 */
+export function startDownloadMocById(rawMocId: string): ActionResult {
+  return downloadMocById(rawMocId);
+}
+
 export function cancelDownloadJob(jobId: number): ActionResult {
   const job = db
     .select()
@@ -1378,6 +1384,106 @@ export function getSetDetailData(setNum: string) {
         href: `${setAssetBasePath}/${setNum}/inventory.csv`,
       },
     ],
+    latestJob,
+  };
+}
+
+function parseMocIdFromRoute(segment: string): number | null {
+  const decoded = decodeURIComponent(segment).trim();
+  const digits = decoded.replace(/^MOC-/i, "");
+  const mocId = Number(digits);
+
+  if (!Number.isInteger(mocId) || mocId <= 0) {
+    return null;
+  }
+
+  return mocId;
+}
+
+export function getMocListData() {
+  const [mocCount] = db.select({ value: count() }).from(mocs).all();
+  const allMocs = db.select().from(mocs).orderBy(desc(mocs.updatedAt)).all();
+  const inventoryRows = db
+    .select({
+      mocId: mocParts.mocId,
+      quantity: mocParts.quantity,
+      isSpare: mocParts.isSpare,
+    })
+    .from(mocParts)
+    .all();
+  const inventoryByMoc = new Map<
+    number,
+    { rowCount: number; quantity: number; spareRows: number }
+  >();
+
+  for (const row of inventoryRows) {
+    const current = inventoryByMoc.get(row.mocId) ?? {
+      rowCount: 0,
+      quantity: 0,
+      spareRows: 0,
+    };
+
+    current.rowCount += 1;
+    current.quantity += row.quantity;
+    current.spareRows += row.isSpare ? 1 : 0;
+    inventoryByMoc.set(row.mocId, current);
+  }
+
+  return {
+    count: mocCount.value,
+    mocs: allMocs.map((moc) => ({
+      ...moc,
+      inventory: inventoryByMoc.get(moc.mocId) ?? {
+        rowCount: 0,
+        quantity: 0,
+        spareRows: 0,
+      },
+    })),
+  };
+}
+
+export function getMocDetailData(mocIdSegment: string) {
+  const mocId = parseMocIdFromRoute(mocIdSegment);
+
+  if (mocId === null) {
+    return null;
+  }
+
+  const moc = db.select().from(mocs).where(eq(mocs.mocId, mocId)).get();
+
+  if (!moc) {
+    return null;
+  }
+
+  const inventoryRows = db
+    .select({
+      partNum: mocParts.partNum,
+      partName: parts.name,
+      partCategoryName: parts.categoryName,
+      colorName: colors.name,
+      colorRgb: colors.rgb,
+      quantity: mocParts.quantity,
+      isSpare: mocParts.isSpare,
+      imageUrl: parts.imageUrl,
+    })
+    .from(mocParts)
+    .innerJoin(parts, eq(mocParts.partNum, parts.partNum))
+    .innerJoin(colors, eq(mocParts.colorId, colors.id))
+    .where(eq(mocParts.mocId, mocId))
+    .orderBy(asc(mocParts.isSpare), desc(mocParts.quantity), asc(parts.name))
+    .all();
+
+  const latestJob = db
+    .select()
+    .from(downloadJobs)
+    .where(and(eq(downloadJobs.sourceType, "moc"), eq(downloadJobs.sourceId, String(mocId))))
+    .orderBy(desc(downloadJobs.updatedAt))
+    .limit(1)
+    .get();
+
+  return {
+    moc,
+    inventory: inventoryRows,
     latestJob,
   };
 }

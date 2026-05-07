@@ -197,6 +197,13 @@ export function DownloadJobsHistoryTable({
                         >
                           {sourceLabel}
                         </Link>
+                      ) : job.sourceType === "moc" ? (
+                        <Link
+                          href={`/mocs/${encodeURIComponent(job.sourceId)}`}
+                          className="font-medium text-blue-700 underline-offset-2 hover:underline"
+                        >
+                          {sourceLabel}
+                        </Link>
                       ) : (
                         <span className="font-medium text-slate-800">{sourceLabel}</span>
                       )}

@@ -542,17 +542,25 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                       <p className="mt-1 text-sm text-slate-500">
                         {moc.designerName ?? "未知作者"} · {formatNumber(moc.numParts)} parts
                       </p>
-                      {moc.rebrickableUrl ? (
+                      <div className="mt-3 flex flex-wrap gap-3">
                         <Link
-                          href={moc.rebrickableUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950"
+                          href={`/mocs/${moc.mocId}`}
+                          className="inline-flex items-center gap-2 text-sm font-medium text-slate-950 underline-offset-2 hover:underline"
                         >
-                          Rebrickable
-                          <ExternalLink className="h-4 w-4" />
+                          本地 MOC 详情
                         </Link>
-                      ) : null}
+                        {moc.rebrickableUrl ? (
+                          <Link
+                            href={moc.rebrickableUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950"
+                          >
+                            Rebrickable
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </article>
