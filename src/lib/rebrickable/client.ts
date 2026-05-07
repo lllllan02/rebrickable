@@ -18,8 +18,8 @@ import type {
 
 const baseUrl = "https://rebrickable.com/api/v3";
 const maxThrottleRetries = 8;
-const defaultRequestIntervalMs = 1100;
-const defaultMaxConcurrentRequests = 2;
+const defaultRequestIntervalMs = 250;
+const defaultMaxConcurrentRequests = 6;
 
 type QueuedRequest = {
   run: () => void;

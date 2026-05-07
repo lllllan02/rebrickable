@@ -42,6 +42,7 @@ export type ActionResult = {
 };
 
 type DownloadJobStatus = "completed" | "failed" | "cancelled";
+type CancellableDownloadJobStatus = "pending" | "running";
 type DownloadSourceType = "set" | "moc" | "catalog";
 
 type DownloadProgress = {
@@ -61,8 +62,10 @@ export type PartExplorerFilters = {
 };
 
 const activeDownloads = new Map<string, { controller: AbortController; jobId: number }>();
-const defaultPartColorWorkerCount = 2;
-const maxPartColorWorkerCount = 8;
+const cancellableDownloadJobStatuses: CancellableDownloadJobStatus[] = ["pending", "running"];
+const defaultPartColorWorkerCount = 6;
+const maxPartColorWorkerCount = 24;
+const cancellationPollIntervalMs = 1000;
 const setAssetBasePath = "/lego-assets/sets";
 
 class DownloadCancelledError extends Error {
@@ -104,10 +107,34 @@ function targetKey(sourceType: DownloadSourceType, sourceId: string) {
   return `${sourceType}:${sourceId}`;
 }
 
-function throwIfCancelled(signal: AbortSignal) {
-  if (signal.aborted) {
+function isDownloadJobCancelled(jobId: number) {
+  const row = db
+    .select({ status: downloadJobs.status })
+    .from(downloadJobs)
+    .where(eq(downloadJobs.id, jobId))
+    .get();
+
+  return row?.status === "cancelled";
+}
+
+function throwIfCancelled(signal: AbortSignal, jobId?: number) {
+  if (signal.aborted || (jobId !== undefined && isDownloadJobCancelled(jobId))) {
     throw new DownloadCancelledError();
   }
+}
+
+function watchDownloadCancellation(jobId: number, controller: AbortController) {
+  if (isDownloadJobCancelled(jobId)) {
+    controller.abort();
+  }
+
+  const timer = setInterval(() => {
+    if (isDownloadJobCancelled(jobId)) {
+      controller.abort();
+    }
+  }, cancellationPollIntervalMs);
+
+  return () => clearInterval(timer);
 }
 
 function sanitizePathSegment(value: string) {
@@ -247,7 +274,7 @@ function getActiveDownloadJob(sourceType: DownloadSourceType, sourceId: string) 
       and(
         eq(downloadJobs.sourceType, sourceType),
         eq(downloadJobs.sourceId, sourceId),
-        inArray(downloadJobs.status, ["pending", "running"]),
+        inArray(downloadJobs.status, cancellableDownloadJobStatuses),
       ),
     )
     .orderBy(desc(downloadJobs.updatedAt))
@@ -276,7 +303,9 @@ function updateJobProgress(id: number, progress: DownloadProgress) {
       progressDetail: progress.detail,
       updatedAt: new Date(),
     })
-    .where(eq(downloadJobs.id, id))
+    .where(
+      and(eq(downloadJobs.id, id), inArray(downloadJobs.status, cancellableDownloadJobStatuses)),
+    )
     .run();
 }
 
@@ -363,7 +392,7 @@ async function downloadPartColorOptions(
 
   const runWorker = async () => {
     while (true) {
-      throwIfCancelled(controller.signal);
+      throwIfCancelled(controller.signal, jobId);
       const part = takeNextPart();
 
       if (!part) {
@@ -372,7 +401,7 @@ async function downloadPartColorOptions(
 
       const options = await rebrickableClient.getPartColors(part.part_num, controller.signal);
 
-      throwIfCancelled(controller.signal);
+      throwIfCancelled(controller.signal, jobId);
       writePartColorOptions(part.part_num, options, now);
 
       processedParts += 1;
@@ -416,7 +445,9 @@ function finishJob(
       progressDetail: progress?.detail,
       updatedAt: new Date(),
     })
-    .where(eq(downloadJobs.id, id))
+    .where(
+      and(eq(downloadJobs.id, id), inArray(downloadJobs.status, cancellableDownloadJobStatuses)),
+    )
     .run();
 }
 
@@ -470,7 +501,7 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
   });
 
   try {
-    throwIfCancelled(signal);
+    throwIfCancelled(signal, jobId);
     const [allParts, allColors, allPartCategories] = await Promise.all([
       rebrickableClient.getAllParts(signal),
       rebrickableClient.getColors(signal),
@@ -486,7 +517,7 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
       detail: `正在写入 ${allParts.length} 个零件、${allPartCategories.length} 个分类和 ${allColors.length} 个颜色`,
     });
 
-    throwIfCancelled(signal);
+    throwIfCancelled(signal, jobId);
     db.transaction((tx) => {
       for (const category of allPartCategories) {
         tx.insert(partCategories)
@@ -604,7 +635,7 @@ async function runSetDownload(
   });
 
   try {
-    throwIfCancelled(signal);
+    throwIfCancelled(signal, jobId);
     const [set, inventory, alternates] = await Promise.all([
       rebrickableClient.getSet(setNum, signal),
       rebrickableClient.getSetParts(setNum, signal),
@@ -643,7 +674,7 @@ async function runSetDownload(
     }> = [];
 
     for (const item of inventory) {
-      throwIfCancelled(signal);
+      throwIfCancelled(signal, jobId);
       const catalogPart = catalogPartsByNum.get(item.part.part_num);
       const catalogPartColor = catalogPartColorsByKey.get(
         partColorKey(item.part.part_num, item.color.id),
@@ -666,7 +697,7 @@ async function runSetDownload(
     }> = [];
 
     for (const alternate of alternates) {
-      throwIfCancelled(signal);
+      throwIfCancelled(signal, jobId);
       alternatesWithImages.push({
         alternate,
         imageUrl: alternate.moc_img_url ?? null,
@@ -680,7 +711,7 @@ async function runSetDownload(
       detail: `正在保存 ${inventory.length} 条零件清单 JSON/CSV`,
     });
 
-    throwIfCancelled(signal);
+    throwIfCancelled(signal, jobId);
     await writeSetInventoryFiles(set, inventoryWithImages);
 
     updateJobProgress(jobId, {
@@ -690,7 +721,7 @@ async function runSetDownload(
       detail: `正在写入套装、${inventory.length} 条零件记录和 ${alternates.length} 个 Alternate MOC`,
     });
 
-    throwIfCancelled(signal);
+    throwIfCancelled(signal, jobId);
     const now = new Date();
 
     db.transaction((tx) => {
@@ -862,7 +893,7 @@ async function runSetDownload(
       }
     });
 
-    throwIfCancelled(signal);
+    throwIfCancelled(signal, jobId);
     finishJob(
       jobId,
       "completed",
@@ -907,9 +938,11 @@ export function startDownloadSetById(rawSetNum: string): ActionResult {
 
   const controller = new AbortController();
   const job = createJob("set", setNum);
+  const stopWatchingCancellation = watchDownloadCancellation(job.id, controller);
   activeDownloads.set(key, { controller, jobId: job.id });
 
   void runSetDownload(job.id, setNum, controller.signal).finally(() => {
+    stopWatchingCancellation();
     const activeJob = activeDownloads.get(key);
 
     if (activeJob?.jobId === job.id) {
@@ -935,9 +968,11 @@ export function startDownloadPartCatalog(): ActionResult {
 
   const controller = new AbortController();
   const job = createJob("catalog", sourceId);
+  const stopWatchingCancellation = watchDownloadCancellation(job.id, controller);
   activeDownloads.set(key, { controller, jobId: job.id });
 
   void runPartCatalogDownload(job.id, controller.signal).finally(() => {
+    stopWatchingCancellation();
     const activeJob = activeDownloads.get(key);
 
     if (activeJob?.jobId === job.id) {
@@ -957,7 +992,13 @@ export async function downloadSetById(rawSetNum: string): Promise<ActionResult> 
 
   const controller = new AbortController();
   const job = createJob("set", setNum);
-  return runSetDownload(job.id, setNum, controller.signal);
+  const stopWatchingCancellation = watchDownloadCancellation(job.id, controller);
+
+  try {
+    return await runSetDownload(job.id, setNum, controller.signal);
+  } finally {
+    stopWatchingCancellation();
+  }
 }
 
 export function downloadMocById(rawMocId: string): ActionResult {
