@@ -31,6 +31,7 @@ import { RebrickableApiError, rebrickableClient } from "./client";
 import type {
   RebrickableAlternate,
   RebrickableInventoryPart,
+  RebrickablePart,
   RebrickablePartColor,
   RebrickableSet,
 } from "./types";
@@ -60,6 +61,9 @@ export type PartExplorerFilters = {
 };
 
 const activeDownloads = new Map<string, { controller: AbortController; jobId: number }>();
+const defaultPartColorWorkerCount = 2;
+const maxPartColorWorkerCount = 8;
+const setAssetBasePath = "/lego-assets/sets";
 
 class DownloadCancelledError extends Error {
   constructor() {
@@ -133,6 +137,21 @@ function partColorImageUrl(option: RebrickablePartColor) {
   return option.part_img_url ?? null;
 }
 
+function positiveIntegerFromEnv(name: string, fallback: number) {
+  const parsed = Number(process.env[name]);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function partColorWorkerCount() {
+  const configured = positiveIntegerFromEnv(
+    "REBRICKABLE_PART_COLOR_WORKERS",
+    positiveIntegerFromEnv("REBRICKABLE_API_MAX_CONCURRENCY", defaultPartColorWorkerCount),
+  );
+
+  return Math.min(configured, maxPartColorWorkerCount);
+}
+
 function csvValue(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
@@ -152,7 +171,7 @@ async function writeSetInventoryFiles(
   const setDirectory = join(
     process.cwd(),
     "public",
-    "rebrickable-assets",
+    "lego-assets",
     "sets",
     sanitizePathSegment(set.set_num),
   );
@@ -259,6 +278,124 @@ function updateJobProgress(id: number, progress: DownloadProgress) {
     })
     .where(eq(downloadJobs.id, id))
     .run();
+}
+
+function writePartColorOptions(partNum: string, options: RebrickablePartColor[], now: Date) {
+  db.transaction((tx) => {
+    tx.delete(partColorOptions).where(eq(partColorOptions.partNum, partNum)).run();
+
+    for (const option of options) {
+      tx.insert(colors)
+        .values({
+          id: option.color_id,
+          name: option.color_name,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: colors.id,
+          set: {
+            name: option.color_name,
+            updatedAt: now,
+          },
+        })
+        .run();
+
+      tx.insert(partColorOptions)
+        .values({
+          partNum,
+          colorId: option.color_id,
+          imageUrl: partColorImageUrl(option),
+          elementIds: JSON.stringify(option.elements ?? []),
+          numSets: option.num_sets,
+          rawJson: JSON.stringify(option),
+          downloadedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [partColorOptions.partNum, partColorOptions.colorId],
+          set: {
+            imageUrl: partColorImageUrl(option),
+            elementIds: JSON.stringify(option.elements ?? []),
+            numSets: option.num_sets,
+            rawJson: JSON.stringify(option),
+            downloadedAt: now,
+            updatedAt: now,
+          },
+        })
+        .run();
+    }
+  });
+}
+
+async function downloadPartColorOptions(
+  allParts: RebrickablePart[],
+  jobId: number,
+  now: Date,
+  signal: AbortSignal,
+) {
+  const workerCount = Math.min(partColorWorkerCount(), allParts.length);
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  let nextPartIndex = 0;
+  let processedParts = 0;
+  let optionCount = 0;
+
+  if (signal.aborted) {
+    controller.abort();
+  } else {
+    signal.addEventListener("abort", abort, { once: true });
+  }
+
+  updateJobProgress(jobId, {
+    stage: "获取零件配色",
+    current: 0,
+    total: allParts.length,
+    detail: `使用 ${workerCount} 个并发任务读取 Rebrickable 零件配色`,
+  });
+
+  const takeNextPart = () => {
+    const part = allParts[nextPartIndex];
+    nextPartIndex += 1;
+    return part;
+  };
+
+  const runWorker = async () => {
+    while (true) {
+      throwIfCancelled(controller.signal);
+      const part = takeNextPart();
+
+      if (!part) {
+        return;
+      }
+
+      const options = await rebrickableClient.getPartColors(part.part_num, controller.signal);
+
+      throwIfCancelled(controller.signal);
+      writePartColorOptions(part.part_num, options, now);
+
+      processedParts += 1;
+      optionCount += options.length;
+      updateJobProgress(jobId, {
+        stage: "获取零件配色",
+        current: processedParts,
+        total: allParts.length,
+        detail: `${part.part_num}：${options.length} 个可用配色`,
+      });
+    }
+  };
+
+  try {
+    await Promise.all(Array.from({ length: workerCount }, runWorker));
+  } catch (error) {
+    controller.abort();
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+
+  return { optionCount, processedParts };
 }
 
 function finishJob(
@@ -429,69 +566,7 @@ async function runPartCatalogDownload(jobId: number, signal: AbortSignal): Promi
       }
     });
 
-    let processedParts = 0;
-    let optionCount = 0;
-
-    for (const part of allParts) {
-      throwIfCancelled(signal);
-      const options = await rebrickableClient.getPartColors(part.part_num, signal);
-
-      db.transaction((tx) => {
-        tx.delete(partColorOptions).where(eq(partColorOptions.partNum, part.part_num)).run();
-
-        for (const option of options) {
-          tx.insert(colors)
-            .values({
-              id: option.color_id,
-              name: option.color_name,
-              createdAt: now,
-              updatedAt: now,
-            })
-            .onConflictDoUpdate({
-              target: colors.id,
-              set: {
-                name: option.color_name,
-                updatedAt: now,
-              },
-            })
-            .run();
-
-          tx.insert(partColorOptions)
-            .values({
-              partNum: part.part_num,
-              colorId: option.color_id,
-              imageUrl: partColorImageUrl(option),
-              elementIds: JSON.stringify(option.elements ?? []),
-              numSets: option.num_sets,
-              rawJson: JSON.stringify(option),
-              downloadedAt: now,
-              createdAt: now,
-              updatedAt: now,
-            })
-            .onConflictDoUpdate({
-              target: [partColorOptions.partNum, partColorOptions.colorId],
-              set: {
-                imageUrl: partColorImageUrl(option),
-                elementIds: JSON.stringify(option.elements ?? []),
-                numSets: option.num_sets,
-                rawJson: JSON.stringify(option),
-                downloadedAt: now,
-                updatedAt: now,
-              },
-            })
-            .run();
-        }
-      });
-
-      processedParts += 1;
-      optionCount += options.length;
-      updateJobProgress(jobId, {
-        stage: "获取零件配色",
-        current: processedParts,
-        total: allParts.length,
-        detail: `${part.part_num}：${options.length} 个可用配色`,
-      });
-    }
+    const { optionCount } = await downloadPartColorOptions(allParts, jobId, now, signal);
 
     finishJob(
       jobId,
@@ -1174,7 +1249,7 @@ export function getSetListData() {
         quantity: 0,
         spareRows: 0,
       },
-      assetBaseUrl: `/rebrickable-assets/sets/${set.setNum}`,
+      assetBaseUrl: `${setAssetBasePath}/${set.setNum}`,
     })),
   };
 }
@@ -1233,15 +1308,15 @@ export function getSetDetailData(setNum: string) {
     set,
     inventory,
     alternates,
-    assetBaseUrl: `/rebrickable-assets/sets/${setNum}`,
+    assetBaseUrl: `${setAssetBasePath}/${setNum}`,
     inventoryFiles: [
       {
         name: "inventory.json",
-        href: `/rebrickable-assets/sets/${setNum}/inventory.json`,
+        href: `${setAssetBasePath}/${setNum}/inventory.json`,
       },
       {
         name: "inventory.csv",
-        href: `/rebrickable-assets/sets/${setNum}/inventory.csv`,
+        href: `${setAssetBasePath}/${setNum}/inventory.csv`,
       },
     ],
     latestJob,
