@@ -26,7 +26,13 @@ function firstSearchValue(value: string | string[] | undefined) {
 }
 
 function numberSearchValue(value: string | string[] | undefined) {
-  const parsed = Number(firstSearchValue(value));
+  const raw = firstSearchValue(value);
+  // `Number("") === 0`：未选「全部颜色/分类」时 URL 里常出现空字符串，不能当成 ID 0（例如黑色）。
+  if (raw === undefined || raw === "") {
+    return undefined;
+  }
+
+  const parsed = Number(raw);
 
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
