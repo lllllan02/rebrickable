@@ -1044,6 +1044,131 @@ export function getPartCatalogSummary() {
   };
 }
 
+export type PartColorElementRow = {
+  colorId: number;
+  colorName: string;
+  colorRgb: string | null;
+  imageUrl: string | null;
+  numSets: number | null;
+  elementIds: string[];
+};
+
+/** 解析 `part_color_options.element_ids` 中存储的 JSON 字符串数组。 */
+export function parseStoredElementIds(value: string | null | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.map((item) => String(item));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 按零件编号精确加载零件及其所有配色下的 Element ID（来自目录聚合或 API）。
+ */
+export function getPartDetailWithElements(partNum: string) {
+  const trimmed = partNum.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const part = db.select().from(parts).where(eq(parts.partNum, trimmed)).get();
+
+  if (!part) {
+    return null;
+  }
+
+  const rows = db
+    .select({
+      colorId: partColorOptions.colorId,
+      colorName: colors.name,
+      colorRgb: colors.rgb,
+      imageUrl: partColorOptions.imageUrl,
+      numSets: partColorOptions.numSets,
+      elementIds: partColorOptions.elementIds,
+    })
+    .from(partColorOptions)
+    .innerJoin(colors, eq(partColorOptions.colorId, colors.id))
+    .where(eq(partColorOptions.partNum, trimmed))
+    .orderBy(asc(colors.name), asc(partColorOptions.colorId))
+    .all();
+
+  const colorRows: PartColorElementRow[] = rows.map((row) => ({
+    colorId: row.colorId,
+    colorName: row.colorName,
+    colorRgb: row.colorRgb,
+    imageUrl: row.imageUrl,
+    numSets: row.numSets,
+    elementIds: parseStoredElementIds(row.elementIds),
+  }));
+
+  const allElementIds = [...new Set(colorRows.flatMap((r) => r.elementIds))].sort();
+
+  return { part, colorRows, allElementIds };
+}
+
+/**
+ * 按 Element ID 反查零件与对应配色行（`element_ids` JSON 数组中包含该 ID 即命中）。
+ */
+export function lookupPartByElementId(elementId: string) {
+  const trimmed = elementId.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const row = db
+    .select({
+      part: parts,
+      colorId: partColorOptions.colorId,
+      colorName: colors.name,
+      colorRgb: colors.rgb,
+      imageUrl: partColorOptions.imageUrl,
+      numSets: partColorOptions.numSets,
+      elementIds: partColorOptions.elementIds,
+    })
+    .from(partColorOptions)
+    .innerJoin(parts, eq(partColorOptions.partNum, parts.partNum))
+    .innerJoin(colors, eq(partColorOptions.colorId, colors.id))
+    .where(
+      and(
+        sql`${partColorOptions.elementIds} is not null`,
+        sql`exists (select 1 from json_each(${partColorOptions.elementIds}) je where je.value = ${trimmed})`,
+      ),
+    )
+    .limit(1)
+    .get();
+
+  if (!row) {
+    return null;
+  }
+
+  const elementIds = parseStoredElementIds(row.elementIds);
+
+  return {
+    part: row.part,
+    matchedElementId: trimmed,
+    colorRow: {
+      colorId: row.colorId,
+      colorName: row.colorName,
+      colorRgb: row.colorRgb,
+      imageUrl: row.imageUrl,
+      numSets: row.numSets,
+      elementIds,
+    } satisfies PartColorElementRow,
+  };
+}
+
 export function getPartExplorerData(filters: PartExplorerFilters = {}) {
   const pageSize = Math.min(Math.max(filters.pageSize ?? 48, 12), 96);
   const conditions: SQL[] = [];
