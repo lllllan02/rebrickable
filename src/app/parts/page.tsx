@@ -264,17 +264,18 @@ export default async function PartsPage({ searchParams }: Props) {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">零件</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
+    <div className="page-stack">
+      <section className="hero-panel">
+        <p className="page-kicker">Parts</p>
+        <h1 className="page-title">零件</h1>
+        <p className="page-description">
           共 {total.toLocaleString("zh-CN")}{" "}
           条；分类与普通/印刷筛选变更会立即生效。印刷件指在零件关系表中作为子件且
           rel_type 为 P 的条目（印于基件）。关键词支持名称、part_num 或
           element_id。
         </p>
-      </div>
-      <form method="get" className="flex flex-wrap items-stretch gap-2">
+      </section>
+      <form method="get" className="filter-bar">
         <label className="sr-only" htmlFor="parts-cat">
           零件类型
         </label>
@@ -282,7 +283,7 @@ export default async function PartsPage({ searchParams }: Props) {
           id="parts-cat"
           name="cat"
           defaultValue={catIdFilter !== null ? String(catIdFilter) : ""}
-          className="max-w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)] focus:ring-2 sm:max-w-[220px]"
+          className="field max-w-full text-sm sm:max-w-[220px]"
         >
           <option value="">全部类型</option>
           {categoryOptions.map((c) => (
@@ -298,7 +299,7 @@ export default async function PartsPage({ searchParams }: Props) {
           id="parts-piece"
           name="piece"
           defaultValue={pieceFilter ?? ""}
-          className="max-w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)] focus:ring-2 sm:max-w-[160px]"
+          className="field max-w-full text-sm sm:max-w-[160px]"
         >
           <option value="">全部零件</option>
           <option value="plain">普通零件</option>
@@ -308,16 +309,13 @@ export default async function PartsPage({ searchParams }: Props) {
           name="q"
           defaultValue={qRaw}
           placeholder="名称、part_num 或 element_id…"
-          className="min-w-[200px] flex-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)] focus:ring-2"
+          className="field min-w-[200px] flex-1 text-sm"
         />
-        <button
-          type="submit"
-          className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-black hover:bg-[var(--accent-dim)]"
-        >
+        <button type="submit" className="button-primary text-sm">
           搜索
         </button>
       </form>
-      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <ul className="content-grid">
         {rows.map((r) => {
           const thumb = thumbByPart.get(r.partNum);
           const elemCount = elemCountByPart.get(r.partNum) ?? 0;
@@ -325,11 +323,8 @@ export default async function PartsPage({ searchParams }: Props) {
           const isPrinted = printedPartNums.has(r.partNum);
           const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
           return (
-            <li
-              key={r.partNum}
-              className="flex gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2"
-            >
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-[var(--border)] bg-[var(--bg)]">
+            <li key={r.partNum} className="result-card">
+              <div className="media-box media-box-sm">
                 {thumb ? (
                   <Image
                     src={thumb}
@@ -359,8 +354,8 @@ export default async function PartsPage({ searchParams }: Props) {
                   <span
                     className={
                       isPrinted
-                        ? "rounded px-1 py-px text-[10px] font-medium text-[var(--accent)] ring-1 ring-[var(--accent)]/40"
-                        : "rounded bg-[var(--bg)] px-1 py-px text-[10px] text-[var(--muted)] ring-1 ring-[var(--border)]"
+                        ? "badge badge-accent"
+                        : "badge"
                     }
                     title={
                       isPrinted
@@ -374,7 +369,7 @@ export default async function PartsPage({ searchParams }: Props) {
                 <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text)]">
                   {r.name}
                 </p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--muted)]">
+                <div className="meta-row mt-1">
                   {colorCount > 0 ? (
                     <span>{colorCount.toLocaleString("zh-CN")} 色</span>
                   ) : null}
@@ -399,7 +394,7 @@ export default async function PartsPage({ searchParams }: Props) {
           );
         })}
         {rows.length === 0 ? (
-          <li className="col-span-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-8 text-center text-sm text-[var(--muted)]">
+          <li className="empty-state col-span-full text-sm">
             没有匹配的零件。
           </li>
         ) : null}
@@ -408,17 +403,17 @@ export default async function PartsPage({ searchParams }: Props) {
         <div className="flex justify-end">
           <nav
             aria-label="分页"
-            className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+            className="pagination-shell"
           >
             {page > 1 ? (
               <Link
                 href={`/parts${qs(page - 1)}`}
-                className="shrink-0 rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text)] no-underline hover:bg-[var(--bg)]"
+                className="pager-link shrink-0"
               >
                 上一页
               </Link>
             ) : (
-              <span className="shrink-0 rounded border border-transparent px-2 py-1 text-xs text-[var(--muted)]">
+              <span className="pager-disabled shrink-0">
                 上一页
               </span>
             )}
@@ -443,7 +438,7 @@ export default async function PartsPage({ searchParams }: Props) {
                     ) : item === page ? (
                       <span
                         key={`p-${item}-${k}`}
-                        className="inline-flex min-w-[1.75rem] justify-center rounded bg-[var(--accent)] px-1.5 py-1 text-xs font-semibold text-black"
+                        className="pager-current inline-flex min-w-[1.75rem] justify-center"
                         aria-current="page"
                       >
                         {item}
@@ -452,7 +447,7 @@ export default async function PartsPage({ searchParams }: Props) {
                       <Link
                         key={`p-${item}-${k}`}
                         href={`/parts${qs(item)}`}
-                        className="inline-flex min-w-[1.75rem] justify-center rounded border border-[var(--border)] px-1.5 py-1 text-xs text-[var(--accent)] no-underline hover:bg-[var(--bg)]"
+                        className="pager-link inline-flex min-w-[1.75rem] justify-center"
                       >
                         {item}
                       </Link>
@@ -464,7 +459,7 @@ export default async function PartsPage({ searchParams }: Props) {
                     <form
                       method="get"
                       action="/parts"
-                      className="mx-0.5 inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded border border-[var(--border)] bg-[var(--bg)] outline-none ring-[var(--accent)] focus-within:ring-2"
+                      className="mx-0.5 inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-full border border-[var(--border)] bg-[var(--bg)] outline-none ring-[var(--accent)] focus-within:ring-2"
                       title="输入页码后按回车跳转"
                     >
                       {qRaw.trim() ? (
@@ -505,12 +500,12 @@ export default async function PartsPage({ searchParams }: Props) {
             {page < totalPages ? (
               <Link
                 href={`/parts${qs(page + 1)}`}
-                className="shrink-0 rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text)] no-underline hover:bg-[var(--bg)]"
+                className="pager-link shrink-0"
               >
                 下一页
               </Link>
             ) : (
-              <span className="shrink-0 rounded border border-transparent px-2 py-1 text-xs text-[var(--muted)]">
+              <span className="pager-disabled shrink-0">
                 下一页
               </span>
             )}

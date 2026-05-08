@@ -16,9 +16,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className="min-h-screen antialiased" suppressHydrationWarning>
+      <body className="app-shell antialiased" suppressHydrationWarning>
         <SiteNav />
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <main className="app-main">{children}</main>
       </body>
     </html>
   );

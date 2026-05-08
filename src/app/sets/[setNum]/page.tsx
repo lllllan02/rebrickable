@@ -89,15 +89,13 @@ export default async function SetDetailPage({ params }: Props) {
   const uniqueParts = new Set(lines.map((l) => l.partNum)).size;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-sm text-[var(--muted)]">
-          <Link href="/sets" className="no-underline">
-            ← 套装列表
-          </Link>
-        </p>
+    <div className="page-stack">
+      <section className="hero-panel">
+        <Link href="/sets" className="back-link">
+          ← 套装列表
+        </Link>
         <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-          <div className="relative mx-auto aspect-square w-full max-w-[min(100%,16rem)] shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)] sm:mx-0 sm:w-56">
+          <div className="media-box media-box-lg mx-auto shrink-0 sm:mx-0 sm:w-56">
             {heroThumb ? (
               <Image
                 src={heroThumb}
@@ -122,13 +120,14 @@ export default async function SetDetailPage({ params }: Props) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="font-mono text-2xl font-semibold text-[var(--accent)]">
+            <p className="page-kicker">Set detail</p>
+            <h1 className="mt-1 font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]">
               {setNum}
             </h1>
             {catalog?.name ? (
               <p className="mt-1 text-lg text-[var(--text)]">{catalog.name}</p>
             ) : null}
-            <dl className="mt-3 flex flex-wrap gap-4 text-sm text-[var(--muted)]">
+            <dl className="meta-row mt-4 text-sm">
               {catalog?.year != null ? (
                 <div>
                   <dt className="inline text-[var(--text)]">年份：</dt>
@@ -165,20 +164,20 @@ export default async function SetDetailPage({ params }: Props) {
             {!heroIsSetBox && heroThumb ? (
               <p className="mt-2 text-xs text-[var(--muted)]">
                 当前为清单中的零件示意图；导入{" "}
-                <code className="text-[var(--accent)]">sets.csv.gz</code>{" "}
-                并重新执行 <code className="text-[var(--accent)]">pnpm db:import</code>{" "}
+                <code className="code-pill">sets.csv.gz</code>{" "}
+                并重新执行 <code className="code-pill">pnpm db:import</code>{" "}
                 后可显示官方套装盒图。
               </p>
             ) : null}
           </div>
         </div>
-      </div>
+      </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-medium">零件清单</h2>
-        <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-            <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-xs uppercase tracking-wide text-[var(--muted)]">
+        <h2 className="section-title">零件清单</h2>
+        <div className="table-shell">
+          <table className="data-table min-w-[720px]">
+            <thead>
               <tr>
                 <th className="w-14 px-2 py-2" aria-label="图示" />
                 <th className="px-2 py-2">零件</th>
@@ -192,7 +191,7 @@ export default async function SetDetailPage({ params }: Props) {
               {lines.map((l, i) => (
                 <tr key={`${l.partNum}-${l.colorId}-${l.isSpare}-${i}`}>
                   <td className="px-2 py-1.5 align-middle">
-                    <div className="relative mx-auto h-11 w-11 overflow-hidden rounded border border-[var(--border)] bg-[var(--bg)]">
+                    <div className="media-box mx-auto h-11 w-11 rounded-md">
                       {l.imgUrl ? (
                         <Image
                           src={l.imgUrl}
@@ -235,7 +234,7 @@ export default async function SetDetailPage({ params }: Props) {
                   </td>
                   <td className="px-2 py-1.5 align-middle text-[var(--muted)]">
                     {l.isSpare ? (
-                      <span className="rounded px-1 py-px text-[10px] font-medium text-[var(--accent)] ring-1 ring-[var(--accent)]/40">
+                      <span className="badge badge-accent">
                         备用
                       </span>
                     ) : null}

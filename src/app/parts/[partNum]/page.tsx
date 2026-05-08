@@ -114,15 +114,13 @@ export default async function PartDetailPage({ params }: Props) {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-sm text-[var(--muted)]">
-          <Link href="/parts" className="no-underline">
-            ← 零件列表
-          </Link>
-        </p>
+    <div className="page-stack">
+      <section className="hero-panel">
+        <Link href="/parts" className="back-link">
+          ← 零件列表
+        </Link>
         <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-          <div className="relative mx-auto aspect-square w-full max-w-[min(100%,16rem)] shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg)] sm:mx-0 sm:w-56">
+          <div className="media-box media-box-lg mx-auto shrink-0 sm:mx-0 sm:w-56">
             {heroThumb ? (
               <Image
                 src={heroThumb}
@@ -143,11 +141,12 @@ export default async function PartDetailPage({ params }: Props) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="font-mono text-2xl font-semibold text-[var(--accent)]">
+            <p className="page-kicker">Part detail</p>
+            <h1 className="mt-1 font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]">
               {row.partNum}
             </h1>
             <p className="mt-1 text-lg">{row.name}</p>
-            <dl className="mt-3 flex flex-wrap gap-4 text-sm text-[var(--muted)]">
+            <dl className="meta-row mt-4 text-sm">
               {row.catName ? (
                 <div>
                   <dt className="inline text-[var(--text)]">分类：</dt>
@@ -163,19 +162,19 @@ export default async function PartDetailPage({ params }: Props) {
             </dl>
           </div>
         </div>
-      </div>
+      </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-medium">颜色 / 元素</h2>
+        <h2 className="section-title">颜色 / 元素</h2>
         <ul className="grid gap-2 sm:grid-cols-2">
           {elemRows.map((e) => {
             const colorThumb = thumbByColor.get(e.colorId);
             return (
               <li
                 key={e.elementId}
-                className="flex items-center gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
+                className="result-card items-center text-sm"
               >
-                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg)]">
+                <div className="media-box media-box-sm">
                   {colorThumb ? (
                     <Image
                       src={colorThumb}
@@ -195,7 +194,7 @@ export default async function PartDetailPage({ params }: Props) {
                   )}
                 </div>
                 <span
-                  className="h-8 w-8 shrink-0 rounded border border-[var(--border)]"
+                  className="color-swatch h-8 w-8 shrink-0"
                   style={{ background: `#${e.rgb}` }}
                   title={e.rgb}
                 />
@@ -216,8 +215,8 @@ export default async function PartDetailPage({ params }: Props) {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <h2 className="text-lg font-medium">子零件（本件为父）</h2>
+        <div className="section-panel">
+          <h2 className="section-title">子零件（本件为父）</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {asParent.map((r) => (
               <li key={`${r.relType}-${r.child}`}>
@@ -235,8 +234,8 @@ export default async function PartDetailPage({ params }: Props) {
             ) : null}
           </ul>
         </div>
-        <div>
-          <h2 className="text-lg font-medium">父零件（本件为子）</h2>
+        <div className="section-panel">
+          <h2 className="section-title">父零件（本件为子）</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {asChild.map((r) => (
               <li key={`${r.relType}-${r.parent}`}>
@@ -256,14 +255,14 @@ export default async function PartDetailPage({ params }: Props) {
         </div>
       </section>
 
-      <section>
-        <h2 className="text-lg font-medium">出现的套装（抽样）</h2>
+      <section className="section-panel">
+        <h2 className="section-title">出现的套装（抽样）</h2>
         <ul className="mt-2 flex flex-wrap gap-2 text-sm">
           {setRows.map((s) => (
             <li key={s.setNum}>
               <Link
                 href={`/sets/${encodeURIComponent(s.setNum)}`}
-                className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 font-mono no-underline hover:border-[var(--accent)]"
+                className="badge font-mono no-underline hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
                 {s.setNum}
               </Link>
