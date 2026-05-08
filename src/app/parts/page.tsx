@@ -373,12 +373,27 @@ function ColorElementsTable({
   );
 }
 
+function browseFiltersFormKey(query: {
+  q?: string | string[];
+  category?: string | string[];
+  color?: string | string[];
+  page?: string | string[];
+}) {
+  return [
+    firstSearchValue(query.q) ?? "",
+    firstSearchValue(query.category) ?? "",
+    firstSearchValue(query.color) ?? "",
+    firstSearchValue(query.page) ?? "",
+  ].join("|");
+}
+
 export default async function PartsPage({ searchParams }: PartsPageProps) {
   const query = await searchParams;
   const summary = getPartCatalogSummary();
 
   const elementParam = firstSearchValue(query.element)?.trim() ?? "";
   const partParam = firstSearchValue(query.part)?.trim() ?? "";
+  const exactLookupFormKey = `${partParam}\u001f${elementParam}`;
 
   const elementLookup = elementParam ? lookupPartByElementId(elementParam) : null;
   const partDetail =
@@ -462,6 +477,7 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
           填写零件编号或 Element ID 其一即可。若同时填写，优先按 Element ID 查询。
         </CardDescription>
         <form
+          key={exactLookupFormKey}
           action="/parts"
           method="get"
           className="mt-5 grid gap-3 md:grid-cols-[1fr_1fr_auto_auto]"
@@ -635,7 +651,9 @@ export default async function PartsPage({ searchParams }: PartsPageProps) {
               变体后缀的零件（如 <span className="font-mono">3001pr0001</span>）。
             </CardDescription>
             <form
+              key={browseFiltersFormKey(query)}
               action="/parts"
+              method="get"
               className="mt-5 grid gap-3 lg:grid-cols-[1.3fr_1fr_1fr_auto_auto]"
             >
               <Input

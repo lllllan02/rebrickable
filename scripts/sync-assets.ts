@@ -1,6 +1,9 @@
 /**
  * 将 Rebrickable 官方 CSV 导出（默认位于 ./assets/*.csv.gz）导入本地 SQLite。
  *
+ * `part_color_options` 由 **elements** 与 **选用清单中的 inventory_parts** 合并得到；
+ * 若某零件在两者中均未出现配色，则写入官方占位色 `color_id = -1`（`[Unknown]`），保证每个 `parts` 行均可关联到颜色。
+ *
  * 用法：pnpm sync:assets
  * 环境变量：REBRICKABLE_DB_PATH（可选）、ASSETS_DIR（可选，默认 ./assets）
  */
@@ -13,7 +16,7 @@ import { createGunzip } from "node:zlib";
 
 import Database from "better-sqlite3";
 import { parse } from "csv-parse";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import * as schema from "../src/db/schema";
@@ -166,6 +169,10 @@ async function computeWinningInventoryMaps(assetDir: string) {
   );
 
   return { bestBySetNum: best, winningInventoryIds: new Set(inventoryIdToSetNum.keys()), inventoryIdToSetNum };
+}
+
+function partColorOptionKey(partNum: string, colorId: number) {
+  return `${partNum}\x00${colorId}`;
 }
 
 async function main() {
@@ -348,6 +355,9 @@ async function main() {
 
   console.log("[sync] 写入 inventory_parts → set_parts（流式）…");
 
+  /** 来自「当前选用清单」行的 (零件, 颜色) 聚合：行数作热度、首张非空图作配图 */
+  const inventoryPartColors = new Map<string, { rowCount: number; imageUrl: string | null }>();
+
   let inserted = 0;
   let skipped = 0;
   const batch: (typeof setParts.$inferInsert)[] = [];
@@ -397,6 +407,20 @@ async function main() {
     const colorId = Number.parseInt(row.color_id, 10);
     const qty = Number.parseInt(row.quantity, 10);
     const isSpare = parseBool(row.is_spare);
+    const pcKey = partColorOptionKey(row.part_num, colorId);
+    const img = row.img_url?.trim() || null;
+    let pcAgg = inventoryPartColors.get(pcKey);
+
+    if (!pcAgg) {
+      pcAgg = { rowCount: 0, imageUrl: null };
+      inventoryPartColors.set(pcKey, pcAgg);
+    }
+
+    pcAgg.rowCount += 1;
+
+    if (img && !pcAgg.imageUrl) {
+      pcAgg.imageUrl = img;
+    }
 
     batch.push({
       setNum,
@@ -430,69 +454,154 @@ async function main() {
   console.log(`[sync] set_parts 完成：写入 ${inserted} 行，跳过旧版本清单 ${skipped} 行。`);
 
   const elementsPath = join(assetDir, "elements.csv.gz");
+  type ElementGroup = { elements: string[] };
+  const elementGroups = new Map<string, ElementGroup>();
 
   if (await fileExists(elementsPath)) {
-    console.log("[sync] 聚合 elements → part_color_options …");
-
-    type Group = { elements: string[] };
-    const groups = new Map<string, Group>();
+    console.log("[sync] 读取 elements.csv.gz（聚合 element_id）…");
 
     for await (const row of iterGzipCsv(elementsPath)) {
       const partNum = row.part_num;
       const colorId = Number.parseInt(row.color_id, 10);
-      const k = `${partNum}\x00${colorId}`;
-      let g = groups.get(k);
+      const k = partColorOptionKey(partNum, colorId);
+      let g = elementGroups.get(k);
 
       if (!g) {
         g = { elements: [] };
-        groups.set(k, g);
+        elementGroups.set(k, g);
       }
 
       g.elements.push(row.element_id);
     }
 
-    let optUpserts = 0;
+    console.log(`[sync] elements 键 ${elementGroups.size} 个。`);
+  } else {
+    console.warn("[sync] 未找到 elements.csv.gz，零件配色将仅来自 inventory_parts 聚合。");
+  }
 
-    for (const [k, g] of groups) {
-      const [partNum, colorIdStr] = k.split("\x00");
-      const colorId = Number.parseInt(colorIdStr, 10);
-      const uniqueSorted = [...new Set(g.elements)].sort();
+  const allPartColorKeys = new Set<string>([
+    ...inventoryPartColors.keys(),
+    ...elementGroups.keys(),
+  ]);
 
-      db.insert(partColorOptions)
-        .values({
-          partNum,
-          colorId,
-          imageUrl: null,
-          elementIds: JSON.stringify(uniqueSorted),
-          numSets: null,
-          rawJson: JSON.stringify({
-            element_ids: uniqueSorted,
-            source: "assets_elements",
-          }),
-          downloadedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [partColorOptions.partNum, partColorOptions.colorId],
-          set: {
-            elementIds: JSON.stringify(uniqueSorted),
-            rawJson: JSON.stringify({
-              element_ids: uniqueSorted,
-              source: "assets_elements",
-            }),
-            downloadedAt: now,
-            updatedAt: now,
-          },
-        })
-        .run();
+  console.log(
+    `[sync] 合并 inventory_parts + elements → part_color_options（${allPartColorKeys.size} 条键）…`,
+  );
 
-      optUpserts += 1;
+  let optUpserts = 0;
+
+  for (const k of allPartColorKeys) {
+    const sep = k.indexOf("\x00");
+
+    if (sep < 0) {
+      continue;
     }
 
-    console.log(`[sync] part_color_options 更新 ${optUpserts} 条（element 聚合）。`);
-  } else {
-    console.warn("[sync] 未找到 elements.csv.gz，跳过零件配色 element 聚合。");
+    const partNum = k.slice(0, sep);
+    const colorId = Number.parseInt(k.slice(sep + 1), 10);
+    const el = elementGroups.get(k);
+    const uniqueSorted = el ? [...new Set(el.elements)].sort() : [];
+    const inv = inventoryPartColors.get(k);
+    const invRowCount = inv?.rowCount ?? 0;
+    const imageUrl = inv?.imageUrl?.trim() || null;
+    const numSets = invRowCount > 0 ? invRowCount : null;
+    const elementJson = JSON.stringify(uniqueSorted);
+    const sources: string[] = [];
+
+    if (el) {
+      sources.push("assets_elements");
+    }
+
+    if (invRowCount > 0) {
+      sources.push("assets_inventory_parts");
+    }
+
+    db.insert(partColorOptions)
+      .values({
+        partNum,
+        colorId,
+        imageUrl,
+        elementIds: elementJson,
+        numSets,
+        rawJson: JSON.stringify({
+          element_ids: uniqueSorted,
+          inventory_row_count: invRowCount > 0 ? invRowCount : undefined,
+          sources,
+        }),
+        downloadedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [partColorOptions.partNum, partColorOptions.colorId],
+        set: {
+          elementIds:
+            uniqueSorted.length > 0 ? elementJson : sql`${partColorOptions.elementIds}`,
+          imageUrl: sql`coalesce(excluded.image_url, ${partColorOptions.imageUrl})`,
+          numSets: sql`coalesce(excluded.num_sets, ${partColorOptions.numSets})`,
+          rawJson: JSON.stringify({
+            element_ids: uniqueSorted,
+            inventory_row_count: invRowCount > 0 ? invRowCount : undefined,
+            sources,
+          }),
+          downloadedAt: now,
+          updatedAt: now,
+        },
+      })
+      .run();
+
+    optUpserts += 1;
+  }
+
+  console.log(`[sync] part_color_options 写入/更新 ${optUpserts} 条。`);
+
+  /** Rebrickable `colors.csv` 中的占位色，用于从未出现在 elements / 选用清单中的零件 */
+  const fallbackUnknownColorId = -1;
+  const missingPartNums = sqlite
+    .prepare(
+      `SELECT p.part_num FROM parts p
+       WHERE NOT EXISTS (SELECT 1 FROM part_color_options pc WHERE pc.part_num = p.part_num)`,
+    )
+    .pluck()
+    .all() as string[];
+
+  if (missingPartNums.length > 0) {
+    console.log(
+      `[sync] 为 ${missingPartNums.length} 个无 elements/清单配色的零件写入占位行（color_id=${fallbackUnknownColorId}）…`,
+    );
+
+    const fbBatch: (typeof partColorOptions.$inferInsert)[] = [];
+    const flushFb = () => {
+      if (fbBatch.length === 0) {
+        return;
+      }
+
+      db.insert(partColorOptions).values(fbBatch).run();
+      fbBatch.length = 0;
+    };
+
+    for (const partNum of missingPartNums) {
+      fbBatch.push({
+        partNum,
+        colorId: fallbackUnknownColorId,
+        imageUrl: null,
+        elementIds: "[]",
+        numSets: null,
+        rawJson: JSON.stringify({
+          source: "assets_fallback",
+          reason: "no_rows_in_elements_or_winning_inventory_parts",
+        }),
+        downloadedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      if (fbBatch.length >= 500) {
+        flushFb();
+      }
+    }
+
+    flushFb();
   }
 
   const relPath = join(assetDir, "part_relationships.csv.gz");
