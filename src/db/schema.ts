@@ -68,6 +68,23 @@ export const partCategories = sqliteTable("part_categories", {
   ...timestamps,
 });
 
+/** Rebrickable `part_relationships.csv`（印刷电路板上的零件组合关系等）。 */
+export const partRelationships = sqliteTable(
+  "part_relationships",
+  {
+    relType: text("rel_type").notNull(),
+    childPartNum: text("child_part_num").notNull(),
+    parentPartNum: text("parent_part_num").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.relType, table.childPartNum, table.parentPartNum],
+    }),
+    index("part_relationships_parent_idx").on(table.parentPartNum),
+  ],
+);
+
 export const colors = sqliteTable("colors", {
   id: integer("id").primaryKey(),
   name: text("name").notNull(),
