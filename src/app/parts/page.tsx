@@ -4,6 +4,7 @@ import {
   and,
   asc,
   count,
+  countDistinct,
   eq,
   exists,
   inArray,
@@ -31,6 +32,29 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 40;
 
+/** 页码序列：首尾与当前附近若干页，间断处用 gap 占位以便渲染省略号 */
+function pageNavSequence(
+  current: number,
+  total: number,
+  neighbors = 3
+): (number | "gap")[] {
+  if (total <= 1) return [1];
+  const set = new Set<number>();
+  set.add(1);
+  set.add(total);
+  for (let p = current - neighbors; p <= current + neighbors; p++) {
+    if (p >= 1 && p <= total) set.add(p);
+  }
+  const sorted = [...set].sort((a, b) => a - b);
+  const out: (number | "gap")[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i]!;
+    if (i > 0 && p - sorted[i - 1]! > 1) out.push("gap");
+    out.push(p);
+  }
+  return out;
+}
+
 type Props = {
   searchParams: Promise<{
     q?: string;
@@ -53,8 +77,7 @@ export default async function PartsPage({ searchParams }: Props) {
   const pieceFilter =
     pieceRaw === "plain" || pieceRaw === "printed" ? pieceRaw : null;
 
-  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  const offset = (page - 1) * PAGE_SIZE;
+  const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
   const db = getDb();
 
@@ -109,84 +132,115 @@ export default async function PartsPage({ searchParams }: Props) {
   }
   const where = clauses.length > 0 ? and(...clauses) : undefined;
 
-  const [totalRow, rows, categoryOptions] = await Promise.all([
+  const [totalRow, categoryOptions] = await Promise.all([
     db.select({ c: count() }).from(parts).where(where),
-    db
-      .select({
-        partNum: parts.partNum,
-        name: parts.name,
-        catId: parts.partCatId,
-        material: parts.partMaterial,
-        catName: partCategories.name,
-      })
-      .from(parts)
-      .leftJoin(partCategories, eq(parts.partCatId, partCategories.id))
-      .where(where)
-      .orderBy(asc(parts.partNum))
-      .limit(PAGE_SIZE)
-      .offset(offset),
     db
       .select({ id: partCategories.id, name: partCategories.name })
       .from(partCategories)
       .orderBy(asc(partCategories.name)),
   ]);
 
+  const total = Number(totalRow[0]?.c ?? 0);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const page = Math.min(totalPages, requestedPage);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const rows = await db
+    .select({
+      partNum: parts.partNum,
+      name: parts.name,
+      catName: partCategories.name,
+    })
+    .from(parts)
+    .leftJoin(partCategories, eq(parts.partCatId, partCategories.id))
+    .where(where)
+    .orderBy(asc(parts.partNum))
+    .limit(PAGE_SIZE)
+    .offset(offset);
+
   const partNums = rows.map((r) => r.partNum);
 
   const thumbByPart = new Map<string, string>();
   const elemCountByPart = new Map<string, number>();
+  const colorCountByPart = new Map<string, number>();
+  const printedPartNums = new Set<string>();
   const matchedElementsByPart = new Map<string, string[]>();
   const elementMatchTruncated = new Set<string>();
 
   if (partNums.length > 0) {
-    const [thumbRows, countRows, matchRows] = await Promise.all([
-      db
-        .select({
-          partNum: inventoryParts.partNum,
-          thumb: min(inventoryParts.imgUrl),
-        })
-        .from(inventoryParts)
-        .where(
-          and(
-            inArray(inventoryParts.partNum, partNums),
-            isNotNull(inventoryParts.imgUrl),
-            ne(inventoryParts.imgUrl, "")
-          )
-        )
-        .groupBy(inventoryParts.partNum),
-      db
-        .select({
-          partNum: elements.partNum,
-          n: count(elements.elementId),
-        })
-        .from(elements)
-        .where(inArray(elements.partNum, partNums))
-        .groupBy(elements.partNum),
-      q.length > 0
-        ? db
-            .select({
-              partNum: elements.partNum,
-              elementId: elements.elementId,
-            })
-            .from(elements)
-            .where(
-              and(
-                inArray(elements.partNum, partNums),
-                like(elements.elementId, `%${q}%`)
-              )
+    const [thumbRows, countRows, colorRows, printedRows, matchRows] =
+      await Promise.all([
+        db
+          .select({
+            partNum: inventoryParts.partNum,
+            thumb: min(inventoryParts.imgUrl),
+          })
+          .from(inventoryParts)
+          .where(
+            and(
+              inArray(inventoryParts.partNum, partNums),
+              isNotNull(inventoryParts.imgUrl),
+              ne(inventoryParts.imgUrl, "")
             )
-            .orderBy(asc(elements.partNum), asc(elements.elementId))
-            .limit(1000)
-        : Promise.resolve(
-            [] as { partNum: string; elementId: string }[]
-          ),
-    ]);
+          )
+          .groupBy(inventoryParts.partNum),
+        db
+          .select({
+            partNum: elements.partNum,
+            n: count(elements.elementId),
+          })
+          .from(elements)
+          .where(inArray(elements.partNum, partNums))
+          .groupBy(elements.partNum),
+        db
+          .select({
+            partNum: elements.partNum,
+            n: countDistinct(elements.colorId),
+          })
+          .from(elements)
+          .where(inArray(elements.partNum, partNums))
+          .groupBy(elements.partNum),
+        db
+          .select({ partNum: partRelationships.childPartNum })
+          .from(partRelationships)
+          .where(
+            and(
+              eq(partRelationships.relType, "P"),
+              inArray(partRelationships.childPartNum, partNums)
+            )
+          )
+          .groupBy(partRelationships.childPartNum),
+        q.length > 0
+          ? db
+              .select({
+                partNum: elements.partNum,
+                elementId: elements.elementId,
+              })
+              .from(elements)
+              .where(
+                and(
+                  inArray(elements.partNum, partNums),
+                  like(elements.elementId, `%${q}%`)
+                )
+              )
+              .orderBy(asc(elements.partNum), asc(elements.elementId))
+              .limit(1000)
+          : Promise.resolve(
+              [] as { partNum: string; elementId: string }[]
+            ),
+      ]);
 
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
     for (const c of countRows) {
       elemCountByPart.set(c.partNum, Number(c.n));
+    }
+    for (const c of colorRows) {
+      colorCountByPart.set(c.partNum, Number(c.n));
+    }
+    for (const p of printedRows) {
+      printedPartNums.add(p.partNum);
     }
     for (const m of matchRows) {
       const list = matchedElementsByPart.get(m.partNum) ?? [];
@@ -198,9 +252,6 @@ export default async function PartsPage({ searchParams }: Props) {
       }
     }
   }
-
-  const total = totalRow[0]?.c ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const qs = (p: number) => {
     const u = new URLSearchParams();
@@ -217,7 +268,7 @@ export default async function PartsPage({ searchParams }: Props) {
       <div>
         <h1 className="text-2xl font-semibold">零件</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          共 {Number(total).toLocaleString("zh-CN")}{" "}
+          共 {total.toLocaleString("zh-CN")}{" "}
           条；分类与普通/印刷筛选变更会立即生效。印刷件指在零件关系表中作为子件且
           rel_type 为 P 的条目（印于基件）。关键词支持名称、part_num 或
           element_id。
@@ -266,29 +317,31 @@ export default async function PartsPage({ searchParams }: Props) {
           搜索
         </button>
       </form>
-      <ul className="space-y-2">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {rows.map((r) => {
           const thumb = thumbByPart.get(r.partNum);
           const elemCount = elemCountByPart.get(r.partNum) ?? 0;
+          const colorCount = colorCountByPart.get(r.partNum) ?? 0;
+          const isPrinted = printedPartNums.has(r.partNum);
           const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
           return (
             <li
               key={r.partNum}
-              className="flex gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+              className="flex gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2"
             >
-              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg)]">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded border border-[var(--border)] bg-[var(--bg)]">
                 {thumb ? (
                   <Image
                     src={thumb}
                     alt=""
-                    width={80}
-                    height={80}
-                    className="box-border h-full w-full object-contain p-1"
-                    sizes="80px"
+                    width={56}
+                    height={56}
+                    className="box-border h-full w-full object-contain p-0.5"
+                    sizes="56px"
                   />
                 ) : (
                   <div
-                    className="flex h-full w-full items-center justify-center text-[10px] text-[var(--muted)]"
+                    className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]"
                     title="库存中暂无图片"
                   >
                     无图
@@ -296,42 +349,46 @@ export default async function PartsPage({ searchParams }: Props) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                   <Link
                     href={`/parts/${encodeURIComponent(r.partNum)}`}
-                    className="font-mono text-sm font-semibold text-[var(--accent)]"
+                    className="font-mono text-xs font-semibold text-[var(--accent)] sm:text-[13px]"
                   >
                     {r.partNum}
                   </Link>
+                  <span
+                    className={
+                      isPrinted
+                        ? "rounded px-1 py-px text-[10px] font-medium text-[var(--accent)] ring-1 ring-[var(--accent)]/40"
+                        : "rounded bg-[var(--bg)] px-1 py-px text-[10px] text-[var(--muted)] ring-1 ring-[var(--border)]"
+                    }
+                    title={
+                      isPrinted
+                        ? "在关系表中作为子件且 rel_type 为 P"
+                        : "非印刷子件关系"
+                    }
+                  >
+                    {isPrinted ? "印刷件" : "普通零件"}
+                  </span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text)]">
+                  {r.name}
+                </p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--muted)]">
+                  {colorCount > 0 ? (
+                    <span>{colorCount.toLocaleString("zh-CN")} 色</span>
+                  ) : null}
                   {elemCount > 0 ? (
-                    <span className="text-xs text-[var(--muted)]">
-                      {elemCount.toLocaleString("zh-CN")} 个元素
+                    <span>{elemCount.toLocaleString("zh-CN")} 元素</span>
+                  ) : null}
+                  {r.catName ? (
+                    <span className="min-w-0 truncate" title={r.catName}>
+                      {r.catName}
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-0.5 text-sm leading-snug">{r.name}</p>
-                <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-[var(--muted)]">
-                  {r.catName ? (
-                    <div>
-                      <dt className="inline text-[var(--text)]">分类</dt>{" "}
-                      <dd className="inline">{r.catName}</dd>
-                    </div>
-                  ) : null}
-                  {r.material ? (
-                    <div>
-                      <dt className="inline text-[var(--text)]">材质</dt>{" "}
-                      <dd className="inline">{r.material}</dd>
-                    </div>
-                  ) : null}
-                  {r.catId != null ? (
-                    <div>
-                      <dt className="inline text-[var(--text)]">分类 ID</dt>{" "}
-                      <dd className="inline font-mono">{r.catId}</dd>
-                    </div>
-                  ) : null}
-                </dl>
                 {matchedElems.length > 0 ? (
-                  <p className="mt-1 font-mono text-[11px] leading-relaxed text-[var(--accent)]">
+                  <p className="mt-0.5 font-mono text-[10px] leading-relaxed text-[var(--accent)]">
                     匹配 element_id：
                     {matchedElems.join(" · ")}
                     {elementMatchTruncated.has(r.partNum) ? " …" : null}
@@ -342,27 +399,126 @@ export default async function PartsPage({ searchParams }: Props) {
           );
         })}
         {rows.length === 0 ? (
-          <li className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-8 text-center text-sm text-[var(--muted)]">
+          <li className="col-span-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-8 text-center text-sm text-[var(--muted)]">
             没有匹配的零件。
           </li>
         ) : null}
       </ul>
       {totalPages > 1 ? (
-        <nav className="flex flex-wrap items-center gap-2 text-sm">
-          {page > 1 ? (
-            <Link href={`/parts${qs(page - 1)}`} className="no-underline">
-              ← 上一页
-            </Link>
-          ) : null}
-          <span className="text-[var(--muted)]">
-            第 {page} / {totalPages} 页
-          </span>
-          {page < totalPages ? (
-            <Link href={`/parts${qs(page + 1)}`} className="no-underline">
-              下一页 →
-            </Link>
-          ) : null}
-        </nav>
+        <div className="flex justify-end">
+          <nav
+            aria-label="分页"
+            className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+          >
+            {page > 1 ? (
+              <Link
+                href={`/parts${qs(page - 1)}`}
+                className="shrink-0 rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text)] no-underline hover:bg-[var(--bg)]"
+              >
+                上一页
+              </Link>
+            ) : (
+              <span className="shrink-0 rounded border border-transparent px-2 py-1 text-xs text-[var(--muted)]">
+                上一页
+              </span>
+            )}
+            <div className="flex flex-wrap items-center gap-0.5">
+              {(() => {
+                const seq = pageNavSequence(page, totalPages, 4);
+                const mid = Math.floor(seq.length / 2);
+                const renderChunk = (
+                  chunk: (number | "gap")[],
+                  keyBase: number
+                ) =>
+                  chunk.map((item, i) => {
+                    const k = keyBase + i;
+                    return item === "gap" ? (
+                      <span
+                        key={`g-${k}`}
+                        className="px-0.5 text-[var(--muted)]"
+                        aria-hidden
+                      >
+                        …
+                      </span>
+                    ) : item === page ? (
+                      <span
+                        key={`p-${item}-${k}`}
+                        className="inline-flex min-w-[1.75rem] justify-center rounded bg-[var(--accent)] px-1.5 py-1 text-xs font-semibold text-black"
+                        aria-current="page"
+                      >
+                        {item}
+                      </span>
+                    ) : (
+                      <Link
+                        key={`p-${item}-${k}`}
+                        href={`/parts${qs(item)}`}
+                        className="inline-flex min-w-[1.75rem] justify-center rounded border border-[var(--border)] px-1.5 py-1 text-xs text-[var(--accent)] no-underline hover:bg-[var(--bg)]"
+                      >
+                        {item}
+                      </Link>
+                    );
+                  });
+                return (
+                  <>
+                    {renderChunk(seq.slice(0, mid), 0)}
+                    <form
+                      method="get"
+                      action="/parts"
+                      className="mx-0.5 inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded border border-[var(--border)] bg-[var(--bg)] outline-none ring-[var(--accent)] focus-within:ring-2"
+                      title="输入页码后按回车跳转"
+                    >
+                      {qRaw.trim() ? (
+                        <input type="hidden" name="q" value={qRaw.trim()} />
+                      ) : null}
+                      {catIdFilter !== null ? (
+                        <input
+                          type="hidden"
+                          name="cat"
+                          value={String(catIdFilter)}
+                        />
+                      ) : null}
+                      {pieceFilter ? (
+                        <input type="hidden" name="piece" value={pieceFilter} />
+                      ) : null}
+                      <input
+                        type="number"
+                        name="page"
+                        min={1}
+                        max={totalPages}
+                        defaultValue={page}
+                        required
+                        aria-label={`跳转到页码，范围 1–${totalPages}，回车确认`}
+                        className="h-full min-w-[1.75rem] max-w-[3.25rem] border-0 bg-transparent px-0.5 text-center font-mono text-xs text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                      <button
+                        type="submit"
+                        className="sr-only"
+                      >
+                        跳转
+                      </button>
+                    </form>
+                    {renderChunk(seq.slice(mid), mid)}
+                  </>
+                );
+              })()}
+            </div>
+            {page < totalPages ? (
+              <Link
+                href={`/parts${qs(page + 1)}`}
+                className="shrink-0 rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text)] no-underline hover:bg-[var(--bg)]"
+              >
+                下一页
+              </Link>
+            ) : (
+              <span className="shrink-0 rounded border border-transparent px-2 py-1 text-xs text-[var(--muted)]">
+                下一页
+              </span>
+            )}
+            <span className="text-[11px] text-[var(--muted)]">
+              第 {page}/{totalPages} 页
+            </span>
+          </nav>
+        </div>
       ) : null}
     </div>
   );

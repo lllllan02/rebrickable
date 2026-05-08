@@ -92,21 +92,26 @@ export default async function SetsPage({ searchParams }: Props) {
         共 {Number(total).toLocaleString("zh-CN")} 套（去重）
       </div>
       {totalPages > 1 ? (
-        <nav className="flex flex-wrap items-center gap-2 text-sm">
-          {page > 1 ? (
-            <Link href={`/sets${qs(page - 1)}`} className="no-underline">
-              ← 上一页
-            </Link>
-          ) : null}
-          <span className="text-[var(--muted)]">
-            第 {page} / {totalPages} 页
-          </span>
-          {page < totalPages ? (
-            <Link href={`/sets${qs(page + 1)}`} className="no-underline">
-              下一页 →
-            </Link>
-          ) : null}
-        </nav>
+        <div className="flex justify-end">
+          <nav
+            aria-label="分页"
+            className="flex flex-wrap items-center justify-end gap-2 text-sm"
+          >
+            {page > 1 ? (
+              <Link href={`/sets${qs(page - 1)}`} className="no-underline">
+                ← 上一页
+              </Link>
+            ) : null}
+            <span className="text-[var(--muted)]">
+              第 {page} / {totalPages} 页
+            </span>
+            {page < totalPages ? (
+              <Link href={`/sets${qs(page + 1)}`} className="no-underline">
+                下一页 →
+              </Link>
+            ) : null}
+          </nav>
+        </div>
       ) : null}
     </div>
   );
