@@ -1,0 +1,37 @@
+{
+  "name": "rebrickable-local",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "db:import": "tsx scripts/import-assets.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "server-only": "^0.0.1",
+    "csv-parse": "^5.6.0",
+    "drizzle-orm": "^0.41.0",
+    "next": "^15.3.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.7",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.15.17",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "drizzle-kit": "^0.31.1",
+    "eslint": "^9.26.0",
+    "eslint-config-next": "^15.3.2",
+    "tailwindcss": "^4.1.7",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

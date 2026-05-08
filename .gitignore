@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+.pnpm-store/
 /.pnp
 .pnp.*
 .yarn/*
@@ -22,7 +23,9 @@
 
 # misc
 .DS_Store
+.eslintcache
 *.pem
+/data/*.db
 /data/*.db-journal
 /data/*.db-shm
 /data/*.db-wal
