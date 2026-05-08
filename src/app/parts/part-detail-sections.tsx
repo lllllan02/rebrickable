@@ -28,7 +28,15 @@ export function PartHeaderBlock({
       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-50">
         {imageUrl ? (
           <div className="relative h-16 w-16">
-            <Image src={imageUrl} alt={name} fill sizes="64px" className="object-contain" />
+            <Image
+              src={imageUrl}
+              alt={name}
+              fill
+              loading="lazy"
+              decoding="async"
+              sizes="64px"
+              className="object-contain"
+            />
           </div>
         ) : (
           <Box className="h-8 w-8 text-slate-300" />

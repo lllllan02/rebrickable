@@ -255,7 +255,8 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
                   src={moc.imageUrl}
                   alt={moc.name}
                   fill
-                  priority
+                  loading="lazy"
+                  decoding="async"
                   sizes="360px"
                   className="object-contain"
                 />
@@ -442,6 +443,8 @@ export default async function MocDetailPage({ params, searchParams }: MocDetailP
                                     src={item.imageUrl}
                                     alt={item.partName}
                                     fill
+                                    loading="lazy"
+                                    decoding="async"
                                     sizes="48px"
                                     className="object-contain"
                                   />

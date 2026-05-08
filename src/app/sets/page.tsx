@@ -62,23 +62,27 @@ export default function SetsPage() {
         </Card>
       ) : (
         <section className="grid gap-5">
-          {sets.map((set, index) => (
+          {sets.map((set) => (
             <Card
               key={set.setNum}
-              className="overflow-hidden p-0 transition-shadow hover:shadow-md"
+              className="relative overflow-hidden p-0 transition-shadow hover:shadow-md"
             >
-              <div className="grid gap-0 lg:grid-cols-[280px_1fr]">
-                <Link
-                  href={`/sets/${set.setNum}`}
-                  className="flex min-h-64 items-center justify-center bg-slate-100 p-6"
-                >
+              <Link
+                href={`/sets/${set.setNum}`}
+                tabIndex={-1}
+                aria-hidden="true"
+                className="absolute inset-0 z-[1] rounded-2xl cursor-pointer"
+              />
+              <div className="relative z-[2] grid gap-0 lg:grid-cols-[280px_1fr] pointer-events-none">
+                <div className="flex min-h-64 items-center justify-center bg-slate-100 p-6">
                   {set.imageUrl ? (
                     <div className="relative h-56 w-full">
                       <Image
                         src={set.imageUrl}
                         alt={set.name}
                         fill
-                        priority={index === 0}
+                        loading="lazy"
+                        decoding="async"
                         sizes="280px"
                         className="object-contain"
                       />
@@ -86,7 +90,7 @@ export default function SetsPage() {
                   ) : (
                     <Box className="h-16 w-16 text-slate-400" />
                   )}
-                </Link>
+                </div>
 
                 <div className="flex flex-col gap-6 p-6">
                   <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
@@ -126,7 +130,7 @@ export default function SetsPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col justify-between gap-4 border-t border-slate-100 pt-5 md:flex-row md:items-center">
+                  <div className="pointer-events-auto flex flex-col justify-between gap-4 border-t border-slate-100 pt-5 md:flex-row md:items-center">
                     <div className="flex flex-wrap gap-3 text-sm">
                       <Link
                         href={`${set.assetBaseUrl}/inventory.json`}

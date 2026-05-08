@@ -66,7 +66,7 @@ export default function MocsPage() {
         </Card>
       ) : (
         <section className="grid gap-5">
-          {mocs.map((moc, index) => (
+          {mocs.map((moc) => (
             <Card
               key={moc.mocId}
               className="overflow-hidden p-0 transition-shadow hover:shadow-md"
@@ -82,7 +82,8 @@ export default function MocsPage() {
                         src={moc.imageUrl}
                         alt={moc.name}
                         fill
-                        priority={index === 0}
+                        loading="lazy"
+                        decoding="async"
                         sizes="280px"
                         className="object-contain"
                       />

@@ -250,7 +250,8 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                   src={data.set.imageUrl}
                   alt={data.set.name}
                   fill
-                  priority
+                  loading="lazy"
+                  decoding="async"
                   sizes="360px"
                   className="object-contain"
                 />
@@ -450,6 +451,8 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                                 src={item.imageUrl}
                                 alt={item.partName}
                                 fill
+                                loading="lazy"
+                                decoding="async"
                                 sizes="48px"
                                 className="object-contain"
                               />
@@ -527,6 +530,8 @@ export default async function SetDetailPage({ params, searchParams }: SetDetailP
                             src={moc.imageUrl}
                             alt={moc.name}
                             fill
+                            loading="lazy"
+                            decoding="async"
                             sizes="80px"
                             className="object-contain"
                           />

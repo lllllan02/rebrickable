@@ -190,7 +190,15 @@ function PartBrowseRow({
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50">
         {imageUrl ? (
           <div className="relative h-8 w-8">
-            <Image src={imageUrl} alt="" fill sizes="32px" className="object-contain" />
+            <Image
+              src={imageUrl}
+              alt=""
+              fill
+              loading="lazy"
+              decoding="async"
+              sizes="32px"
+              className="object-contain"
+            />
           </div>
         ) : (
           <Box className="h-4 w-4 text-slate-300" />

@@ -1310,31 +1310,27 @@ export function getSetListData() {
     .from(sets)
     .orderBy(desc(sets.updatedAt))
     .all();
-  const inventoryRows = db
+  /** 在库内聚合，避免每次拉全表 `set_parts` 再在内存里累加（清单大时极慢）。 */
+  const inventoryAgg = db
     .select({
       setNum: setParts.setNum,
-      quantity: setParts.quantity,
-      isSpare: setParts.isSpare,
+      rowCount: sql<number>`count(*)`,
+      quantity: sql<number>`coalesce(sum(${setParts.quantity}), 0)`,
+      spareRows: sql<number>`coalesce(sum(case when ${setParts.isSpare} then 1 else 0 end), 0)`,
     })
     .from(setParts)
+    .groupBy(setParts.setNum)
     .all();
-  const inventoryBySet = new Map<
-    string,
-    { rowCount: number; quantity: number; spareRows: number }
-  >();
-
-  for (const row of inventoryRows) {
-    const current = inventoryBySet.get(row.setNum) ?? {
-      rowCount: 0,
-      quantity: 0,
-      spareRows: 0,
-    };
-
-    current.rowCount += 1;
-    current.quantity += row.quantity;
-    current.spareRows += row.isSpare ? 1 : 0;
-    inventoryBySet.set(row.setNum, current);
-  }
+  const inventoryBySet = new Map(
+    inventoryAgg.map((row) => [
+      row.setNum,
+      {
+        rowCount: Number(row.rowCount),
+        quantity: Number(row.quantity),
+        spareRows: Number(row.spareRows),
+      },
+    ]),
+  );
 
   return {
     count: setCount.value,
@@ -1429,31 +1425,26 @@ function parseMocIdFromRoute(segment: string): number | null {
 export function getMocListData() {
   const [mocCount] = db.select({ value: count() }).from(mocs).all();
   const allMocs = db.select().from(mocs).orderBy(desc(mocs.updatedAt)).all();
-  const inventoryRows = db
+  const inventoryAgg = db
     .select({
       mocId: mocParts.mocId,
-      quantity: mocParts.quantity,
-      isSpare: mocParts.isSpare,
+      rowCount: sql<number>`count(*)`,
+      quantity: sql<number>`coalesce(sum(${mocParts.quantity}), 0)`,
+      spareRows: sql<number>`coalesce(sum(case when ${mocParts.isSpare} then 1 else 0 end), 0)`,
     })
     .from(mocParts)
+    .groupBy(mocParts.mocId)
     .all();
-  const inventoryByMoc = new Map<
-    number,
-    { rowCount: number; quantity: number; spareRows: number }
-  >();
-
-  for (const row of inventoryRows) {
-    const current = inventoryByMoc.get(row.mocId) ?? {
-      rowCount: 0,
-      quantity: 0,
-      spareRows: 0,
-    };
-
-    current.rowCount += 1;
-    current.quantity += row.quantity;
-    current.spareRows += row.isSpare ? 1 : 0;
-    inventoryByMoc.set(row.mocId, current);
-  }
+  const inventoryByMoc = new Map(
+    inventoryAgg.map((row) => [
+      row.mocId,
+      {
+        rowCount: Number(row.rowCount),
+        quantity: Number(row.quantity),
+        spareRows: Number(row.spareRows),
+      },
+    ]),
+  );
 
   return {
     count: mocCount.value,
