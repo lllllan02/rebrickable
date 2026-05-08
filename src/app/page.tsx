@@ -78,6 +78,8 @@ export default async function HomePage() {
           <li>
             将 Rebrickable 导出的 gz CSV 放入{" "}
             <code className="text-[var(--accent)]">assets/</code>
+            （建议包含 <code className="text-[var(--accent)]">sets.csv.gz</code>
+            ，以便套装列表与详情显示官方盒图）
           </li>
           <li>
             运行 <code className="text-[var(--accent)]">pnpm install</code> 与{" "}

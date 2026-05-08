@@ -64,6 +64,7 @@ function ensureSchema(db: Database.Database) {
     DROP TABLE IF EXISTS part_relationships;
     DROP TABLE IF EXISTS elements;
     DROP TABLE IF EXISTS inventories;
+    DROP TABLE IF EXISTS sets;
     DROP TABLE IF EXISTS parts;
     DROP TABLE IF EXISTS part_categories;
     DROP TABLE IF EXISTS colors;
@@ -100,6 +101,16 @@ function ensureSchema(db: Database.Database) {
       design_id TEXT
     );
     CREATE INDEX elements_part_idx ON elements(part_num);
+
+    CREATE TABLE sets (
+      set_num TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      year INTEGER,
+      theme_id INTEGER,
+      num_parts INTEGER,
+      img_url TEXT
+    );
+    CREATE INDEX sets_name_idx ON sets(name);
 
     CREATE TABLE inventories (
       id INTEGER PRIMARY KEY,
@@ -251,6 +262,57 @@ async function loadElements(db: Database.Database) {
   if (buf.length) tx(buf);
 }
 
+async function loadSets(db: Database.Database) {
+  const full = path.join(ASSETS, "sets.csv.gz");
+  if (!fs.existsSync(full)) {
+    console.warn(
+      "未找到 assets/sets.csv.gz，已跳过；套装盒图需该文件（Rebrickable 下载页可获取）。"
+    );
+    return;
+  }
+  const ins = db.prepare(
+    `INSERT INTO sets (set_num, name, year, theme_id, num_parts, img_url)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  const tx = db.transaction(
+    (
+      rows: [
+        string,
+        string,
+        number | null,
+        number | null,
+        number | null,
+        string | null,
+      ][]
+    ) => {
+      for (const r of rows) ins.run(...r);
+    }
+  );
+  const buf: [
+    string,
+    string,
+    number | null,
+    number | null,
+    number | null,
+    string | null,
+  ][] = [];
+  for await (const row of readGzCsv("sets.csv.gz")) {
+    buf.push([
+      textReq(row.set_num),
+      textReq(row.name),
+      intOrNull(row.year),
+      intOrNull(row.theme_id),
+      intOrNull(row.num_parts),
+      textOrNull(row.img_url),
+    ]);
+    if (buf.length >= BATCH) {
+      tx(buf);
+      buf.length = 0;
+    }
+  }
+  if (buf.length) tx(buf);
+}
+
 async function loadInventories(db: Database.Database) {
   const ins = db.prepare(
     `INSERT INTO inventories (id, version, set_num) VALUES (?, ?, ?)`
@@ -338,6 +400,8 @@ async function main() {
   await loadParts(db);
   console.log("导入 elements…");
   await loadElements(db);
+  console.log("导入 sets（套装元数据与盒图）…");
+  await loadSets(db);
   console.log("导入 inventories…");
   await loadInventories(db);
   console.log("导入 inventory_parts（较慢）…");
