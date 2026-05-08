@@ -1,6 +1,7 @@
 import { asc } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
+import { colorDomId } from "@/lib/dom-anchors";
 import { colors } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export default async function ColorsPage() {
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {rows.map((c) => (
-              <tr key={c.id}>
+              <tr key={c.id} id={colorDomId(c.id)} className="scroll-mt-24">
                 <td className="px-2 py-1.5 font-mono">{c.id}</td>
                 <td className="px-2 py-1.5">
                   <span

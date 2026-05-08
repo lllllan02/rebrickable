@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { GlobalSearch } from "@/components/global-search";
+
 const links = [
   { href: "/", label: "首页" },
   { href: "/parts", label: "零件" },
@@ -14,7 +16,8 @@ export function SiteNav() {
         <Link href="/" className="site-brand">
           Rebrickable 本地库
         </Link>
-        <nav className="site-links">
+        <GlobalSearch />
+        <nav className="site-links site-links-end">
           {links.map((l) => (
             <Link key={l.href} href={l.href} className="site-link">
               {l.label}

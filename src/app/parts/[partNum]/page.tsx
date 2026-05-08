@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
+import { elementDomId } from "@/lib/dom-anchors";
 import {
   colors,
   elements,
@@ -172,7 +173,8 @@ export default async function PartDetailPage({ params }: Props) {
             return (
               <li
                 key={e.elementId}
-                className="result-card items-center text-sm"
+                id={elementDomId(e.elementId)}
+                className="result-card items-center scroll-mt-24 text-sm"
               >
                 <div className="media-box media-box-sm">
                   {colorThumb ? (
