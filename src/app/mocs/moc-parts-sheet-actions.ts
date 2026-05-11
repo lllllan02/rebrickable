@@ -198,7 +198,6 @@ export async function saveMocPartsSheetToDb(input: {
     });
 
     revalidatePath("/mocs");
-    revalidatePath("/mocs/import");
     revalidatePath(`/mocs/${encodeURIComponent(mocId)}`);
     return { ok: true, savedAt };
   } catch {

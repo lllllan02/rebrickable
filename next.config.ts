@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async redirects() {
     return [
-      { source: "/parts-sheet", destination: "/mocs/import", permanent: true },
-      { source: "/shortage", destination: "/mocs/import", permanent: true },
+      { source: "/parts-sheet", destination: "/mocs", permanent: true },
+      { source: "/shortage", destination: "/mocs", permanent: true },
     ];
   },
   images: {

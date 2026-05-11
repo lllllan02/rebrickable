@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
@@ -106,13 +105,13 @@ function MocPartDetailBody({
 
         {item.partFound ? (
           <p className="mt-5 border-t border-[var(--border-soft)] pt-4 text-xs">
-            <Link
+            <a
               href={`/parts/${encodeURIComponent(item.partNum)}`}
               className="text-[var(--accent)] underline underline-offset-2"
               onClick={onClose}
             >
               打开零件页
-            </Link>
+            </a>
           </p>
         ) : null}
       </div>
@@ -124,13 +123,11 @@ type Props = {
   items: ShortageResolveItem[];
   skippedHeader: boolean;
   savedAt: string;
-  /** 链到导入页（含 loadMoc），便于对照编辑 */
-  partsSheetHref?: string;
   /** 各行列 quantity 之和；不传则由 items 现场累加 */
   totalPartQty?: number;
 };
 
-export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref, totalPartQty: totalPartQtyProp }: Props) {
+export function MocPartsList({ items, skippedHeader, savedAt, totalPartQty: totalPartQtyProp }: Props) {
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
   const detailDialogRef = useRef<HTMLDialogElement>(null);
@@ -190,19 +187,6 @@ export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref, to
         </p>
       </div>
 
-      <p className="text-xs leading-relaxed text-[var(--muted)]">
-        分类与导入页一致：未收录零件不参与分类；仅作浏览筛选。
-        {partsSheetHref ? (
-          <>
-            {" "}
-            <Link href={partsSheetHref} className="text-[var(--accent)] underline underline-offset-2">
-              打开导入页编辑
-            </Link>
-            。
-          </>
-        ) : null}
-      </p>
-
       <div className="meta-row flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)]">
         {sheetFilterOptions.length > 1 ? (
           <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -234,12 +218,10 @@ export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref, to
           当前分类下没有匹配条目。未收录零件不参与分类筛选；可点「全部」查看完整列表。
         </p>
       ) : (
-        <>
-          <p className="text-[11px] text-[var(--muted)]">参考 Rebrickable：缩略图 + 数量与零件号；点击卡片打开详情侧栏。</p>
-          <div
-            className="grid gap-2"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))" }}
-          >
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))" }}
+        >
             {listFiltered.map((r, idx) => (
               <button
                 key={`${r.lineNumber}-${r.partNum}-${r.colorId}-${idx}`}
@@ -278,8 +260,7 @@ export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref, to
                 </p>
               </button>
             ))}
-          </div>
-        </>
+        </div>
       )}
 
       <dialog

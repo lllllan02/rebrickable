@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 
+import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
+import { PartsSheetImport } from "@/app/mocs/moc-parts-sheet-import";
 import { getDb } from "@/db/client";
 import { mocImages, mocProfiles } from "@/db/schema";
 import { mocImagePublicPath } from "@/lib/moc-image-public-path";
@@ -47,20 +48,56 @@ export default async function MocDetailPage({ params }: Props) {
   }));
 
   const rbHref = `https://rebrickable.com/mocs/MOC-${encodeURIComponent(mocId)}/`;
-  const partsSheetHref = `/mocs/import?loadMoc=${encodeURIComponent(mocId)}`;
   const partTotalQty = sheet.ok ? sheet.totalPartQty : null;
+
+  let initialMocSheet: InitialMocSheetFromServer | null = null;
+  let initialMocLoadError: string | null = null;
+  if (sheet.ok) {
+    initialMocSheet = {
+      mocId: sheet.mocId,
+      skippedHeader: sheet.skippedHeader,
+      items: sheet.items,
+      savedAt: sheet.savedAt,
+    };
+  } else {
+    initialMocLoadError = sheet.error;
+  }
 
   return (
     <div className="page-stack">
       <MocDetailEditorial
         mocId={mocId}
         rbHref={rbHref}
-        partsSheetHref={partsSheetHref}
         images={galleryImages}
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}
       />
+
+      <div id="moc-parts-sheet-tools" className="section-panel scroll-mt-24">
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--text)]">零件表</h2>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
+              与{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
+                rebrickable_parts_*_缺货表.csv
+              </code>{" "}
+              相同结构。选择 CSV 解析成功后会立刻覆盖并保存到本 MOC。可在此导出 Excel 或 CSV；零件缩略图与浏览见下方列表。新 MOC 也可从{" "}
+              <a href="/mocs" className="text-[var(--accent)] underline">
+                MOC 列表
+              </a>{" "}
+              顶部上传导入。
+            </p>
+          </div>
+          <PartsSheetImport
+            requestedLoadMocId={mocId}
+            initialMocSheet={initialMocSheet}
+            initialMocLoadError={initialMocLoadError}
+            mocDetailEmbed
+          />
+        </section>
+      </div>
 
       {sheet.ok ? (
         <div className="section-panel">
@@ -68,19 +105,14 @@ export default async function MocDetailPage({ params }: Props) {
             items={sheet.items}
             skippedHeader={sheet.skippedHeader}
             savedAt={sheet.savedAt}
-            partsSheetHref={partsSheetHref}
             totalPartQty={sheet.totalPartQty}
           />
         </div>
       ) : (
         <section className="rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-6 text-sm text-[var(--muted)]">
-          <p>暂无已存零件表：{sheet.error}</p>
+          <p>暂无已存零件列表视图：{sheet.error}</p>
           <p className="mt-2">
-            可在{" "}
-            <Link href="/mocs/import" className="text-[var(--accent)] underline">
-              零件表导入
-            </Link>{" "}
-            页导入 CSV 后保存到该 MOC ID。
+            可在上方「零件表」区域选择 CSV；解析成功后会自动保存，随后本页将显示带缩略图的浏览列表。
           </p>
         </section>
       )}

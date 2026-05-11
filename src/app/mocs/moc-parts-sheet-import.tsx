@@ -5,14 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { parseMocIdFromFilename } from "@/lib/parts-sheet-moc-id";
 import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 
-import {
-  type InitialMocSheetFromServer,
-  loadMocPartsSheetFromDb,
-  saveMocPartsSheetToDb,
-} from "./moc-parts-sheet-actions";
+import { type InitialMocSheetFromServer, saveMocPartsSheetToDb } from "./moc-parts-sheet-actions";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
@@ -88,15 +83,15 @@ type PartsSheetImportProps = {
   requestedLoadMocId?: string;
   initialMocSheet?: InitialMocSheetFromServer | null;
   initialMocLoadError?: string | null;
-  /** 在 `/mocs/import`：保存成功后跳转 MOC 详情 */
-  mocImportMode?: boolean;
+  /** 嵌在 MOC 详情页：锁定 MOC ID，保存后刷新本页数据 */
+  mocDetailEmbed?: boolean;
 };
 
 export function PartsSheetImport({
   requestedLoadMocId,
   initialMocSheet,
   initialMocLoadError,
-  mocImportMode = false,
+  mocDetailEmbed = false,
 }: PartsSheetImportProps) {
   const router = useRouter();
   const clearedByEditRef = useRef(false);
@@ -115,7 +110,6 @@ export function PartsSheetImport({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [exportBusy, setExportBusy] = useState(false);
-  const [mocId, setMocId] = useState("");
   const [mocLocalMessage, setMocLocalMessage] = useState<string | null>(null);
   const [mocActionBusy, setMocActionBusy] = useState(false);
   const mocFeedbackAnchorRef = useRef<HTMLDivElement>(null);
@@ -215,44 +209,94 @@ export function PartsSheetImport({
     );
   }, [colorFilter, colorsOptions]);
 
-  const onFile = useCallback(async (file: File | null) => {
-    setError(null);
-    setLineNumber(null);
-    setItems(null);
-    setFileName(null);
-    clearedByEditRef.current = false;
-    if (!file) return;
+  /** MOC 反馈区滚入视口，以免自动保存后「没反应」 */
+  const scrollMocFeedbackIntoView = useCallback(() => {
+    setTimeout(() => {
+      mocFeedbackAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }, []);
 
-    setLoading(true);
-    setFileName(file.name);
-    const fromName = parseMocIdFromFilename(file.name);
-    if (fromName) setMocId(fromName);
-    try {
-      const csv = await file.text();
-      const result = await postResolvePartsSheetCsv(csv);
-      if ("error" in result && result.error) {
-        setError(result.error);
-        setLineNumber(result.lineNumber ?? null);
-        return;
+  const saveSheetToMocDbCore = useCallback(
+    async (
+      id: string,
+      rows: ShortageRow[],
+      nextSkippedHeader: boolean,
+      sourceFileName: string | null
+    ): Promise<boolean> => {
+      const trimmed = id.trim();
+      if (!trimmed || rows.length === 0) return false;
+      setMocLocalMessage(null);
+      setMocActionBusy(true);
+      try {
+        const result = await saveMocPartsSheetToDb({
+          mocId: trimmed,
+          skippedHeader: nextSkippedHeader,
+          sourceFileName,
+          items: rows.map(({ rowId, ...rest }) => {
+            void rowId;
+            return rest;
+          }),
+        });
+        if (!result.ok) {
+          setError(result.error);
+          setLineNumber(null);
+          scrollMocFeedbackIntoView();
+          return false;
+        }
+        setError(null);
+        setLineNumber(null);
+        router.refresh();
+        setMocLocalMessage("已保存并覆盖当前 MOC 零件表，下方列表已刷新。");
+        scrollMocFeedbackIntoView();
+        return true;
+      } catch {
+        setError("保存失败，请重试。");
+        setLineNumber(null);
+        scrollMocFeedbackIntoView();
+        return false;
+      } finally {
+        setMocActionBusy(false);
       }
-      setSkippedHeader(result.skippedHeader);
-      setSheetListFilter("all");
-      setItems(withRowIds(result.items));
-    } catch {
-      setError("读取或上传失败，请重试。");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [router, scrollMocFeedbackIntoView]
+  );
 
-  const removeRow = useCallback((rowId: string) => {
-    setItems((prev) => {
-      if (!prev) return prev;
-      const next = prev.filter((r) => r.rowId !== rowId);
-      if (next.length === 0) clearedByEditRef.current = true;
-      return next;
-    });
-  }, []);
+  const onFile = useCallback(
+    async (file: File | null) => {
+      setError(null);
+      setLineNumber(null);
+      setItems(null);
+      setFileName(null);
+      clearedByEditRef.current = false;
+      if (!file) return;
+
+      setLoading(true);
+      setFileName(file.name);
+      try {
+        const csv = await file.text();
+        const result = await postResolvePartsSheetCsv(csv);
+        if ("error" in result && result.error) {
+          setError(result.error);
+          setLineNumber(result.lineNumber ?? null);
+          return;
+        }
+        setSkippedHeader(result.skippedHeader);
+        setSheetListFilter("all");
+        const rows = withRowIds(result.items);
+        setItems(rows);
+
+        if (mocDetailEmbed) {
+          const mid = (requestedLoadMocId ?? "").trim();
+          if (mid) await saveSheetToMocDbCore(mid, rows, result.skippedHeader, file.name);
+        }
+      } catch {
+        setError("读取或上传失败，请重试。");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mocDetailEmbed, requestedLoadMocId, saveSheetToMocDbCore]
+  );
 
   const applyColorChange = useCallback(async () => {
     const editing = colorEditRow;
@@ -284,12 +328,11 @@ export function PartsSheetImport({
       }
       const prevIds = nextRows.map((r) => r.rowId);
       setSkippedHeader(result.skippedHeader);
-      setItems(
-        result.items.map((r, i) => ({
-          ...r,
-          rowId: prevIds[i] ?? crypto.randomUUID(),
-        }))
-      );
+      const mapped = result.items.map((r, i) => ({
+        ...r,
+        rowId: prevIds[i] ?? crypto.randomUUID(),
+      }));
+      setItems(mapped);
     } catch {
       setError("更新颜色后重新解析失败，请重试。");
     } finally {
@@ -302,18 +345,10 @@ export function PartsSheetImport({
     [fileName]
   );
 
-  /** MOC 区在长列表上方，保存/载入后滚入视口以免「点了没反应」 */
-  const scrollMocFeedbackIntoView = useCallback(() => {
-    setTimeout(() => {
-      mocFeedbackAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 0);
-  }, []);
-
   useEffect(() => {
     const qid = requestedLoadMocId?.trim();
     if (!qid) return;
 
-    setMocId(qid);
     setLineNumber(null);
     setMocLocalMessage(null);
 
@@ -331,102 +366,8 @@ export function PartsSheetImport({
       setSheetListFilter("all");
       setItems(withRowIds(initialMocSheet.items));
       setFileName(`moc-${qid}.csv`);
-      const savedAtStr = initialMocSheet.savedAt.slice(0, 19).replace("T", " ");
-      setMocLocalMessage(`已从数据库载入 MOC ${qid}（保存于 ${savedAtStr}）。`);
-      scrollMocFeedbackIntoView();
     }
-  }, [
-    requestedLoadMocId,
-    initialMocSheet,
-    initialMocLoadError,
-    scrollMocFeedbackIntoView,
-  ]);
-
-  const savePartsSheetToMocDb = useCallback(async () => {
-    setMocLocalMessage(null);
-    const id = mocId.trim();
-    if (!id) {
-      setError("请填写或从文件名识别 MOC ID 后再保存。");
-      setLineNumber(null);
-      scrollMocFeedbackIntoView();
-      return;
-    }
-    if (!items || items.length === 0) {
-      setError("当前没有可保存的零件行。请先导入 CSV 或从数据库载入。");
-      setLineNumber(null);
-      scrollMocFeedbackIntoView();
-      return;
-    }
-    setMocActionBusy(true);
-    try {
-      const result = await saveMocPartsSheetToDb({
-        mocId: id,
-        skippedHeader,
-        sourceFileName: fileName,
-        items: items.map(({ rowId, ...rest }) => {
-          void rowId;
-          return rest;
-        }),
-      });
-      if (!result.ok) {
-        setError(result.error);
-        setLineNumber(null);
-        scrollMocFeedbackIntoView();
-        return;
-      }
-      setError(null);
-      setLineNumber(null);
-      if (mocImportMode) {
-        router.push(`/mocs/${encodeURIComponent(id)}`);
-        return;
-      }
-      setMocLocalMessage(`已写入数据库（MOC ${id}，同一 ID 再次保存会覆盖）。`);
-      scrollMocFeedbackIntoView();
-    } catch {
-      setError("保存失败，请重试。");
-      setLineNumber(null);
-      scrollMocFeedbackIntoView();
-    } finally {
-      setMocActionBusy(false);
-    }
-  }, [fileName, items, mocId, skippedHeader, mocImportMode, router, scrollMocFeedbackIntoView]);
-
-  const loadPartsSheetFromMocDb = useCallback(async () => {
-    setMocLocalMessage(null);
-    const id = mocId.trim();
-    if (!id) {
-      setError("请填写 MOC ID 后再载入。");
-      setLineNumber(null);
-      scrollMocFeedbackIntoView();
-      return;
-    }
-    setMocActionBusy(true);
-    try {
-      const result = await loadMocPartsSheetFromDb(id);
-      if (!result.ok) {
-        setError(result.error);
-        setLineNumber(null);
-        scrollMocFeedbackIntoView();
-        return;
-      }
-      clearedByEditRef.current = false;
-      setError(null);
-      setLineNumber(null);
-      setSkippedHeader(result.skippedHeader);
-      setSheetListFilter("all");
-      setItems(withRowIds(result.items));
-      setFileName(`moc-${id}.csv`);
-      const savedAtStr = result.savedAt.slice(0, 19).replace("T", " ");
-      setMocLocalMessage(`已从数据库载入 MOC ${id}（保存于 ${savedAtStr}）。`);
-      scrollMocFeedbackIntoView();
-    } catch {
-      setError("载入失败，请重试。");
-      setLineNumber(null);
-      scrollMocFeedbackIntoView();
-    } finally {
-      setMocActionBusy(false);
-    }
-  }, [mocId, scrollMocFeedbackIntoView]);
+  }, [requestedLoadMocId, initialMocSheet, initialMocLoadError, scrollMocFeedbackIntoView]);
 
   const onExportCsv = useCallback(() => {
     if (!items || items.length === 0) return;
@@ -851,21 +792,21 @@ export function PartsSheetImport({
             type="file"
             accept=".csv,text/csv"
             className="sr-only"
-            disabled={loading}
+            disabled={loading || mocActionBusy}
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
               void onFile(f);
               e.target.value = "";
             }}
           />
-          {loading ? "解析中…" : "选择零件表 CSV"}
+          {loading ? "解析中…" : mocDetailEmbed ? "选择 CSV（覆盖当前 MOC）" : "选择零件表 CSV"}
         </label>
         {items !== null && items.length > 0 ? (
           <>
             <button
               type="button"
               className="button-primary text-sm"
-              disabled={loading || exportBusy}
+              disabled={loading || exportBusy || mocActionBusy}
               onClick={() => void onExportXlsx()}
             >
               {exportBusy ? "导出中…" : "导出 Excel（含缩略图）"}
@@ -873,7 +814,7 @@ export function PartsSheetImport({
             <button
               type="button"
               className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
-              disabled={loading || exportBusy}
+              disabled={loading || exportBusy || mocActionBusy}
               onClick={onExportCsv}
             >
               导出 CSV（无图，可再导入）
@@ -883,41 +824,14 @@ export function PartsSheetImport({
         {fileName ? (
           <span className="text-xs text-[var(--muted)]">{fileName}</span>
         ) : null}
+        {mocDetailEmbed && items !== null && items.length > 0 ? (
+          <span className="text-xs text-[var(--muted)]">
+            已载入 {items.length.toLocaleString("zh-CN")} 行（仅用于导出）；零件明细见下方列表。
+          </span>
+        ) : null}
       </div>
 
       <div ref={mocFeedbackAnchorRef} className="space-y-2 scroll-mt-24">
-        <div className="flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-2)] px-3 py-3">
-          <label className="min-w-[8rem] flex-1 text-xs text-[var(--muted)]">
-            MOC ID
-            <input
-              type="text"
-              inputMode="numeric"
-              value={mocId}
-              onChange={(e) => {
-                setMocId(e.target.value);
-                setMocLocalMessage(null);
-              }}
-              placeholder="如 12345；上传 rebrickable_parts_12345_… 时会自动填入"
-              className="field mt-1 w-full max-w-xs font-mono text-sm text-[var(--text)]"
-            />
-          </label>
-          <button
-            type="button"
-            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
-            disabled={loading || exportBusy || mocActionBusy}
-            onClick={() => void loadPartsSheetFromMocDb()}
-          >
-            从数据库载入
-          </button>
-          <button
-            type="button"
-            className="button-primary text-sm"
-            disabled={loading || exportBusy || mocActionBusy}
-            onClick={() => void savePartsSheetToMocDb()}
-          >
-            {mocImportMode ? "保存 MOC 零件表" : "保存到数据库（按 MOC）"}
-          </button>
-        </div>
         {mocLocalMessage ? (
           <div
             className="rounded-[var(--radius-md)] border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm text-[var(--text)]"
@@ -955,7 +869,7 @@ export function PartsSheetImport({
         </p>
       ) : null}
 
-      {items !== null && items.length > 0 ? (
+      {!mocDetailEmbed && items !== null && items.length > 0 ? (
         <>
           <div className="meta-row flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)]">
             <span>
@@ -1050,6 +964,7 @@ export function PartsSheetImport({
                           type="button"
                           className="badge cursor-pointer border-0 bg-[var(--surface-3)] text-left hover:ring-1 hover:ring-[var(--accent)]/40"
                           title="点击更换颜色（将重新匹配缩略图与颜色名）"
+                          disabled={loading || exportBusy || mocActionBusy}
                           onClick={() => openColorDialog(r)}
                         >
                           色 {r.colorId}
@@ -1109,15 +1024,6 @@ export function PartsSheetImport({
                         </p>
                       ) : null}
                     </div>
-                    <button
-                      type="button"
-                      className="shrink-0 self-start rounded-md border border-[var(--border-soft)] px-2 py-1 text-[11px] text-[var(--muted)] hover:border-red-400/40 hover:bg-[var(--danger-soft)] hover:text-red-200/95"
-                      title="从列表中移除此行"
-                      aria-label={`删除 ${r.partNum}`}
-                      onClick={() => removeRow(r.rowId)}
-                    >
-                      删除
-                    </button>
                   </div>
                 </div>
               </li>

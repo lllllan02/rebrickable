@@ -8,7 +8,6 @@ import { MocProfileForm } from "@/app/mocs/moc-profile-form";
 type Props = {
   mocId: string;
   rbHref: string;
-  partsSheetHref: string;
   images: MocGalleryImage[];
   initialDisplayName: string;
   initialTags: string[];
@@ -19,7 +18,6 @@ type Props = {
 export function MocDetailEditorial({
   mocId,
   rbHref,
-  partsSheetHref,
   images,
   initialDisplayName,
   initialTags,
@@ -52,16 +50,13 @@ export function MocDetailEditorial({
             <a href={rbHref} className="text-[var(--accent)] underline underline-offset-2" target="_blank" rel="noreferrer">
               在 Rebrickable 打开 MOC-{mocId}
             </a>
-            <Link href={partsSheetHref} className="text-[var(--accent)] underline underline-offset-2">
-              编辑零件表并保存
-            </Link>
             <Link href="/mocs" className="text-[var(--muted)] underline-offset-2 hover:text-[var(--text)] hover:underline">
               返回 MOC 列表
             </Link>
           </nav>
 
           <p className="text-[11px] leading-relaxed text-[var(--muted)]">
-            零件清单在页面下方。参考图仅存本机；在输入框外可用 ⌘V / Ctrl+V 粘贴图片。列表封面取上传时间最早的一张。
+            零件表 CSV 导入与导出在本页「零件表」区域；有已存数据时，其下方为带缩略图的浏览列表。参考图仅存本机；在输入框外可用 ⌘V / Ctrl+V 粘贴图片。列表封面取上传时间最早的一张。
           </p>
         </aside>
       </div>
