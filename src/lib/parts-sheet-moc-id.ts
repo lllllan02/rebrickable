@@ -13,6 +13,27 @@ export type MocPartsSheetPayloadV1 = {
   savedAt: string;
 };
 
+/** 单一分支（完整表或缺件表） */
+export type MocSheetBranchPayload = {
+  skippedHeader: boolean;
+  items: ShortageResolveItem[];
+  savedAt: string;
+};
+
+export type MocPartsSheetPayloadV2 = {
+  version: 2;
+  /** 未上传完整表时为 null */
+  full: MocSheetBranchPayload | null;
+  /** 未上传缺件表时为 null */
+  shortage: MocSheetBranchPayload | null;
+};
+
+/** 内存中归一化结构（含从 v1 迁移）；至少一侧非空 */
+export type StoredMocDualSheets = {
+  full: MocSheetBranchPayload | null;
+  shortage: MocSheetBranchPayload | null;
+};
+
 export function parseMocIdFromFilename(fileName: string): string | null {
   const base = fileName.replace(/\\/g, "/").split("/").pop() ?? fileName;
 
@@ -105,19 +126,78 @@ function isShortageResolveItem(v: unknown): v is ShortageResolveItem {
   );
 }
 
-/** 校验持久化 JSON（数据库 payload 或 API 体），失败返回 null */
-export function parseStoredMocPartsSheet(raw: unknown): MocPartsSheetPayloadV1 | null {
+function isSheetBranchPayload(v: unknown): v is MocSheetBranchPayload {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.skippedHeader === "boolean" &&
+    typeof o.savedAt === "string" &&
+    Array.isArray(o.items) &&
+    o.items.length > 0 &&
+    o.items.every(isShortageResolveItem)
+  );
+}
+
+/**
+ * 校验持久化 JSON（v1 单表 或 v2 双表），失败返回 null。
+ * v1 视为仅含「完整零件表」，缺件表为空。
+ */
+export function parseStoredMocDualSheets(raw: unknown): StoredMocDualSheets | null {
   if (typeof raw !== "object" || raw === null) return null;
   const o = raw as Record<string, unknown>;
-  if (o.version !== 1) return null;
-  if (typeof o.skippedHeader !== "boolean") return null;
-  if (typeof o.savedAt !== "string") return null;
-  if (!Array.isArray(o.items) || !o.items.every(isShortageResolveItem)) return null;
+
+  if (o.version === 2) {
+    const full =
+      o.full === null ? null : isSheetBranchPayload(o.full) ? (o.full as MocSheetBranchPayload) : null;
+    const shortage =
+      o.shortage === null
+        ? null
+        : isSheetBranchPayload(o.shortage)
+          ? (o.shortage as MocSheetBranchPayload)
+          : null;
+    if (!full && !shortage) return null;
+    return { full, shortage };
+  }
+
+  if (o.version === 1) {
+    if (typeof o.skippedHeader !== "boolean") return null;
+    if (typeof o.savedAt !== "string") return null;
+    if (!Array.isArray(o.items) || !o.items.every(isShortageResolveItem) || o.items.length === 0) {
+      return null;
+    }
+    return {
+      full: {
+        skippedHeader: o.skippedHeader,
+        items: o.items,
+        savedAt: o.savedAt,
+      },
+      shortage: null,
+    };
+  }
+
+  return null;
+}
+
+/** @deprecated 使用 {@link parseStoredMocDualSheets}；仍返回 v1 形状供旧逻辑读取「完整表」 */
+export function parseStoredMocPartsSheet(raw: unknown): MocPartsSheetPayloadV1 | null {
+  const dual = parseStoredMocDualSheets(raw);
+  if (!dual?.full) return null;
   return {
     version: 1,
-    skippedHeader: o.skippedHeader,
-    items: o.items,
-    savedAt: o.savedAt,
+    skippedHeader: dual.full.skippedHeader,
+    items: dual.full.items,
+    savedAt: dual.full.savedAt,
+  };
+}
+
+export function dualSheetsToPayloadV2(dual: StoredMocDualSheets): MocPartsSheetPayloadV2 {
+  if (!dual.full && !dual.shortage) {
+    throw new Error("dualSheetsToPayloadV2: 至少一侧须有数据");
+  }
+  return {
+    version: 2,
+    full: dual.full,
+    shortage: dual.shortage,
   };
 }
 

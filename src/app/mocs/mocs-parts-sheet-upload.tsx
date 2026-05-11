@@ -57,6 +57,7 @@ export function MocsPartsSheetUpload() {
     try {
       const result = await saveMocPartsSheetToDb({
         mocId,
+        kind: "full",
         skippedHeader: pending.skippedHeader,
         sourceFileName: pending.fileName,
         items: pending.items,

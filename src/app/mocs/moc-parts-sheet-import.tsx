@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
+import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
 import { type InitialMocSheetFromServer, saveMocPartsSheetToDb } from "./moc-parts-sheet-actions";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
@@ -81,7 +82,10 @@ function isValidColorPayload(data: unknown): data is { colors: ColorOption[] } {
 type PartsSheetImportProps = {
   /** 地址栏 `?loadMoc=` 的 ID（由服务端读库后配合下面两项初始化） */
   requestedLoadMocId?: string;
-  initialMocSheet?: InitialMocSheetFromServer | null;
+  /** 非详情嵌页：初始化预览数据（若有） */
+  initialFullSheet?: InitialMocSheetFromServer | null;
+  /** 详情页：已存缺件表 */
+  initialShortageSheet?: InitialMocSheetFromServer | null;
   initialMocLoadError?: string | null;
   /** 嵌在 MOC 详情页：锁定 MOC ID，保存后刷新本页数据 */
   mocDetailEmbed?: boolean;
@@ -89,7 +93,8 @@ type PartsSheetImportProps = {
 
 export function PartsSheetImport({
   requestedLoadMocId,
-  initialMocSheet,
+  initialFullSheet,
+  initialShortageSheet,
   initialMocLoadError,
   mocDetailEmbed = false,
 }: PartsSheetImportProps) {
@@ -97,6 +102,12 @@ export function PartsSheetImport({
   const clearedByEditRef = useRef(false);
   const [items, setItems] = useState<ShortageRow[] | null>(null);
   const [skippedHeader, setSkippedHeader] = useState(false);
+  const [fullItems, setFullItems] = useState<ShortageRow[] | null>(null);
+  const [fullSkippedHeader, setFullSkippedHeader] = useState(false);
+  const [fullFileName, setFullFileName] = useState<string | null>(null);
+  const [shortageItems, setShortageItems] = useState<ShortageRow[] | null>(null);
+  const [shortageSkippedHeader, setShortageSkippedHeader] = useState(false);
+  const [shortageFileName, setShortageFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lineNumber, setLineNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,19 +133,9 @@ export function PartsSheetImport({
   const colorDialogRef = useRef<HTMLDialogElement>(null);
   const imageDialogRef = useRef<HTMLDialogElement>(null);
   const exportProgressDialogRef = useRef<HTMLDialogElement>(null);
-  const exportPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const exportPollTickRef = useRef(false);
   const colorLabelId = useId();
   const imageTitleId = useId();
   const exportProgressTitleId = useId();
-
-  const clearExportPoll = useCallback(() => {
-    if (exportPollRef.current) {
-      clearInterval(exportPollRef.current);
-      exportPollRef.current = null;
-    }
-    exportPollTickRef.current = false;
-  }, []);
 
   const loadColors = useCallback(async () => {
     setColorsLoading(true);
@@ -188,8 +189,6 @@ export function PartsSheetImport({
     if (d && !d.open) d.showModal();
   }, [exportProgress]);
 
-  useEffect(() => () => clearExportPoll(), [clearExportPoll]);
-
   const openColorDialog = useCallback((row: ShortageRow) => {
     setColorFilter("");
     setSelectedColorId(row.colorId);
@@ -221,7 +220,8 @@ export function PartsSheetImport({
       id: string,
       rows: ShortageRow[],
       nextSkippedHeader: boolean,
-      sourceFileName: string | null
+      sourceFileName: string | null,
+      kind: "full" | "shortage"
     ): Promise<boolean> => {
       const trimmed = id.trim();
       if (!trimmed || rows.length === 0) return false;
@@ -230,6 +230,7 @@ export function PartsSheetImport({
       try {
         const result = await saveMocPartsSheetToDb({
           mocId: trimmed,
+          kind,
           skippedHeader: nextSkippedHeader,
           sourceFileName,
           items: rows.map(({ rowId, ...rest }) => {
@@ -246,7 +247,11 @@ export function PartsSheetImport({
         setError(null);
         setLineNumber(null);
         router.refresh();
-        setMocLocalMessage("已保存并覆盖当前 MOC 零件表，下方列表已刷新。");
+        setMocLocalMessage(
+          kind === "full"
+            ? "已保存完整零件表；下方列表在对应 Tab 下刷新。"
+            : "已保存缺件表；下方列表在对应 Tab 下刷新。"
+        );
         scrollMocFeedbackIntoView();
         return true;
       } catch {
@@ -262,16 +267,32 @@ export function PartsSheetImport({
   );
 
   const onFile = useCallback(
-    async (file: File | null) => {
+    async (file: File | null, sheetKind?: "full" | "shortage") => {
       setError(null);
       setLineNumber(null);
-      setItems(null);
-      setFileName(null);
+      if (!mocDetailEmbed) {
+        setItems(null);
+        setFileName(null);
+      } else {
+        if (sheetKind === "full") {
+          setFullItems(null);
+          setFullFileName(null);
+        } else if (sheetKind === "shortage") {
+          setShortageItems(null);
+          setShortageFileName(null);
+        }
+      }
       clearedByEditRef.current = false;
       if (!file) return;
 
       setLoading(true);
-      setFileName(file.name);
+      const kind = mocDetailEmbed ? (sheetKind ?? "full") : "full";
+      if (mocDetailEmbed) {
+        if (kind === "full") setFullFileName(file.name);
+        else setShortageFileName(file.name);
+      } else {
+        setFileName(file.name);
+      }
       try {
         const csv = await file.text();
         const result = await postResolvePartsSheetCsv(csv);
@@ -280,14 +301,21 @@ export function PartsSheetImport({
           setLineNumber(result.lineNumber ?? null);
           return;
         }
-        setSkippedHeader(result.skippedHeader);
         setSheetListFilter("all");
         const rows = withRowIds(result.items);
-        setItems(rows);
-
         if (mocDetailEmbed) {
+          if (kind === "full") {
+            setFullSkippedHeader(result.skippedHeader);
+            setFullItems(rows);
+          } else {
+            setShortageSkippedHeader(result.skippedHeader);
+            setShortageItems(rows);
+          }
           const mid = (requestedLoadMocId ?? "").trim();
-          if (mid) await saveSheetToMocDbCore(mid, rows, result.skippedHeader, file.name);
+          if (mid) await saveSheetToMocDbCore(mid, rows, result.skippedHeader, file.name, kind);
+        } else {
+          setSkippedHeader(result.skippedHeader);
+          setItems(rows);
         }
       } catch {
         setError("读取或上传失败，请重试。");
@@ -354,20 +382,54 @@ export function PartsSheetImport({
 
     if (initialMocLoadError) {
       setError(initialMocLoadError);
-      setItems(null);
+      if (mocDetailEmbed) {
+        setFullItems(null);
+        setShortageItems(null);
+      } else {
+        setItems(null);
+      }
       scrollMocFeedbackIntoView();
       return;
     }
 
-    if (initialMocSheet && initialMocSheet.mocId === qid) {
+    if (mocDetailEmbed) {
       clearedByEditRef.current = false;
       setError(null);
-      setSkippedHeader(initialMocSheet.skippedHeader);
+      if (initialFullSheet && initialFullSheet.mocId === qid) {
+        setFullSkippedHeader(initialFullSheet.skippedHeader);
+        setFullItems(withRowIds(initialFullSheet.items));
+        setFullFileName(`moc-${qid}-full.csv`);
+      } else {
+        setFullItems(null);
+        setFullFileName(null);
+      }
+      if (initialShortageSheet && initialShortageSheet.mocId === qid) {
+        setShortageSkippedHeader(initialShortageSheet.skippedHeader);
+        setShortageItems(withRowIds(initialShortageSheet.items));
+        setShortageFileName(`moc-${qid}-shortage.csv`);
+      } else {
+        setShortageItems(null);
+        setShortageFileName(null);
+      }
+      return;
+    }
+
+    if (initialFullSheet && initialFullSheet.mocId === qid) {
+      clearedByEditRef.current = false;
+      setError(null);
+      setSkippedHeader(initialFullSheet.skippedHeader);
       setSheetListFilter("all");
-      setItems(withRowIds(initialMocSheet.items));
+      setItems(withRowIds(initialFullSheet.items));
       setFileName(`moc-${qid}.csv`);
     }
-  }, [requestedLoadMocId, initialMocSheet, initialMocLoadError, scrollMocFeedbackIntoView]);
+  }, [
+    requestedLoadMocId,
+    initialFullSheet,
+    initialShortageSheet,
+    initialMocLoadError,
+    mocDetailEmbed,
+    scrollMocFeedbackIntoView,
+  ]);
 
   const onExportCsv = useCallback(() => {
     if (!items || items.length === 0) return;
@@ -377,191 +439,36 @@ export function PartsSheetImport({
 
   const onExportXlsx = useCallback(async () => {
     if (!items || items.length === 0) return;
-    clearExportPoll();
     setExportBusy(true);
     setError(null);
     setLineNumber(null);
-    const payload = {
-      filenameStem: exportStem,
-      items: items.map((r) => {
-        const { rowId, ...rest } = r;
-        void rowId;
-        return rest;
-      }),
-    };
-
+    const stripped = items.map(({ rowId, ...rest }) => {
+      void rowId;
+      return rest;
+    });
+    setExportProgress({
+      jobId: "export",
+      total: stripped.length,
+      current: 0,
+      writingFile: false,
+    });
     try {
-      const res = await fetch("/api/parts-sheet/export-xlsx/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const result = await downloadPartsSheetXlsx(stripped, exportStem, (p) => {
+        setExportProgress((prev) =>
+          prev ? { ...prev, current: p.current, total: p.total, writingFile: p.writingFile } : prev
+        );
       });
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        let msg =
-          typeof data === "object" &&
-          data !== null &&
-          "error" in data &&
-          typeof (data as { error: unknown }).error === "string"
-            ? (data as { error: string }).error
-            : `导出失败（${res.status}）`;
-        const detail =
-          typeof data === "object" &&
-          data !== null &&
-          "detail" in data &&
-          typeof (data as { detail: unknown }).detail === "string"
-            ? (data as { detail: string }).detail.trim()
-            : "";
-        if (detail) msg = `${msg}（${detail}）`;
-        setError(msg);
-        setExportBusy(false);
-        return;
+      if (!result.ok) {
+        setError(result.error);
       }
-      const jobId =
-        typeof data === "object" &&
-        data !== null &&
-        "jobId" in data &&
-        typeof (data as { jobId: unknown }).jobId === "string"
-          ? (data as { jobId: string }).jobId
-          : null;
-      const totalFromApi =
-        typeof data === "object" &&
-        data !== null &&
-        "total" in data &&
-        typeof (data as { total: unknown }).total === "number"
-          ? (data as { total: number }).total
-          : items.length;
-      if (!jobId) {
-        setError("导出任务创建失败。");
-        setExportBusy(false);
-        return;
-      }
-
-      setExportProgress({
-        jobId,
-        total: totalFromApi,
-        current: 0,
-        writingFile: false,
-      });
-
-      const deadline = Date.now() + 10 * 60 * 1000;
-
-      exportPollRef.current = setInterval(() => {
-        void (async () => {
-          if (exportPollTickRef.current) return;
-          exportPollTickRef.current = true;
-          try {
-            if (Date.now() > deadline) {
-              clearExportPoll();
-              setError("导出超时，请减少行数或稍后重试。");
-              exportProgressDialogRef.current?.close();
-              setExportProgress(null);
-              setExportBusy(false);
-              return;
-            }
-
-            const sr = await fetch(
-              `/api/parts-sheet/export-xlsx/status?jobId=${encodeURIComponent(jobId)}`
-            );
-            const st: unknown = await sr.json().catch(() => null);
-            if (!sr.ok) return;
-
-            const status =
-              typeof st === "object" &&
-              st !== null &&
-              "status" in st &&
-              typeof (st as { status: unknown }).status === "string"
-                ? (st as { status: string }).status
-                : "";
-            const current =
-              typeof st === "object" &&
-              st !== null &&
-              "current" in st &&
-              typeof (st as { current: unknown }).current === "number"
-                ? (st as { current: number }).current
-                : 0;
-            const total =
-              typeof st === "object" &&
-              st !== null &&
-              "total" in st &&
-              typeof (st as { total: unknown }).total === "number"
-                ? (st as { total: number }).total
-                : totalFromApi;
-            const writingFile =
-              typeof st === "object" &&
-              st !== null &&
-              "writingFile" in st &&
-              typeof (st as { writingFile: unknown }).writingFile === "boolean"
-                ? (st as { writingFile: boolean }).writingFile
-                : false;
-
-            if (status === "running") {
-              setExportProgress((p) =>
-                p && p.jobId === jobId
-                  ? { ...p, current, total, writingFile }
-                  : p
-              );
-              return;
-            }
-
-            if (status === "error") {
-              clearExportPoll();
-              const errMsg =
-                typeof st === "object" &&
-                st !== null &&
-                "error" in st &&
-                typeof (st as { error: unknown }).error === "string"
-                  ? (st as { error: string }).error
-                  : "生成 Excel 失败。";
-              setError(errMsg);
-              exportProgressDialogRef.current?.close();
-              setExportProgress(null);
-              setExportBusy(false);
-              return;
-            }
-
-            if (status === "done") {
-              clearExportPoll();
-              const dr = await fetch(
-                `/api/parts-sheet/export-xlsx/download?jobId=${encodeURIComponent(jobId)}`
-              );
-              if (!dr.ok) {
-                const errBody: unknown = await dr.json().catch(() => null);
-                const errMsg =
-                  typeof errBody === "object" &&
-                  errBody !== null &&
-                  "error" in errBody &&
-                  typeof (errBody as { error: unknown }).error === "string"
-                    ? (errBody as { error: string }).error
-                    : `下载失败（${dr.status}）`;
-                setError(errMsg);
-                exportProgressDialogRef.current?.close();
-                setExportProgress(null);
-                setExportBusy(false);
-                return;
-              }
-              const blob = await dr.blob();
-              downloadBlob(`${exportStem}.xlsx`, blob);
-              exportProgressDialogRef.current?.close();
-              setExportProgress(null);
-              setExportBusy(false);
-            }
-          } catch {
-            clearExportPoll();
-            setError("导出过程中断，请重试。");
-            exportProgressDialogRef.current?.close();
-            setExportProgress(null);
-            setExportBusy(false);
-          } finally {
-            exportPollTickRef.current = false;
-          }
-        })();
-      }, 250);
     } catch {
       setError("导出 Excel 失败，请重试。");
+    } finally {
+      exportProgressDialogRef.current?.close();
+      setExportProgress(null);
       setExportBusy(false);
     }
-  }, [clearExportPoll, exportStem, items]);
+  }, [exportStem, items]);
 
   const missingParts = items?.filter((i) => !i.partFound).length ?? 0;
   const noImage = items?.filter((i) => i.partFound && !i.imgUrl).length ?? 0;
@@ -592,7 +499,7 @@ export function PartsSheetImport({
           : 0;
 
   return (
-    <div className="space-y-6">
+    <div className={mocDetailEmbed ? "space-y-4" : "space-y-6"}>
       <dialog
         ref={imageDialogRef}
         className="fixed left-1/2 top-1/2 z-[200] m-0 max-h-[min(92vh,56rem)] max-w-[min(96vw,56rem)] w-[min(96vw,56rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/70"
@@ -634,7 +541,6 @@ export function PartsSheetImport({
         aria-labelledby={exportProgressTitleId}
         aria-busy={exportBusy}
         onClose={() => {
-          clearExportPoll();
           setExportBusy(false);
           setExportProgress(null);
         }}
@@ -786,22 +692,61 @@ export function PartsSheetImport({
         ) : null}
       </dialog>
 
-      <div className="filter-bar flex-wrap items-center gap-3">
-        <label className="button-primary cursor-pointer text-sm">
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            disabled={loading || mocActionBusy}
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              void onFile(f);
-              e.target.value = "";
-            }}
-          />
-          {loading ? "解析中…" : mocDetailEmbed ? "选择 CSV（覆盖当前 MOC）" : "选择零件表 CSV"}
-        </label>
-        {items !== null && items.length > 0 ? (
+      <div
+        className={
+          mocDetailEmbed
+            ? "flex flex-wrap items-center gap-x-3 gap-y-2"
+            : "filter-bar flex-wrap items-center gap-3"
+        }
+      >
+        {mocDetailEmbed ? (
+          <>
+            <label className="button-primary cursor-pointer text-sm">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                disabled={loading || mocActionBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  void onFile(f, "full");
+                  e.target.value = "";
+                }}
+              />
+              {loading ? "解析中…" : "上传完整零件表 CSV"}
+            </label>
+            <label className="cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                disabled={loading || mocActionBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  void onFile(f, "shortage");
+                  e.target.value = "";
+                }}
+              />
+              上传缺件表 CSV
+            </label>
+          </>
+        ) : (
+          <label className="button-primary cursor-pointer text-sm">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="sr-only"
+              disabled={loading || mocActionBusy}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                void onFile(f);
+                e.target.value = "";
+              }}
+            />
+            {loading ? "解析中…" : "选择零件表 CSV"}
+          </label>
+        )}
+        {!mocDetailEmbed && items !== null && items.length > 0 ? (
           <>
             <button
               type="button"
@@ -821,13 +766,17 @@ export function PartsSheetImport({
             </button>
           </>
         ) : null}
-        {fileName ? (
-          <span className="text-xs text-[var(--muted)]">{fileName}</span>
-        ) : null}
-        {mocDetailEmbed && items !== null && items.length > 0 ? (
-          <span className="text-xs text-[var(--muted)]">
-            已载入 {items.length.toLocaleString("zh-CN")} 行（仅用于导出）；零件明细见下方列表。
+        {mocDetailEmbed ? (
+          <span className="max-w-full text-xs leading-relaxed text-[var(--muted)]">
+            完整表 {fullItems ? `${fullItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
+            {fullFileName ? `（${fullFileName}）` : ""}
+            {" · "}
+            缺件表 {shortageItems ? `${shortageItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
+            {shortageFileName ? `（${shortageFileName}）` : ""}
+            。导出请使用下方列表旁的按钮。
           </span>
+        ) : fileName ? (
+          <span className="text-xs text-[var(--muted)]">{fileName}</span>
         ) : null}
       </div>
 
