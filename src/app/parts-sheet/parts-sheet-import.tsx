@@ -4,6 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { parseMocIdFromFilename } from "@/lib/parts-sheet-moc-id";
+
+import {
+  type InitialMocSheetFromServer,
+  loadMocPartsSheetFromDb,
+  saveMocPartsSheetToDb,
+} from "./actions";
 import {
   PARTS_SHEET_TAG_LABELS,
   PARTS_SHEET_TAG_ORDER,
@@ -118,7 +125,18 @@ function isValidColorPayload(data: unknown): data is { colors: ColorOption[] } {
   );
 }
 
-export function PartsSheetImport() {
+type PartsSheetImportProps = {
+  /** 地址栏 `?loadMoc=` 的 ID（由服务端读库后配合下面两项初始化） */
+  requestedLoadMocId?: string;
+  initialMocSheet?: InitialMocSheetFromServer | null;
+  initialMocLoadError?: string | null;
+};
+
+export function PartsSheetImport({
+  requestedLoadMocId,
+  initialMocSheet,
+  initialMocLoadError,
+}: PartsSheetImportProps) {
   const clearedByEditRef = useRef(false);
   const [items, setItems] = useState<ShortageRow[] | null>(null);
   const [skippedHeader, setSkippedHeader] = useState(false);
@@ -135,6 +153,10 @@ export function PartsSheetImport() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [exportBusy, setExportBusy] = useState(false);
+  const [mocId, setMocId] = useState("");
+  const [mocLocalMessage, setMocLocalMessage] = useState<string | null>(null);
+  const [mocActionBusy, setMocActionBusy] = useState(false);
+  const mocFeedbackAnchorRef = useRef<HTMLDivElement>(null);
   const [exportProgress, setExportProgress] = useState<{
     jobId: string;
     total: number;
@@ -241,6 +263,8 @@ export function PartsSheetImport() {
 
     setLoading(true);
     setFileName(file.name);
+    const fromName = parseMocIdFromFilename(file.name);
+    if (fromName) setMocId(fromName);
     try {
       const csv = await file.text();
       const result = await postResolve(csv);
@@ -315,6 +339,127 @@ export function PartsSheetImport() {
     () => (fileName?.replace(/\.csv$/i, "") ?? "parts-sheet") + "-edited",
     [fileName]
   );
+
+  /** MOC 区在长列表上方，保存/载入后滚入视口以免「点了没反应」 */
+  const scrollMocFeedbackIntoView = useCallback(() => {
+    setTimeout(() => {
+      mocFeedbackAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }, []);
+
+  useEffect(() => {
+    const qid = requestedLoadMocId?.trim();
+    if (!qid) return;
+
+    setMocId(qid);
+    setLineNumber(null);
+    setMocLocalMessage(null);
+
+    if (initialMocLoadError) {
+      setError(initialMocLoadError);
+      setItems(null);
+      scrollMocFeedbackIntoView();
+      return;
+    }
+
+    if (initialMocSheet && initialMocSheet.mocId === qid) {
+      clearedByEditRef.current = false;
+      setError(null);
+      setSkippedHeader(initialMocSheet.skippedHeader);
+      setSheetListFilter("all");
+      setItems(withRowIds(initialMocSheet.items));
+      setFileName(`moc-${qid}.csv`);
+      const savedAtStr = initialMocSheet.savedAt.slice(0, 19).replace("T", " ");
+      setMocLocalMessage(`已从数据库载入 MOC ${qid}（保存于 ${savedAtStr}）。`);
+      scrollMocFeedbackIntoView();
+    }
+  }, [
+    requestedLoadMocId,
+    initialMocSheet,
+    initialMocLoadError,
+    scrollMocFeedbackIntoView,
+  ]);
+
+  const savePartsSheetToMocDb = useCallback(async () => {
+    setMocLocalMessage(null);
+    const id = mocId.trim();
+    if (!id) {
+      setError("请填写或从文件名识别 MOC ID 后再保存。");
+      setLineNumber(null);
+      scrollMocFeedbackIntoView();
+      return;
+    }
+    if (!items || items.length === 0) {
+      setError("当前没有可保存的零件行。请先导入 CSV 或从数据库载入。");
+      setLineNumber(null);
+      scrollMocFeedbackIntoView();
+      return;
+    }
+    setMocActionBusy(true);
+    try {
+      const result = await saveMocPartsSheetToDb({
+        mocId: id,
+        skippedHeader,
+        items: items.map(({ rowId, ...rest }) => {
+          void rowId;
+          return rest;
+        }),
+      });
+      if (!result.ok) {
+        setError(result.error);
+        setLineNumber(null);
+        scrollMocFeedbackIntoView();
+        return;
+      }
+      setError(null);
+      setLineNumber(null);
+      setMocLocalMessage(`已写入数据库（MOC ${id}，同一 ID 再次保存会覆盖）。`);
+      scrollMocFeedbackIntoView();
+    } catch {
+      setError("保存失败，请重试。");
+      setLineNumber(null);
+      scrollMocFeedbackIntoView();
+    } finally {
+      setMocActionBusy(false);
+    }
+  }, [items, mocId, skippedHeader, scrollMocFeedbackIntoView]);
+
+  const loadPartsSheetFromMocDb = useCallback(async () => {
+    setMocLocalMessage(null);
+    const id = mocId.trim();
+    if (!id) {
+      setError("请填写 MOC ID 后再载入。");
+      setLineNumber(null);
+      scrollMocFeedbackIntoView();
+      return;
+    }
+    setMocActionBusy(true);
+    try {
+      const result = await loadMocPartsSheetFromDb(id);
+      if (!result.ok) {
+        setError(result.error);
+        setLineNumber(null);
+        scrollMocFeedbackIntoView();
+        return;
+      }
+      clearedByEditRef.current = false;
+      setError(null);
+      setLineNumber(null);
+      setSkippedHeader(result.skippedHeader);
+      setSheetListFilter("all");
+      setItems(withRowIds(result.items));
+      setFileName(`moc-${id}.csv`);
+      const savedAtStr = result.savedAt.slice(0, 19).replace("T", " ");
+      setMocLocalMessage(`已从数据库载入 MOC ${id}（保存于 ${savedAtStr}）。`);
+      scrollMocFeedbackIntoView();
+    } catch {
+      setError("载入失败，请重试。");
+      setLineNumber(null);
+      scrollMocFeedbackIntoView();
+    } finally {
+      setMocActionBusy(false);
+    }
+  }, [mocId, scrollMocFeedbackIntoView]);
 
   const onExportCsv = useCallback(() => {
     if (!items || items.length === 0) return;
@@ -799,19 +944,62 @@ export function PartsSheetImport() {
         ) : null}
       </div>
 
-      {error ? (
-        <div
-          className="rounded-[var(--radius-md)] border border-red-400/30 bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--text)]"
-          role="alert"
-        >
-          <p className="font-medium text-red-200/95">{error}</p>
-          {lineNumber !== null ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              出错行号：{lineNumber}
-            </p>
-          ) : null}
+      <div ref={mocFeedbackAnchorRef} className="space-y-2 scroll-mt-24">
+        <div className="flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-2)] px-3 py-3">
+          <label className="min-w-[8rem] flex-1 text-xs text-[var(--muted)]">
+            MOC ID
+            <input
+              type="text"
+              inputMode="numeric"
+              value={mocId}
+              onChange={(e) => {
+                setMocId(e.target.value);
+                setMocLocalMessage(null);
+              }}
+              placeholder="如 12345；上传 rebrickable_parts_12345_… 时会自动填入"
+              className="field mt-1 w-full max-w-xs font-mono text-sm text-[var(--text)]"
+            />
+          </label>
+          <button
+            type="button"
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+            disabled={loading || exportBusy || mocActionBusy}
+            onClick={() => void loadPartsSheetFromMocDb()}
+          >
+            从数据库载入
+          </button>
+          <button
+            type="button"
+            className="button-primary text-sm"
+            disabled={loading || exportBusy || mocActionBusy}
+            onClick={() => void savePartsSheetToMocDb()}
+          >
+            保存到数据库（按 MOC）
+          </button>
         </div>
-      ) : null}
+        {mocLocalMessage ? (
+          <div
+            className="rounded-[var(--radius-md)] border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm text-[var(--text)]"
+            role="status"
+          >
+            <p className="font-medium text-emerald-100/95">{mocLocalMessage}</p>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div
+            className="rounded-[var(--radius-md)] border border-red-400/30 bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--text)]"
+            role="alert"
+          >
+            <p className="font-medium text-red-200/95">{error}</p>
+            {lineNumber !== null ? (
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                出错行号：{lineNumber}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {items !== null && items.length === 0 && !error ? (
         <p className="text-sm text-[var(--muted)]">

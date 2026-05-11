@@ -114,3 +114,16 @@ export const partRelationships = sqliteTable(
     index("pr_child_idx").on(t.childPartNum),
   ]
 );
+
+/** 零件表页按 MOC ID 保存的解析结果（JSON），同一 ID 再次保存即覆盖 */
+export const mocSavedPartsSheets = sqliteTable(
+  "moc_saved_parts_sheets",
+  {
+    mocId: text("moc_id").primaryKey(),
+    skippedHeader: integer("skipped_header", { mode: "boolean" }).notNull(),
+    payloadJson: text("payload_json").notNull(),
+    lineCount: integer("line_count").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("moc_saved_parts_updated_idx").on(t.updatedAt)]
+);

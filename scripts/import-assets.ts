@@ -9,6 +9,8 @@ import { createGunzip } from "zlib";
 import { parse } from "csv-parse";
 import Database from "better-sqlite3";
 
+import { ensureMocSavedPartsSheetTable } from "../src/db/ensure-moc-saved-parts-sheet-table";
+
 const ROOT = path.join(__dirname, "..");
 const ASSETS = path.join(ROOT, "assets");
 const DB_PATH = path.join(ROOT, "data", "rebrickable.db");
@@ -140,6 +142,7 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX pr_parent_idx ON part_relationships(parent_part_num);
     CREATE INDEX pr_child_idx ON part_relationships(child_part_num);
   `);
+  ensureMocSavedPartsSheetTable(db);
 }
 
 async function loadPartCategories(db: Database.Database) {

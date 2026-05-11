@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import fs from "fs";
 import path from "path";
 
+import { ensureMocSavedPartsSheetTable } from "./ensure-moc-saved-parts-sheet-table";
 import * as schema from "./schema";
 
 const dbPath = path.join(process.cwd(), "data", "rebrickable.db");
@@ -17,6 +18,7 @@ function openDb() {
   }
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
+  ensureMocSavedPartsSheetTable(sqlite);
   return drizzle(sqlite, { schema });
 }
 

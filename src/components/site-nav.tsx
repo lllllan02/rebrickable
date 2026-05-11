@@ -8,6 +8,7 @@ const links = [
   { href: "/sets", label: "套装" },
   { href: "/colors", label: "颜色" },
   { href: "/parts-sheet", label: "零件表" },
+  { href: "/mocs", label: "MOC 列表" },
 ] as const;
 
 export function SiteNav() {
