@@ -14,6 +14,8 @@ import { ensureBuildTables } from "../src/db/ensure-build-tables";
 const ROOT = path.join(__dirname, "..");
 const ASSETS = path.join(ROOT, "assets");
 const DB_PATH = path.join(ROOT, "data", "rebrickable.db");
+const GZ_REF_PATH = path.join(ROOT, "data", ".rebrickable-db-from-gz.json");
+const IMPORT_MARK_PATH = path.join(ROOT, "data", ".rebrickable-db-from-import");
 
 const BATCH = 8000;
 
@@ -416,6 +418,12 @@ async function main() {
   db.pragma("foreign_keys = ON");
   db.exec("ANALYZE");
   db.close();
+  try {
+    await fs.promises.unlink(GZ_REF_PATH);
+  } catch {
+    /* 无则忽略 */
+  }
+  await fs.promises.writeFile(IMPORT_MARK_PATH, "1\n", "utf8");
   console.log(`完成：${DB_PATH}`);
 }
 
