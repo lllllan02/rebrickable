@@ -4,11 +4,13 @@ import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actio
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { PartsSheetImport } from "@/app/mocs/moc-parts-sheet-import";
 import { getDb } from "@/db/client";
-import { mocImages, mocProfiles } from "@/db/schema";
+import { mocAttachments, mocImages, mocProfiles } from "@/db/schema";
+import { mocAttachmentPublicPath } from "@/lib/moc-attachment-public-path";
 import { mocImagePublicPath } from "@/lib/moc-image-public-path";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
 import { MocDetailEditorial } from "../moc-detail-editorial";
+import type { MocAttachmentRow } from "../moc-attachments-panel";
 import type { MocGalleryImage } from "../moc-image-carousel";
 import { MocPartsList } from "../moc-parts-list";
 
@@ -21,7 +23,7 @@ export default async function MocDetailPage({ params }: Props) {
   const mocId = decodeURIComponent(raw);
 
   const db = getDb();
-  const [imgRows, sheet, profileRow] = await Promise.all([
+  const [imgRows, attRows, sheet, profileRow] = await Promise.all([
     db
       .select({
         id: mocImages.id,
@@ -32,6 +34,17 @@ export default async function MocDetailPage({ params }: Props) {
       .from(mocImages)
       .where(eq(mocImages.mocId, mocId))
       .orderBy(asc(mocImages.createdAt), asc(mocImages.id)),
+    db
+      .select({
+        id: mocAttachments.id,
+        storedFile: mocAttachments.storedFile,
+        originalName: mocAttachments.originalName,
+        byteSize: mocAttachments.byteSize,
+        createdAt: mocAttachments.createdAt,
+      })
+      .from(mocAttachments)
+      .where(eq(mocAttachments.mocId, mocId))
+      .orderBy(asc(mocAttachments.createdAt), asc(mocAttachments.id)),
     loadMocPartsSheetFromDb(mocId),
     db.select().from(mocProfiles).where(eq(mocProfiles.mocId, mocId)).limit(1),
   ]);
@@ -44,6 +57,14 @@ export default async function MocDetailPage({ params }: Props) {
     id: r.id,
     url: mocImagePublicPath(mocId, r.storedFile),
     originalName: r.originalName,
+    createdAt: r.createdAt,
+  }));
+
+  const attachmentRows: MocAttachmentRow[] = attRows.map((r) => ({
+    id: r.id,
+    url: mocAttachmentPublicPath(mocId, r.storedFile),
+    originalName: r.originalName,
+    byteSize: r.byteSize,
     createdAt: r.createdAt,
   }));
 
@@ -69,6 +90,7 @@ export default async function MocDetailPage({ params }: Props) {
         mocId={mocId}
         rbHref={rbHref}
         images={galleryImages}
+        attachments={attachmentRows}
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}

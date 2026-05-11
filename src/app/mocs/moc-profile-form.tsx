@@ -16,6 +16,8 @@ type Props = {
   initialTags: string[];
   /** `sidebar`：与轮播并排时的紧凑形态（无外层大卡片） */
   variant?: "default" | "sidebar";
+  /** 侧边栏：显示在标题与 MOC ID 之下、标签之上（无已存零件表时为 null 则不显示） */
+  partTotalQty?: number | null;
 };
 
 type OptimisticProfile = { displayName: string; tags: string[] };
@@ -25,6 +27,7 @@ export function MocProfileForm({
   initialDisplayName,
   initialTags,
   variant = "default",
+  partTotalQty = null,
 }: Props) {
   const router = useRouter();
   const formTitleId = useId();
@@ -127,7 +130,19 @@ export function MocProfileForm({
         >
           {viewTitle}
         </p>
-        <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">MOC ID · {mocId}</p>
+        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
+          <span>MOC ID · {mocId}</span>
+          {isSidebar && partTotalQty !== null ? (
+            <>
+              <span className="select-none text-[var(--muted-2)]" aria-hidden>
+                ·
+              </span>
+              <span>
+                零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
+              </span>
+            </>
+          ) : null}
+        </p>
         {!isSidebar ? (
           <p className="mt-1 text-xs text-[var(--muted)]">
             显示名称仅用于本应用列表与标题；MOC ID（<span className="font-mono">{mocId}</span>）不变。
@@ -195,7 +210,19 @@ export function MocProfileForm({
             }
           />
         </label>
-        <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">MOC ID · {mocId}</p>
+        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
+          <span>MOC ID · {mocId}</span>
+          {isSidebar && partTotalQty !== null ? (
+            <>
+              <span className="select-none text-[var(--muted-2)]" aria-hidden>
+                ·
+              </span>
+              <span>
+                零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
+              </span>
+            </>
+          ) : null}
+        </p>
         {!isSidebar ? (
           <p className="mt-1 text-xs text-[var(--muted)]">
             显示名称仅用于本应用列表与标题；MOC ID（<span className="font-mono">{mocId}</span>）不变。

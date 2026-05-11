@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { MocAttachmentsPanel, type MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import { MocImageCarousel, type MocGalleryImage } from "@/app/mocs/moc-image-carousel";
 import { MocProfileForm } from "@/app/mocs/moc-profile-form";
 
@@ -9,6 +10,7 @@ type Props = {
   mocId: string;
   rbHref: string;
   images: MocGalleryImage[];
+  attachments: MocAttachmentRow[];
   initialDisplayName: string;
   initialTags: string[];
   /** 已存零件表各行列 quantity 之和；无表时为 null */
@@ -19,6 +21,7 @@ export function MocDetailEditorial({
   mocId,
   rbHref,
   images,
+  attachments,
   initialDisplayName,
   initialTags,
   partTotalQty,
@@ -37,14 +40,10 @@ export function MocDetailEditorial({
             mocId={mocId}
             initialDisplayName={initialDisplayName}
             initialTags={initialTags}
+            partTotalQty={partTotalQty}
           />
 
-          {partTotalQty !== null ? (
-            <p className="text-sm tabular-nums text-[var(--text)]">
-              <span className="text-[var(--muted)]">零件总数 </span>
-              {partTotalQty.toLocaleString("zh-CN")}
-            </p>
-          ) : null}
+          <MocAttachmentsPanel mocId={mocId} attachments={attachments} />
 
           <nav className="flex flex-col gap-2 border-t border-[var(--border-soft)] pt-4 text-sm">
             <a href={rbHref} className="text-[var(--accent)] underline underline-offset-2" target="_blank" rel="noreferrer">
@@ -54,10 +53,6 @@ export function MocDetailEditorial({
               返回 MOC 列表
             </Link>
           </nav>
-
-          <p className="text-[11px] leading-relaxed text-[var(--muted)]">
-            零件表 CSV 导入与导出在本页「零件表」区域；有已存数据时，其下方为带缩略图的浏览列表。参考图仅存本机；在输入框外可用 ⌘V / Ctrl+V 粘贴图片。列表封面取上传时间最早的一张。
-          </p>
         </aside>
       </div>
     </section>

@@ -156,3 +156,18 @@ export const mocImages = sqliteTable(
   },
   (t) => [index("moc_images_moc_idx").on(t.mocId)]
 );
+
+/** MOC 说明书 PDF、Studio 源文件等（与参考图同目录 data/moc-uploads/<moc_id>/） */
+export const mocAttachments = sqliteTable(
+  "moc_attachments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    mocId: text("moc_id").notNull(),
+    storedFile: text("stored_file").notNull().unique(),
+    originalName: text("original_name"),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("moc_attachments_moc_idx").on(t.mocId)]
+);
