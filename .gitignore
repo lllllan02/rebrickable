@@ -42,5 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local SQLite（体积大，由导入脚本生成，勿提交）
+# 本地 SQLite 主文件（由 postinstall 从 rebrickable.db.gz 解压，或由 db:import 生成）
 /data/rebrickable.db
+/data/rebrickable.db-shm
+/data/rebrickable.db-wal

@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "tsx scripts/ensure-local-db.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "db:import": "tsx scripts/import-assets.ts",
+    "db:pack": "tsx scripts/pack-local-db.ts",
     "db:migrate-moc-uploads": "tsx scripts/migrate-moc-upload-dirs.ts",
     "db:studio": "drizzle-kit studio"
   },
