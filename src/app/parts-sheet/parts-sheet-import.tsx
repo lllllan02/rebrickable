@@ -1,0 +1,610 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+
+import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
+import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
+
+type ResolveResponse = {
+  skippedHeader: boolean;
+  items: ShortageResolveItem[];
+};
+
+type ShortageRow = ShortageResolveItem & { rowId: string };
+
+type ColorOption = {
+  id: number;
+  name: string;
+  rgb: string;
+  isTrans: boolean;
+};
+
+function withRowIds(items: ShortageResolveItem[]): ShortageRow[] {
+  return items.map((r) => ({ ...r, rowId: crypto.randomUUID() }));
+}
+
+function rowsToCsv(rows: ShortageRow[], includeHeader: boolean): string {
+  return serializeShortageCsv(
+    rows.map((r) => ({
+      partNum: r.partNum,
+      colorId: r.colorId,
+      quantity: r.quantity,
+      rest: r.rest,
+    })),
+    { includeHeader }
+  );
+}
+
+async function postResolve(csv: string): Promise<ResolveResponse & { error?: string; lineNumber?: number | null }> {
+  const res = await fetch("/api/parts-sheet/resolve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ csv }),
+  });
+  const data: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err =
+      typeof data === "object" &&
+      data !== null &&
+      "error" in data &&
+      typeof (data as { error: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : `请求失败（${res.status}）`;
+    const ln =
+      typeof data === "object" &&
+      data !== null &&
+      "lineNumber" in data &&
+      typeof (data as { lineNumber: unknown }).lineNumber === "number"
+        ? (data as { lineNumber: number }).lineNumber
+        : null;
+    return { skippedHeader: false, items: [], error: err, lineNumber: ln };
+  }
+  const ok = data as ResolveResponse;
+  return {
+    skippedHeader: Boolean(ok.skippedHeader),
+    items: Array.isArray(ok.items) ? ok.items : [],
+  };
+}
+
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function isValidColorPayload(data: unknown): data is { colors: ColorOption[] } {
+  if (typeof data !== "object" || data === null || !("colors" in data)) return false;
+  const { colors: c } = data as { colors: unknown };
+  if (!Array.isArray(c)) return false;
+  return c.every(
+    (row) =>
+      typeof row === "object" &&
+      row !== null &&
+      "id" in row &&
+      typeof (row as { id: unknown }).id === "number" &&
+      "name" in row &&
+      typeof (row as { name: unknown }).name === "string" &&
+      "rgb" in row &&
+      typeof (row as { rgb: unknown }).rgb === "string" &&
+      "isTrans" in row &&
+      typeof (row as { isTrans: unknown }).isTrans === "boolean"
+  );
+}
+
+export function PartsSheetImport() {
+  const clearedByEditRef = useRef(false);
+  const [items, setItems] = useState<ShortageRow[] | null>(null);
+  const [skippedHeader, setSkippedHeader] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lineNumber, setLineNumber] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [colorEditRow, setColorEditRow] = useState<ShortageRow | null>(null);
+  const [selectedColorId, setSelectedColorId] = useState<number>(0);
+  const [colorFilter, setColorFilter] = useState("");
+  const [colorsOptions, setColorsOptions] = useState<ColorOption[] | null>(null);
+  const [colorsLoading, setColorsLoading] = useState(false);
+  const [colorsLoadError, setColorsLoadError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const colorDialogRef = useRef<HTMLDialogElement>(null);
+  const imageDialogRef = useRef<HTMLDialogElement>(null);
+  const colorLabelId = useId();
+  const imageTitleId = useId();
+
+  const loadColors = useCallback(async () => {
+    setColorsLoading(true);
+    setColorsLoadError(null);
+    try {
+      const res = await fetch("/api/colors");
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok || !isValidColorPayload(data)) {
+        setColorsLoadError("颜色列表加载失败。");
+        return;
+      }
+      setColorsOptions(data.colors);
+    } catch {
+      setColorsLoadError("颜色列表加载失败。");
+    } finally {
+      setColorsLoading(false);
+    }
+  }, []);
+
+  const handleDialogClose = useCallback(() => {
+    setColorEditRow(null);
+    setSelectedColorId(0);
+    setColorFilter("");
+  }, []);
+
+  const handleImageDialogClose = useCallback(() => {
+    setPreviewUrl(null);
+  }, []);
+
+  useEffect(() => {
+    if (!colorEditRow) return;
+    const d = colorDialogRef.current;
+    if (d && !d.open) d.showModal();
+  }, [colorEditRow]);
+
+  useEffect(() => {
+    if (!colorEditRow) return;
+    if (colorsOptions !== null) return;
+    void loadColors();
+  }, [colorEditRow, colorsOptions, loadColors]);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    const d = imageDialogRef.current;
+    if (d && !d.open) d.showModal();
+  }, [previewUrl]);
+
+  const openColorDialog = useCallback((row: ShortageRow) => {
+    setColorFilter("");
+    setSelectedColorId(row.colorId);
+    setColorEditRow(row);
+  }, []);
+
+  const filteredColors = useMemo(() => {
+    if (!colorsOptions) return [];
+    const raw = colorFilter.trim().toLowerCase();
+    if (!raw) return colorsOptions;
+    const forRgb = raw.replace(/^#/, "");
+    return colorsOptions.filter(
+      (c) =>
+        String(c.id).includes(forRgb) ||
+        c.name.toLowerCase().includes(raw) ||
+        c.rgb.toLowerCase().includes(forRgb)
+    );
+  }, [colorFilter, colorsOptions]);
+
+  const onFile = useCallback(async (file: File | null) => {
+    setError(null);
+    setLineNumber(null);
+    setItems(null);
+    setFileName(null);
+    clearedByEditRef.current = false;
+    if (!file) return;
+
+    setLoading(true);
+    setFileName(file.name);
+    try {
+      const csv = await file.text();
+      const result = await postResolve(csv);
+      if ("error" in result && result.error) {
+        setError(result.error);
+        setLineNumber(result.lineNumber ?? null);
+        return;
+      }
+      setSkippedHeader(result.skippedHeader);
+      setItems(withRowIds(result.items));
+    } catch {
+      setError("读取或上传失败，请重试。");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const removeRow = useCallback((rowId: string) => {
+    setItems((prev) => {
+      if (!prev) return prev;
+      const next = prev.filter((r) => r.rowId !== rowId);
+      if (next.length === 0) clearedByEditRef.current = true;
+      return next;
+    });
+  }, []);
+
+  const applyColorChange = useCallback(async () => {
+    const editing = colorEditRow;
+    if (!editing || !items) return;
+    if (!Number.isFinite(selectedColorId) || selectedColorId < 0) {
+      setError("请从列表中选择颜色。");
+      setLineNumber(null);
+      return;
+    }
+    if (selectedColorId === editing.colorId) {
+      colorDialogRef.current?.close();
+      return;
+    }
+
+    const nextRows: ShortageRow[] = items.map((r) =>
+      r.rowId === editing.rowId ? { ...r, colorId: selectedColorId } : r
+    );
+    const csv = rowsToCsv(nextRows, skippedHeader);
+    setLoading(true);
+    setError(null);
+    setLineNumber(null);
+    colorDialogRef.current?.close();
+    try {
+      const result = await postResolve(csv);
+      if ("error" in result && result.error) {
+        setError(result.error);
+        setLineNumber(result.lineNumber ?? null);
+        return;
+      }
+      const prevIds = nextRows.map((r) => r.rowId);
+      setSkippedHeader(result.skippedHeader);
+      setItems(
+        result.items.map((r, i) => ({
+          ...r,
+          rowId: prevIds[i] ?? crypto.randomUUID(),
+        }))
+      );
+    } catch {
+      setError("更新颜色后重新解析失败，请重试。");
+    } finally {
+      setLoading(false);
+    }
+  }, [colorEditRow, items, selectedColorId, skippedHeader]);
+
+  const onExport = useCallback(() => {
+    if (!items || items.length === 0) return;
+    const base =
+      (fileName?.replace(/\.csv$/i, "") ?? "parts-sheet") + "-edited.csv";
+    const text = rowsToCsv(items, skippedHeader);
+    downloadText(base, text);
+  }, [fileName, items, skippedHeader]);
+
+  const missingParts = items?.filter((i) => !i.partFound).length ?? 0;
+  const noImage = items?.filter((i) => i.partFound && !i.imgUrl).length ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <dialog
+        ref={imageDialogRef}
+        className="fixed left-1/2 top-1/2 z-[200] m-0 max-h-[min(92vh,56rem)] max-w-[min(96vw,56rem)] w-[min(96vw,56rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/70"
+        aria-labelledby={imageTitleId}
+        onClose={handleImageDialogClose}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) imageDialogRef.current?.close();
+        }}
+      >
+        {previewUrl ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <p id={imageTitleId} className="text-sm font-medium">
+                图片预览
+              </p>
+              <button
+                type="button"
+                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]"
+                onClick={() => imageDialogRef.current?.close()}
+              >
+                关闭
+              </button>
+            </div>
+            <Image
+              src={previewUrl}
+              alt=""
+              width={960}
+              height={960}
+              unoptimized
+              className="mx-auto max-h-[min(85vh,900px)] w-auto max-w-full object-contain"
+            />
+          </div>
+        ) : null}
+      </dialog>
+
+      <dialog
+        ref={colorDialogRef}
+        className="fixed left-1/2 top-1/2 z-[200] m-0 max-h-[min(92vh,40rem)] w-[min(100vw-1.5rem,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/55"
+        aria-labelledby={colorLabelId}
+        onClose={handleDialogClose}
+      >
+        {colorEditRow ? (
+          <form
+            className="flex max-h-[min(88vh,38rem)] flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void applyColorChange();
+            }}
+          >
+            <h2 id={colorLabelId} className="text-sm font-semibold">
+              更换颜色
+            </h2>
+            <p className="text-xs text-[var(--muted)]">
+              零件{" "}
+              <span className="font-mono text-[var(--text)]">{colorEditRow.partNum}</span>
+              ，请从库中选择颜色；也可打开{" "}
+              <Link href="/colors" className="underline">
+                颜色表
+              </Link>{" "}
+              对照色块。
+            </p>
+            {colorsLoadError ? (
+              <div className="rounded-md border border-red-400/25 bg-[var(--danger-soft)] px-3 py-2 text-xs text-red-200/95">
+                <p>{colorsLoadError}</p>
+                <button
+                  type="button"
+                  className="mt-2 text-[var(--accent)] underline"
+                  onClick={() => void loadColors()}
+                >
+                  重试
+                </button>
+              </div>
+            ) : null}
+            <label className="block shrink-0 text-xs text-[var(--muted)]">
+              筛选
+              <input
+                type="search"
+                value={colorFilter}
+                onChange={(e) => setColorFilter(e.target.value)}
+                placeholder="名称、ID 或 RGB…"
+                className="field mt-1 w-full text-sm"
+                disabled={colorsLoading || !colorsOptions}
+              />
+            </label>
+            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]">
+              {colorsLoading && !colorsOptions ? (
+                <p className="p-4 text-center text-sm text-[var(--muted)]">加载颜色中…</p>
+              ) : colorsOptions ? (
+                <ul
+                  className="max-h-[min(52vh,22rem)] overflow-y-auto overscroll-contain p-1.5"
+                  role="listbox"
+                  aria-label="颜色列表"
+                >
+                  {filteredColors.length === 0 ? (
+                    <li className="px-2 py-4 text-center text-sm text-[var(--muted)]">无匹配项</li>
+                  ) : (
+                    filteredColors.map((c) => {
+                      const active = c.id === selectedColorId;
+                      return (
+                        <li key={c.id} className="py-0.5">
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            className={`flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left text-sm transition-colors ${
+                              active
+                                ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                                : "border-transparent text-[var(--text)] hover:bg-[var(--surface-3)]"
+                            }`}
+                            onClick={() => setSelectedColorId(c.id)}
+                          >
+                            <span
+                              className="color-swatch h-6 w-9 shrink-0 rounded-sm border border-[var(--border)]"
+                              style={{ background: `#${c.rgb}` }}
+                            />
+                            <span className="shrink-0 font-mono text-xs text-[var(--muted)]">{c.id}</span>
+                            <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                            {c.isTrans ? (
+                              <span className="shrink-0 text-[10px] text-[var(--muted)]">透明</span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border-soft)] pt-3">
+              <button
+                type="button"
+                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
+                onClick={() => colorDialogRef.current?.close()}
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="button-primary text-sm"
+                disabled={
+                  loading ||
+                  colorsLoading ||
+                  !colorsOptions ||
+                  Boolean(colorsLoadError) ||
+                  selectedColorId === colorEditRow.colorId
+                }
+              >
+                应用并刷新
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </dialog>
+
+      <div className="filter-bar flex-wrap items-center gap-3">
+        <label className="button-primary cursor-pointer text-sm">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="sr-only"
+            disabled={loading}
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              void onFile(f);
+              e.target.value = "";
+            }}
+          />
+          {loading ? "解析中…" : "选择零件表 CSV"}
+        </label>
+        {items !== null && items.length > 0 ? (
+          <button
+            type="button"
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
+            disabled={loading}
+            onClick={onExport}
+          >
+            导出当前 CSV
+          </button>
+        ) : null}
+        {fileName ? (
+          <span className="text-xs text-[var(--muted)]">{fileName}</span>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div
+          className="rounded-[var(--radius-md)] border border-red-400/30 bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--text)]"
+          role="alert"
+        >
+          <p className="font-medium text-red-200/95">{error}</p>
+          {lineNumber !== null ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              出错行号：{lineNumber}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {items !== null && items.length === 0 && !error ? (
+        <p className="text-sm text-[var(--muted)]">
+          {clearedByEditRef.current ? (
+            <>已将列表清空。可重新选择 CSV 导入，或关闭本页。</>
+          ) : (
+            <>
+              文件中没有数据行（仅表头或空文件）。
+              {skippedHeader ? " 已跳过表头。" : ""}
+            </>
+          )}
+        </p>
+      ) : null}
+
+      {items !== null && items.length > 0 ? (
+        <>
+          <div className="meta-row text-xs text-[var(--muted)]">
+            <span>共 {items.length} 条</span>
+            {skippedHeader ? <span>导出时将保留表头行</span> : null}
+            {missingParts > 0 ? (
+              <span className="text-amber-200/90">
+                本地库未收录：{missingParts} 条
+              </span>
+            ) : null}
+            {noImage > 0 ? (
+              <span>有收录但无库存图：{noImage} 条</span>
+            ) : null}
+          </div>
+          <ul className="content-grid">
+            {items.map((r) => (
+              <li key={r.rowId} className="result-card">
+                <div className="media-box media-box-sm">
+                  {r.imgUrl ? (
+                    <button
+                      type="button"
+                      className="flex h-full w-full cursor-zoom-in items-center justify-center border-0 bg-transparent p-0"
+                      title="点击放大预览"
+                      aria-label={`放大预览 ${r.partNum} 零件图`}
+                      onClick={() => setPreviewUrl(r.imgUrl!)}
+                    >
+                      <Image
+                        src={r.imgUrl}
+                        alt=""
+                        width={56}
+                        height={56}
+                        className="box-border h-full w-full object-contain p-0.5"
+                        sizes="56px"
+                      />
+                    </button>
+                  ) : (
+                    <div
+                      className="flex h-full w-full items-center justify-center text-[9px] leading-tight text-[var(--muted)]"
+                      title={r.partFound ? "库存中暂无图片" : "零件未收录"}
+                    >
+                      {r.partFound ? "无图" : "?"}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        {r.partFound ? (
+                          <Link
+                            href={`/parts/${encodeURIComponent(r.partNum)}`}
+                            className="font-mono text-xs font-semibold text-[var(--accent)] sm:text-[13px]"
+                          >
+                            {r.partNum}
+                          </Link>
+                        ) : (
+                          <span className="font-mono text-xs font-semibold text-amber-200/90 sm:text-[13px]">
+                            {r.partNum}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="badge cursor-pointer border-0 bg-[var(--surface-3)] text-left hover:ring-1 hover:ring-[var(--accent)]/40"
+                          title="点击更换颜色（将重新匹配缩略图与颜色名）"
+                          onClick={() => openColorDialog(r)}
+                        >
+                          色 {r.colorId}
+                          {r.colorName ? ` · ${r.colorName}` : ""}
+                        </button>
+                        <span className="badge badge-accent">×{r.quantity}</span>
+                        {r.imgSource === "part" ? (
+                          <span
+                            className="text-[10px] text-[var(--muted)]"
+                            title="当前颜色无库存图，已使用该零件其他颜色的图片"
+                          >
+                            图·异色
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text)]">
+                        {r.partFound && r.partName ? (
+                          r.partName
+                        ) : r.partFound ? (
+                          <span className="text-[var(--muted)]">（无名称）</span>
+                        ) : (
+                          <span className="text-amber-200/85">
+                            本地库中无此 part_num，请核对导出或导入数据。
+                          </span>
+                        )}
+                      </p>
+                      {r.rest ? (
+                        <p className="meta-row mt-1 text-[10px] leading-relaxed text-[var(--muted)]">
+                          {r.rest}
+                        </p>
+                      ) : null}
+                      {r.partFound && !r.elementKnown ? (
+                        <p className="mt-0.5 text-[10px] text-[var(--muted)]">
+                          提示：elements 表中无此零件+颜色组合（图片仍可能来自库存抽样）。
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 self-start rounded-md border border-[var(--border-soft)] px-2 py-1 text-[11px] text-[var(--muted)] hover:border-red-400/40 hover:bg-[var(--danger-soft)] hover:text-red-200/95"
+                      title="从列表中移除此行"
+                      aria-label={`删除 ${r.partNum}`}
+                      onClick={() => removeRow(r.rowId)}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
