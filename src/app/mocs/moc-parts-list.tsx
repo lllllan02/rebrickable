@@ -166,6 +166,8 @@ type Props = {
   items: ShortageResolveItem[];
   skippedHeader: boolean;
   savedAt: string;
+  /** 若提供，列表页脚时间处显示该文案，替代「保存于 … · 导入时含表头」 */
+  sourceMetaLine?: string | null;
   /** 各行列 quantity 之和；不传则由 items 现场累加 */
   totalPartQty?: number;
   /** 缺件表：允许删除行、换色并持久化 */
@@ -176,6 +178,7 @@ export function MocPartsList({
   items,
   skippedHeader,
   savedAt,
+  sourceMetaLine = null,
   totalPartQty: totalPartQtyProp,
   shortageEditable = null,
 }: Props) {
@@ -383,9 +386,18 @@ export function MocPartsList({
           {sheetListFilter !== "all" && listFiltered.length !== displayItems.length
             ? `，当前分类 ${listFiltered.length} 条`
             : ""}
-          {" · "}
-          保存于 {savedAt.slice(0, 19).replace("T", " ")}
-          {(shortageEditable ? draftSkippedHeader : skippedHeader) ? " · 导入时含表头" : ""}
+          {sourceMetaLine != null && sourceMetaLine !== "" ? (
+            <>
+              {" · "}
+              {sourceMetaLine}
+            </>
+          ) : (
+            <>
+              {" · "}
+              保存于 {savedAt.slice(0, 19).replace("T", " ")}
+              {(shortageEditable ? draftSkippedHeader : skippedHeader) ? " · 导入时含表头" : ""}
+            </>
+          )}
         </p>
       </div>
 

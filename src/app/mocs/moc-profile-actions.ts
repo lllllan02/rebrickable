@@ -1,10 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
 import { getDb } from "@/db/client";
 import { buildProfiles } from "@/db/schema";
-import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
+import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
+import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
 import {
   MOC_PROFILE_MAX_DISPLAY_NAME,
   normalizeMocTags,
@@ -12,16 +11,22 @@ import {
 } from "@/lib/moc-profile-parse";
 import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
 
-export type SaveMocProfileResult = { ok: true } | { ok: false; error: string };
+export type SaveBuildProfileResult = { ok: true } | { ok: false; error: string };
 
-export async function saveMocProfileAction(input: {
-  mocId: string;
+export type SaveMocProfileResult = SaveBuildProfileResult;
+
+export async function saveBuildProfileAction(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
   displayName: string;
   tags: unknown;
-}): Promise<SaveMocProfileResult> {
-  const mocId = input.mocId.trim();
-  if (!mocId || mocId.length > BUILD_UPLOAD_MAX_ID_LEN) {
-    return { ok: false, error: "MOC ID 无效。" };
+}): Promise<SaveBuildProfileResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > BUILD_UPLOAD_MAX_ID_LEN) {
+    return { ok: false, error: "主体 ID 无效。" };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: "主体 ID 含有非法字符。" };
   }
 
   const displayName = String(input.displayName ?? "")
@@ -40,8 +45,8 @@ export async function saveMocProfileAction(input: {
     await db
       .insert(buildProfiles)
       .values({
-        subjectKind: BUILD_SUBJECT_MOC,
-        subjectId: mocId,
+        subjectKind: input.subjectKind,
+        subjectId,
         displayName,
         tagsJson,
         profileUpdatedAt,
@@ -55,10 +60,22 @@ export async function saveMocProfileAction(input: {
         },
       });
 
-    revalidatePath("/mocs");
-    revalidatePath(`/mocs/${mocId}`);
+    revalidateBuildSubjectPaths(input.subjectKind, subjectId);
     return { ok: true };
   } catch {
     return { ok: false, error: "保存失败，请重试。" };
   }
+}
+
+export async function saveMocProfileAction(input: {
+  mocId: string;
+  displayName: string;
+  tags: unknown;
+}): Promise<SaveMocProfileResult> {
+  return saveBuildProfileAction({
+    subjectKind: BUILD_SUBJECT_MOC,
+    subjectId: input.mocId,
+    displayName: input.displayName,
+    tags: input.tags,
+  });
 }

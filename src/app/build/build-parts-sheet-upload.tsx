@@ -4,10 +4,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import {
-  mocHasSavedPartsSheet,
-  saveMocPartsSheetToDb,
+  buildHasSavedPartsSheet,
+  saveBuildPartsSheetToDb,
 } from "@/app/mocs/moc-parts-sheet-actions";
-import { parseMocIdFromFilename } from "@/lib/parts-sheet-moc-id";
+import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectUi } from "@/lib/build-ui";
+import { parseBuildSubjectIdFromFilename } from "@/lib/parts-sheet-moc-id";
 import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
@@ -17,7 +20,10 @@ type PendingPayload = {
   fileName: string;
 };
 
-export function MocsPartsSheetUpload() {
+type Props = { kind: BuildSubjectKind };
+
+export function BuildPartsSheetUpload({ kind }: Props) {
+  const ui = buildSubjectUi(kind);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -26,7 +32,7 @@ export function MocsPartsSheetUpload() {
   const [parseBusy, setParseBusy] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingPayload | null>(null);
-  const [mocIdInput, setMocIdInput] = useState("");
+  const [subjectIdInput, setSubjectIdInput] = useState("");
   const [step, setStep] = useState<"confirm" | "duplicate">("confirm");
   const [modalError, setModalError] = useState<string | null>(null);
   const [modalBusy, setModalBusy] = useState(false);
@@ -40,7 +46,7 @@ export function MocsPartsSheetUpload() {
   const closeDialog = useCallback(() => {
     dialogRef.current?.close();
     setPending(null);
-    setMocIdInput("");
+    setSubjectIdInput("");
     setStep("confirm");
     setModalError(null);
     setModalBusy(false);
@@ -48,15 +54,16 @@ export function MocsPartsSheetUpload() {
 
   const performImportSave = useCallback(async () => {
     if (!pending) return;
-    const mocId = mocIdInput.trim();
-    if (!mocId) {
-      setModalError("请填写 MOC ID。");
+    const subjectId = subjectIdInput.trim();
+    if (!subjectId) {
+      setModalError(`请填写 ${ui.subjectIdLabel}。`);
       return;
     }
     setModalError(null);
     try {
-      const result = await saveMocPartsSheetToDb({
-        mocId,
+      const result = await saveBuildPartsSheetToDb({
+        subjectKind: kind,
+        subjectId,
         kind: "full",
         skippedHeader: pending.skippedHeader,
         sourceFileName: pending.fileName,
@@ -67,22 +74,22 @@ export function MocsPartsSheetUpload() {
         return;
       }
       closeDialog();
-      router.push(`/mocs/${encodeURIComponent(mocId)}`);
+      router.push(buildSubjectDetailPath(kind, subjectId));
     } catch {
       setModalError("保存失败，请重试。");
     }
-  }, [closeDialog, mocIdInput, pending, router]);
+  }, [closeDialog, kind, pending, router, subjectIdInput, ui.subjectIdLabel]);
 
   const onConfirmImport = useCallback(async () => {
-    const mocId = mocIdInput.trim();
-    if (!mocId) {
-      setModalError("请填写 MOC ID。");
+    const subjectId = subjectIdInput.trim();
+    if (!subjectId) {
+      setModalError(`请填写 ${ui.subjectIdLabel}。`);
       return;
     }
     setModalError(null);
     setModalBusy(true);
     try {
-      const exists = await mocHasSavedPartsSheet(mocId);
+      const exists = await buildHasSavedPartsSheet(kind, subjectId);
       if (exists) {
         setStep("duplicate");
         return;
@@ -93,7 +100,7 @@ export function MocsPartsSheetUpload() {
     } finally {
       setModalBusy(false);
     }
-  }, [mocIdInput, performImportSave]);
+  }, [kind, performImportSave, subjectIdInput, ui.subjectIdLabel]);
 
   const onOverwriteSave = useCallback(async () => {
     setModalBusy(true);
@@ -122,7 +129,7 @@ export function MocsPartsSheetUpload() {
         }
         setStep("confirm");
         setModalError(null);
-        setMocIdInput(parseMocIdFromFilename(file.name) ?? "");
+        setSubjectIdInput(parseBuildSubjectIdFromFilename(kind, file.name) ?? "");
         setPending({
           skippedHeader: result.skippedHeader,
           items: result.items,
@@ -135,7 +142,7 @@ export function MocsPartsSheetUpload() {
         if (inputRef.current) inputRef.current.value = "";
       }
     },
-    []
+    [kind]
   );
 
   return (
@@ -157,7 +164,7 @@ export function MocsPartsSheetUpload() {
           <code className="rounded bg-[var(--surface-3)] px-1 py-px font-mono text-[11px]">
             rebrickable_parts_*_缺货表.csv
           </code>{" "}
-          结构一致；解析成功后在本页确认 MOC ID 并写入数据库。若该 ID 已有零件表，将询问是否覆盖。
+          结构一致；解析成功后在本页确认 {ui.subjectIdLabel} 并写入数据库。若该 ID 已有零件表，将询问是否覆盖。
         </p>
       </div>
       {parseError ? <p className="mt-2 text-xs text-red-200/90">{parseError}</p> : null}
@@ -171,26 +178,25 @@ export function MocsPartsSheetUpload() {
         {pending ? (
           <div className="flex flex-col gap-3">
             <h2 id={titleId} className="text-sm font-semibold">
-              {step === "confirm" ? "确认导入" : "MOC ID 已存在"}
+              {step === "confirm" ? "确认导入" : `${ui.noun} 已存在`}
             </h2>
             {step === "confirm" ? (
               <>
                 <p className="text-xs leading-relaxed text-[var(--muted)]">
                   文件 <span className="font-mono text-[var(--text)]">{pending.fileName}</span>，共{" "}
                   <span className="tabular-nums text-[var(--text)]">{pending.items.length}</span>{" "}
-                  行。请填写或核对 Rebrickable 数字 MOC ID 后导入。
+                  行。请填写或核对 {ui.subjectIdLabel} 后导入。
                 </p>
                 <label className="text-xs text-[var(--muted)]">
-                  MOC ID
+                  {ui.subjectIdLabel}
                   <input
                     type="text"
-                    inputMode="numeric"
-                    value={mocIdInput}
+                    value={subjectIdInput}
                     onChange={(e) => {
-                      setMocIdInput(e.target.value);
+                      setSubjectIdInput(e.target.value);
                       setModalError(null);
                     }}
-                    placeholder="如 12345"
+                    placeholder={ui.kind === BUILD_SUBJECT_MOC ? "如 12345" : "如 42143-1"}
                     className="field mt-1 w-full font-mono text-sm text-[var(--text)]"
                     autoComplete="off"
                   />
@@ -198,8 +204,8 @@ export function MocsPartsSheetUpload() {
               </>
             ) : (
               <p className="text-xs leading-relaxed text-[var(--muted)]">
-                本地库中已有 MOC{" "}
-                <span className="font-mono text-[var(--text)]">{mocIdInput.trim()}</span>{" "}
+                本地库中已有 {ui.noun}{" "}
+                <span className="font-mono text-[var(--text)]">{subjectIdInput.trim()}</span>{" "}
                 的零件表。覆盖将替换为本次 CSV 解析结果，且无法撤销。
               </p>
             )}

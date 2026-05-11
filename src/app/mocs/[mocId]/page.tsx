@@ -75,7 +75,6 @@ export default async function MocDetailPage({ params }: Props) {
     createdAt: r.createdAt,
   }));
 
-  const rbHref = `https://rebrickable.com/mocs/MOC-${encodeURIComponent(mocId)}/`;
   const partTotalQty = sheet.ok
     ? sheet.full?.totalPartQty ?? sheet.shortage?.totalPartQty ?? null
     : null;
@@ -86,7 +85,7 @@ export default async function MocDetailPage({ params }: Props) {
   if (sheet.ok) {
     if (sheet.full) {
       initialFull = {
-        mocId: sheet.mocId,
+        subjectId: sheet.subjectId,
         skippedHeader: sheet.full.skippedHeader,
         items: sheet.full.items,
         savedAt: sheet.full.savedAt,
@@ -94,7 +93,7 @@ export default async function MocDetailPage({ params }: Props) {
     }
     if (sheet.shortage) {
       initialShortage = {
-        mocId: sheet.mocId,
+        subjectId: sheet.subjectId,
         skippedHeader: sheet.shortage.skippedHeader,
         items: sheet.shortage.items,
         savedAt: sheet.shortage.savedAt,
@@ -107,8 +106,7 @@ export default async function MocDetailPage({ params }: Props) {
   return (
     <div className="page-stack">
       <MocDetailEditorial
-        mocId={mocId}
-        rbHref={rbHref}
+        subjectId={mocId}
         images={galleryImages}
         attachments={attachmentRows}
         initialDisplayName={initialDisplayName}
@@ -117,7 +115,7 @@ export default async function MocDetailPage({ params }: Props) {
       />
 
       <MocDetailPartsSection
-        mocId={mocId}
+        subjectId={mocId}
         initialFull={initialFull}
         initialShortage={initialShortage}
         initialMocLoadError={initialMocLoadError}

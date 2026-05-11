@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 
-import { deleteMocAttachmentAction, uploadMocAttachmentAction } from "@/app/mocs/moc-attachment-actions";
+import {
+  deleteBuildAttachmentAction,
+  uploadBuildAttachmentAction,
+} from "@/app/mocs/moc-attachment-actions";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 
 export type MocAttachmentRow = {
   id: number;
@@ -20,11 +24,16 @@ function formatBytes(n: number): string {
 }
 
 type Props = {
-  mocId: string;
+  subjectKind?: BuildSubjectKind;
+  subjectId: string;
   attachments: MocAttachmentRow[];
 };
 
-export function MocAttachmentsPanel({ mocId, attachments }: Props) {
+export function MocAttachmentsPanel({
+  subjectKind = BUILD_SUBJECT_MOC,
+  subjectId,
+  attachments,
+}: Props) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,10 +46,10 @@ export function MocAttachmentsPanel({ mocId, attachments }: Props) {
       setError(null);
       startTransition(async () => {
         const fd = new FormData();
-        fd.set("subjectKind", "moc");
-        fd.set("subjectId", mocId);
+        fd.set("subjectKind", subjectKind);
+        fd.set("subjectId", subjectId);
         fd.set("file", file);
-        const r = await uploadMocAttachmentAction(fd);
+        const r = await uploadBuildAttachmentAction(fd);
         if (!r.ok) {
           setError(r.error);
           return;
@@ -49,7 +58,7 @@ export function MocAttachmentsPanel({ mocId, attachments }: Props) {
         router.refresh();
       });
     },
-    [mocId, router]
+    [router, subjectId, subjectKind]
   );
 
   const onDelete = useCallback(
@@ -57,7 +66,7 @@ export function MocAttachmentsPanel({ mocId, attachments }: Props) {
       setMessage(null);
       setError(null);
       startTransition(async () => {
-        const r = await deleteMocAttachmentAction(mocId, id);
+        const r = await deleteBuildAttachmentAction(subjectKind, subjectId, id);
         if (!r.ok) {
           setError(r.error);
           return;
@@ -66,7 +75,7 @@ export function MocAttachmentsPanel({ mocId, attachments }: Props) {
         router.refresh();
       });
     },
-    [mocId, router]
+    [router, subjectId, subjectKind]
   );
 
   return (

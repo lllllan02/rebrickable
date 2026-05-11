@@ -8,7 +8,9 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
-import { type InitialMocSheetFromServer, saveMocPartsSheetToDb } from "./moc-parts-sheet-actions";
+import { type InitialMocSheetFromServer, saveBuildPartsSheetToDb } from "./moc-parts-sheet-actions";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectUi } from "@/lib/build-ui";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
@@ -80,24 +82,28 @@ function isValidColorPayload(data: unknown): data is { colors: ColorOption[] } {
 }
 
 type PartsSheetImportProps = {
-  /** 地址栏 `?loadMoc=` 的 ID（由服务端读库后配合下面两项初始化） */
+  /** 写入 `build_saved_parts_sheets` 的 subject_kind */
+  buildSubjectKind?: BuildSubjectKind;
+  /** 详情页嵌入时：锁定保存到该主体 ID（MOC 数字 ID 或套装 set_num） */
   requestedLoadMocId?: string;
   /** 非详情嵌页：初始化预览数据（若有） */
   initialFullSheet?: InitialMocSheetFromServer | null;
   /** 详情页：已存缺件表 */
   initialShortageSheet?: InitialMocSheetFromServer | null;
   initialMocLoadError?: string | null;
-  /** 嵌在 MOC 详情页：锁定 MOC ID，保存后刷新本页数据 */
+  /** 嵌在详情页：锁定主体 ID，保存后刷新本页数据 */
   mocDetailEmbed?: boolean;
 };
 
 export function PartsSheetImport({
+  buildSubjectKind = BUILD_SUBJECT_MOC,
   requestedLoadMocId,
   initialFullSheet,
   initialShortageSheet,
   initialMocLoadError,
   mocDetailEmbed = false,
 }: PartsSheetImportProps) {
+  const sheetUi = useMemo(() => buildSubjectUi(buildSubjectKind), [buildSubjectKind]);
   const router = useRouter();
   const clearedByEditRef = useRef(false);
   const [items, setItems] = useState<ShortageRow[] | null>(null);
@@ -228,8 +234,9 @@ export function PartsSheetImport({
       setMocLocalMessage(null);
       setMocActionBusy(true);
       try {
-        const result = await saveMocPartsSheetToDb({
-          mocId: trimmed,
+        const result = await saveBuildPartsSheetToDb({
+          subjectKind: buildSubjectKind,
+          subjectId: trimmed,
           kind,
           skippedHeader: nextSkippedHeader,
           sourceFileName,
@@ -263,7 +270,7 @@ export function PartsSheetImport({
         setMocActionBusy(false);
       }
     },
-    [router, scrollMocFeedbackIntoView]
+    [buildSubjectKind, router, scrollMocFeedbackIntoView]
   );
 
   const onFile = useCallback(
@@ -395,18 +402,18 @@ export function PartsSheetImport({
     if (mocDetailEmbed) {
       clearedByEditRef.current = false;
       setError(null);
-      if (initialFullSheet && initialFullSheet.mocId === qid) {
+      if (initialFullSheet && initialFullSheet.subjectId === qid) {
         setFullSkippedHeader(initialFullSheet.skippedHeader);
         setFullItems(withRowIds(initialFullSheet.items));
-        setFullFileName(`moc-${qid}-full.csv`);
+        setFullFileName(`${sheetUi.exportFilenameStem(qid, "full").replace(/-edited$/, "")}.csv`);
       } else {
         setFullItems(null);
         setFullFileName(null);
       }
-      if (initialShortageSheet && initialShortageSheet.mocId === qid) {
+      if (initialShortageSheet && initialShortageSheet.subjectId === qid) {
         setShortageSkippedHeader(initialShortageSheet.skippedHeader);
         setShortageItems(withRowIds(initialShortageSheet.items));
-        setShortageFileName(`moc-${qid}-shortage.csv`);
+        setShortageFileName(`${sheetUi.exportFilenameStem(qid, "shortage").replace(/-edited$/, "")}.csv`);
       } else {
         setShortageItems(null);
         setShortageFileName(null);
@@ -414,21 +421,23 @@ export function PartsSheetImport({
       return;
     }
 
-    if (initialFullSheet && initialFullSheet.mocId === qid) {
+    if (initialFullSheet && initialFullSheet.subjectId === qid) {
       clearedByEditRef.current = false;
       setError(null);
       setSkippedHeader(initialFullSheet.skippedHeader);
       setSheetListFilter("all");
       setItems(withRowIds(initialFullSheet.items));
-      setFileName(`moc-${qid}.csv`);
+      setFileName(`${sheetUi.exportFilenameStem(qid, "full").replace(/-full-edited$/, "")}.csv`);
     }
   }, [
+    buildSubjectKind,
     requestedLoadMocId,
     initialFullSheet,
     initialShortageSheet,
     initialMocLoadError,
     mocDetailEmbed,
     scrollMocFeedbackIntoView,
+    sheetUi,
   ]);
 
   const onExportCsv = useCallback(() => {

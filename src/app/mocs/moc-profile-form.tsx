@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 
-import { saveMocProfileAction } from "@/app/mocs/moc-profile-actions";
+import { saveBuildProfileAction } from "@/app/mocs/moc-profile-actions";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectUi } from "@/lib/build-ui";
 import {
   MOC_PROFILE_MAX_DISPLAY_NAME,
   MOC_PROFILE_MAX_TAG_LEN,
@@ -11,24 +13,27 @@ import {
 } from "@/lib/moc-profile-parse";
 
 type Props = {
-  mocId: string;
+  subjectKind?: BuildSubjectKind;
+  subjectId: string;
   initialDisplayName: string;
   initialTags: string[];
   /** `sidebar`：与轮播并排时的紧凑形态（无外层大卡片） */
   variant?: "default" | "sidebar";
-  /** 侧边栏：显示在标题与 MOC ID 之下、标签之上（无已存零件表时为 null 则不显示） */
+  /** 侧边栏：显示在标题与主体 ID 之下、标签之上（无已存零件表时为 null 则不显示） */
   partTotalQty?: number | null;
 };
 
 type OptimisticProfile = { displayName: string; tags: string[] };
 
 export function MocProfileForm({
-  mocId,
+  subjectKind = BUILD_SUBJECT_MOC,
+  subjectId,
   initialDisplayName,
   initialTags,
   variant = "default",
   partTotalQty = null,
 }: Props) {
+  const ui = buildSubjectUi(subjectKind);
   const router = useRouter();
   const formTitleId = useId();
   const tagInputId = useId();
@@ -58,7 +63,7 @@ export function MocProfileForm({
 
   const viewDisplayName = optimistic?.displayName ?? initialDisplayName;
   const viewTags = optimistic?.tags ?? initialTags;
-  const viewTitle = viewDisplayName.trim() || `MOC ${mocId}`;
+  const viewTitle = viewDisplayName.trim() || `${ui.noun} ${subjectId}`;
 
   const enterEdit = useCallback(() => {
     const baseName = (optimistic?.displayName ?? initialDisplayName).slice(0, MOC_PROFILE_MAX_DISPLAY_NAME);
@@ -105,7 +110,7 @@ export function MocProfileForm({
     setMessage(null);
     setError(null);
     startTransition(async () => {
-      const r = await saveMocProfileAction({ mocId, displayName, tags });
+      const r = await saveBuildProfileAction({ subjectKind, subjectId, displayName, tags });
       if (r.ok) {
         setOptimistic({ displayName, tags: [...tags] });
         setMessage("已保存。");
@@ -115,7 +120,7 @@ export function MocProfileForm({
         setError(r.error);
       }
     });
-  }, [displayName, mocId, router, tags]);
+  }, [displayName, router, subjectId, subjectKind, tags]);
 
   const readOnlyBlock = (
     <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
@@ -131,7 +136,9 @@ export function MocProfileForm({
           {viewTitle}
         </p>
         <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
-          <span>MOC ID · {mocId}</span>
+          <span>
+            {ui.subjectIdLabel} · {subjectId}
+          </span>
           {isSidebar && partTotalQty !== null ? (
             <>
               <span className="select-none text-[var(--muted-2)]" aria-hidden>
@@ -145,7 +152,7 @@ export function MocProfileForm({
         </p>
         {!isSidebar ? (
           <p className="mt-1 text-xs text-[var(--muted)]">
-            显示名称仅用于本应用列表与标题；MOC ID（<span className="font-mono">{mocId}</span>）不变。
+            显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
           </p>
         ) : null}
       </div>
@@ -201,7 +208,7 @@ export function MocProfileForm({
               setError(null);
             }}
             maxLength={MOC_PROFILE_MAX_DISPLAY_NAME}
-            placeholder={`MOC ${mocId}`}
+            placeholder={`${ui.noun} ${subjectId}`}
             aria-label="显示名称"
             className={
               isSidebar
@@ -211,7 +218,9 @@ export function MocProfileForm({
           />
         </label>
         <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
-          <span>MOC ID · {mocId}</span>
+          <span>
+            {ui.subjectIdLabel} · {subjectId}
+          </span>
           {isSidebar && partTotalQty !== null ? (
             <>
               <span className="select-none text-[var(--muted-2)]" aria-hidden>
@@ -225,7 +234,7 @@ export function MocProfileForm({
         </p>
         {!isSidebar ? (
           <p className="mt-1 text-xs text-[var(--muted)]">
-            显示名称仅用于本应用列表与标题；MOC ID（<span className="font-mono">{mocId}</span>）不变。
+            显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
           </p>
         ) : null}
       </div>

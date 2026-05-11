@@ -4,7 +4,9 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 
-import { deleteMocImageAction, uploadMocImageAction } from "@/app/mocs/moc-detail-actions";
+import { deleteBuildImageAction, uploadBuildImageAction } from "@/app/mocs/moc-detail-actions";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectUi } from "@/lib/build-ui";
 
 function isEditablePasteTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -45,11 +47,13 @@ export type MocGalleryImage = {
 };
 
 type Props = {
-  mocId: string;
+  subjectKind?: BuildSubjectKind;
+  subjectId: string;
   images: MocGalleryImage[];
 };
 
-export function MocImageCarousel({ mocId, images }: Props) {
+export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, images }: Props) {
+  const ui = buildSubjectUi(subjectKind);
   const router = useRouter();
   const wrapRef = useRef<HTMLDivElement>(null);
   const thumbRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -84,10 +88,10 @@ export function MocImageCarousel({ mocId, images }: Props) {
       startTransition(async () => {
         for (const file of list) {
           const fd = new FormData();
-          fd.set("subjectKind", "moc");
-          fd.set("subjectId", mocId);
+          fd.set("subjectKind", subjectKind);
+          fd.set("subjectId", subjectId);
           fd.set("file", file);
-          const r = await uploadMocImageAction(fd);
+          const r = await uploadBuildImageAction(fd);
           if (!r.ok) {
             setError(r.error);
             return;
@@ -97,7 +101,7 @@ export function MocImageCarousel({ mocId, images }: Props) {
         router.refresh();
       });
     },
-    [mocId, router]
+    [router, subjectId, subjectKind]
   );
 
   const onPick = useCallback(
@@ -152,7 +156,7 @@ export function MocImageCarousel({ mocId, images }: Props) {
     setMessage(null);
     setError(null);
     startTransition(async () => {
-      const r = await deleteMocImageAction(mocId, cur.id);
+      const r = await deleteBuildImageAction(subjectKind, subjectId, cur.id);
       if (r.ok) {
         setMessage("已删除。");
         router.refresh();
@@ -160,7 +164,7 @@ export function MocImageCarousel({ mocId, images }: Props) {
         setError(r.error);
       }
     });
-  }, [images, idx, mocId, router]);
+  }, [images, idx, router, subjectId, subjectKind]);
 
   const current = images[idx] ?? null;
 
@@ -175,7 +179,7 @@ export function MocImageCarousel({ mocId, images }: Props) {
         className="relative min-h-[min(52vw,22rem)] outline-none ring-[var(--accent)]/40 focus-visible:ring-2 sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]"
       >
         <p id={regionId} className="sr-only">
-          MOC 参考图轮播，左右方向键切换；本区域聚焦时可使用键盘。
+          {ui.noun} 参考图轮播，左右方向键切换；本区域聚焦时可使用键盘。
         </p>
 
         {images.length === 0 ? (
@@ -198,7 +202,7 @@ export function MocImageCarousel({ mocId, images }: Props) {
               {current ? (
                 <Image
                   src={current.url}
-                  alt={current.originalName ?? "MOC 参考图"}
+                  alt={current.originalName ?? `${ui.noun} 参考图`}
                   fill
                   className="object-contain p-2"
                   sizes="(max-width: 1024px) 100vw, 66vw"

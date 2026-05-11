@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectUi } from "@/lib/build-ui";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
@@ -20,14 +22,16 @@ function downloadText(filename: string, text: string) {
 }
 
 type Props = {
-  mocId: string;
+  subjectKind?: BuildSubjectKind;
+  subjectId: string;
   listTab: "full" | "shortage";
   initialFull: InitialMocSheetFromServer | null;
   initialShortage: InitialMocSheetFromServer | null;
 };
 
 export function MocDetailPartsListExportBar({
-  mocId,
+  subjectKind = BUILD_SUBJECT_MOC,
+  subjectId,
   listTab,
   initialFull,
   initialShortage,
@@ -46,12 +50,9 @@ export function MocDetailPartsListExportBar({
   } | null>(null);
 
   const filenameStem = useMemo(() => {
-    const qid = mocId.trim();
-    if (listTab === "full") {
-      return (qid ? `moc-${qid}-full` : "full-parts") + "-edited";
-    }
-    return (qid ? `moc-${qid}-shortage` : "shortage-parts") + "-edited";
-  }, [listTab, mocId]);
+    const ui = buildSubjectUi(subjectKind);
+    return ui.exportFilenameStem(subjectId, listTab);
+  }, [listTab, subjectId, subjectKind]);
 
   useEffect(() => {
     if (!exportProgress) return;

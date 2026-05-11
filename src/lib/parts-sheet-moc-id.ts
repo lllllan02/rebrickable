@@ -2,6 +2,7 @@
  * 从用户上传的缺货表文件名中尽量解析 Rebrickable MOC 数字 ID（仅启发式，不调用 API）。
  */
 
+import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { MOC_PROFILE_MAX_DISPLAY_NAME } from "@/lib/moc-profile-parse";
 import type { PartsSheetTag } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
@@ -54,7 +55,7 @@ function escapeRegExpChars(s: string): string {
 }
 
 /** 将文件名中的 slug 片段整理为可读标题（空格、长度上限） */
-function slugFragmentToDisplayTitle(fragment: string): string {
+export function slugFragmentToDisplayTitle(fragment: string): string {
   const t = fragment
     .replace(/\.csv$/i, "")
     .replace(/[_-]+/g, " ")
@@ -94,6 +95,60 @@ export function parseMocDisplayNameFromFilename(fileName: string, mocId: string)
   }
 
   return null;
+}
+
+/** 从文件名启发式解析官方套装编号（如 42143-1） */
+export function parseSetNumFromFilename(fileName: string): string | null {
+  const base = fileName.replace(/\\/g, "/").split("/").pop() ?? fileName;
+  const rb = base.match(/\b(\d{4,6}-\d+)\b/);
+  if (rb?.[1]) return rb[1];
+  const prefixed = base.match(/(?:^|[^0-9a-z])set[_-]?(\d{4,6}-\d+)/i);
+  if (prefixed?.[1]) return prefixed[1];
+  return null;
+}
+
+/**
+ * 在已知 `setNum` 的前提下，从文件名中尽量解析套装显示名称。
+ */
+export function parseSetDisplayNameFromFilename(fileName: string, setNum: string): string | null {
+  const base = fileName.replace(/\\/g, "/").split("/").pop() ?? fileName;
+  const id = setNum.trim();
+  if (!id) return null;
+  const idRe = escapeRegExpChars(id);
+
+  const rb = base.match(new RegExp(`^rebrickable_parts_${idRe}_(.+)\\.csv$`, "i"));
+  if (rb?.[1]) {
+    const title = slugFragmentToDisplayTitle(rb[1]);
+    return title || null;
+  }
+
+  const setWord = base.match(new RegExp(`(?:^|[^0-9a-z])set[_-]?${idRe}[_-](.+)\\.csv$`, "i"));
+  if (setWord?.[1]) {
+    const title = slugFragmentToDisplayTitle(setWord[1]);
+    return title || null;
+  }
+
+  const lone = base.match(new RegExp(`^${idRe}(?:[^0-9A-Za-z](.+))?\\.csv$`, "i"));
+  if (lone?.[1]) {
+    const title = slugFragmentToDisplayTitle(lone[1]);
+    return title || null;
+  }
+
+  return null;
+}
+
+export function parseBuildSubjectIdFromFilename(kind: BuildSubjectKind, fileName: string): string | null {
+  if (kind === BUILD_SUBJECT_MOC) return parseMocIdFromFilename(fileName);
+  return parseSetNumFromFilename(fileName);
+}
+
+export function parseBuildDisplayNameFromFilename(
+  kind: BuildSubjectKind,
+  fileName: string,
+  subjectId: string
+): string | null {
+  if (kind === BUILD_SUBJECT_MOC) return parseMocDisplayNameFromFilename(fileName, subjectId);
+  return parseSetDisplayNameFromFilename(fileName, subjectId);
 }
 
 const SHEET_TAGS: ReadonlySet<PartsSheetTag> = new Set(["printed", "minifig", "sticker"]);

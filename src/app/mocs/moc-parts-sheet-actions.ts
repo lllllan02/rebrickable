@@ -1,14 +1,19 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { buildProfiles, buildSavedPartsSheets } from "@/db/schema";
-import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
+import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
+import {
+  BUILD_SUBJECT_MOC,
+  BUILD_SUBJECT_SET,
+  isSafeBuildSubjectId,
+  type BuildSubjectKind,
+} from "@/lib/build-subject";
 import { MOC_PROFILE_MAX_DISPLAY_NAME, serializeTagsJson } from "@/lib/moc-profile-parse";
 import {
-  parseMocDisplayNameFromFilename,
+  parseBuildDisplayNameFromFilename,
   parseMocSheetItems,
   parseStoredMocDualSheets,
   dualSheetsToPayloadV2,
@@ -16,42 +21,47 @@ import {
 } from "@/lib/parts-sheet-moc-id";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
-const MAX_MOC_ID_LEN = 128;
+const MAX_SUBJECT_ID_LEN = 128;
 const MAX_ITEMS = 100_000;
 
-function mocSheetKey(mocId: string) {
-  return and(
-    eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_MOC),
-    eq(buildSavedPartsSheets.subjectId, mocId)
-  );
+function buildSheetKey(kind: BuildSubjectKind, subjectId: string) {
+  return and(eq(buildSavedPartsSheets.subjectKind, kind), eq(buildSavedPartsSheets.subjectId, subjectId));
 }
 
-function mocProfileKey(mocId: string) {
-  return and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
+function buildProfileKey(kind: BuildSubjectKind, subjectId: string) {
+  return and(eq(buildProfiles.subjectKind, kind), eq(buildProfiles.subjectId, subjectId));
 }
 
-export type InitialMocSheetFromServer = {
-  mocId: string;
+export type InitialBuildSheetFromServer = {
+  subjectId: string;
   skippedHeader: boolean;
   items: ShortageResolveItem[];
   savedAt: string;
 };
 
-export type MocSheetBranchLoaded = {
+/** @deprecated 字段请用 {@link InitialBuildSheetFromServer.subjectId} */
+export type InitialMocSheetFromServer = InitialBuildSheetFromServer;
+
+export type BuildSheetBranchLoaded = {
   skippedHeader: boolean;
   items: ShortageResolveItem[];
   savedAt: string;
   totalPartQty: number;
 };
 
-export type LoadMocPartsSheetResult =
+export type MocSheetBranchLoaded = BuildSheetBranchLoaded;
+
+export type LoadBuildPartsSheetResult =
   | {
       ok: true;
-      mocId: string;
-      full: MocSheetBranchLoaded | null;
-      shortage: MocSheetBranchLoaded | null;
+      subjectKind: BuildSubjectKind;
+      subjectId: string;
+      full: BuildSheetBranchLoaded | null;
+      shortage: BuildSheetBranchLoaded | null;
     }
   | { ok: false; error: string };
+
+export type LoadMocPartsSheetResult = LoadBuildPartsSheetResult;
 
 function branchTotals(items: ShortageResolveItem[]): number {
   return items.reduce((s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0), 0);
@@ -61,7 +71,7 @@ function toLoadedBranch(
   skippedHeader: boolean,
   items: ShortageResolveItem[],
   savedAt: string
-): MocSheetBranchLoaded {
+): BuildSheetBranchLoaded {
   return {
     skippedHeader,
     items,
@@ -70,16 +80,23 @@ function toLoadedBranch(
   };
 }
 
-/** 是否已有该 MOC 的已存零件表（用于列表直传前的重复提示） */
-export async function mocHasSavedPartsSheet(mocIdRaw: string): Promise<boolean> {
-  const mocId = mocIdRaw.trim();
-  if (!mocId || mocId.length > MAX_MOC_ID_LEN) return false;
+function subjectKindLabel(kind: BuildSubjectKind): string {
+  return kind === BUILD_SUBJECT_MOC ? "MOC" : "套装";
+}
+
+export async function buildHasSavedPartsSheet(
+  subjectKind: BuildSubjectKind,
+  subjectIdRaw: string
+): Promise<boolean> {
+  const subjectId = subjectIdRaw.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) return false;
+  if (!isSafeBuildSubjectId(subjectKind, subjectId)) return false;
   try {
     const db = getDb();
     const rows = await db
       .select({ subjectId: buildSavedPartsSheets.subjectId })
       .from(buildSavedPartsSheets)
-      .where(mocSheetKey(mocId))
+      .where(buildSheetKey(subjectKind, subjectId))
       .limit(1);
     return Boolean(rows[0]);
   } catch {
@@ -87,10 +104,20 @@ export async function mocHasSavedPartsSheet(mocIdRaw: string): Promise<boolean> 
   }
 }
 
-export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMocPartsSheetResult> {
-  const mocId = mocIdRaw.trim();
-  if (!mocId || mocId.length > MAX_MOC_ID_LEN) {
-    return { ok: false, error: "请填写有效的 MOC ID。" };
+export async function mocHasSavedPartsSheet(mocIdRaw: string): Promise<boolean> {
+  return buildHasSavedPartsSheet(BUILD_SUBJECT_MOC, mocIdRaw);
+}
+
+export async function loadBuildPartsSheetFromDb(
+  subjectKind: BuildSubjectKind,
+  subjectIdRaw: string
+): Promise<LoadBuildPartsSheetResult> {
+  const subjectId = subjectIdRaw.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `请填写有效的 ${subjectKindLabel(subjectKind)} ID。` };
+  }
+  if (!isSafeBuildSubjectId(subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(subjectKind)} ID 含有非法字符。` };
   }
 
   try {
@@ -98,12 +125,18 @@ export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMoc
     const rows = await db
       .select({ payloadJson: buildSavedPartsSheets.payloadJson })
       .from(buildSavedPartsSheets)
-      .where(mocSheetKey(mocId))
+      .where(buildSheetKey(subjectKind, subjectId))
       .limit(1);
 
     const row = rows[0];
     if (!row) {
-      return { ok: false, error: `数据库中未找到 MOC ${mocId} 的已存零件表。` };
+      return {
+        ok: true,
+        subjectKind,
+        subjectId,
+        full: null,
+        shortage: null,
+      };
     }
 
     let parsed: unknown;
@@ -120,7 +153,8 @@ export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMoc
 
     return {
       ok: true,
-      mocId,
+      subjectKind,
+      subjectId,
       full: dual.full
         ? toLoadedBranch(dual.full.skippedHeader, dual.full.items, dual.full.savedAt)
         : null,
@@ -133,7 +167,13 @@ export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMoc
   }
 }
 
-export type SaveMocPartsSheetResult = { ok: true; savedAt: string } | { ok: false; error: string };
+export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMocPartsSheetResult> {
+  return loadBuildPartsSheetFromDb(BUILD_SUBJECT_MOC, mocIdRaw);
+}
+
+export type SaveBuildPartsSheetResult = { ok: true; savedAt: string } | { ok: false; error: string };
+
+export type SaveMocPartsSheetResult = SaveBuildPartsSheetResult;
 
 function aggregateRowFromDual(dual: StoredMocDualSheets): {
   skippedHeader: boolean;
@@ -151,17 +191,21 @@ function aggregateRowFromDual(dual: StoredMocDualSheets): {
   };
 }
 
-export async function saveMocPartsSheetToDb(input: {
-  mocId: string;
+export async function saveBuildPartsSheetToDb(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
   kind: "full" | "shortage";
   skippedHeader: boolean;
   items: ShortageResolveItem[];
   /** 原始导入文件名：尚无显示名时写入 `build_profiles.display_name`（仅 kind=full） */
   sourceFileName?: string | null;
-}): Promise<SaveMocPartsSheetResult> {
-  const mocId = input.mocId.trim();
-  if (!mocId || mocId.length > MAX_MOC_ID_LEN) {
-    return { ok: false, error: `mocId 须为非空且不超过 ${MAX_MOC_ID_LEN} 字符。` };
+}): Promise<SaveBuildPartsSheetResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
   }
 
   if (input.kind !== "full" && input.kind !== "shortage") {
@@ -191,7 +235,9 @@ export async function saveMocPartsSheetToDb(input: {
   const sourceFileName = typeof rawSourceName === "string" ? rawSourceName : "";
   const fromFileTitle =
     input.kind === "full" && sourceFileName.trim().length > 0
-      ? parseMocDisplayNameFromFilename(sourceFileName, mocId)?.trim().slice(0, MOC_PROFILE_MAX_DISPLAY_NAME) ?? ""
+      ? parseBuildDisplayNameFromFilename(input.subjectKind, sourceFileName, subjectId)
+          ?.trim()
+          .slice(0, MOC_PROFILE_MAX_DISPLAY_NAME) ?? ""
       : "";
 
   try {
@@ -200,7 +246,7 @@ export async function saveMocPartsSheetToDb(input: {
       const existingRows = tx
         .select({ payloadJson: buildSavedPartsSheets.payloadJson })
         .from(buildSavedPartsSheets)
-        .where(mocSheetKey(mocId))
+        .where(buildSheetKey(input.subjectKind, subjectId))
         .limit(1)
         .all();
       const existingJson = existingRows[0]?.payloadJson;
@@ -230,8 +276,8 @@ export async function saveMocPartsSheetToDb(input: {
 
       tx.insert(buildSavedPartsSheets)
         .values({
-          subjectKind: BUILD_SUBJECT_MOC,
-          subjectId: mocId,
+          subjectKind: input.subjectKind,
+          subjectId,
           skippedHeader,
           payloadJson: JSON.stringify(payload),
           lineCount,
@@ -255,7 +301,7 @@ export async function saveMocPartsSheetToDb(input: {
       const profRows = tx
         .select({ displayName: buildProfiles.displayName, tagsJson: buildProfiles.tagsJson })
         .from(buildProfiles)
-        .where(mocProfileKey(mocId))
+        .where(buildProfileKey(input.subjectKind, subjectId))
         .limit(1)
         .all();
       const prof = profRows[0];
@@ -263,8 +309,8 @@ export async function saveMocPartsSheetToDb(input: {
 
       tx.insert(buildProfiles)
         .values({
-          subjectKind: BUILD_SUBJECT_MOC,
-          subjectId: mocId,
+          subjectKind: input.subjectKind,
+          subjectId,
           displayName: fromFileTitle,
           tagsJson: prof?.tagsJson ?? serializeTagsJson([]),
           profileUpdatedAt: savedAt,
@@ -279,10 +325,43 @@ export async function saveMocPartsSheetToDb(input: {
         .run();
     });
 
-    revalidatePath("/mocs");
-    revalidatePath(`/mocs/${encodeURIComponent(mocId)}`);
+    revalidateBuildSubjectPaths(input.subjectKind, subjectId);
     return { ok: true, savedAt };
   } catch {
     return { ok: false, error: "写入数据库失败。" };
   }
+}
+
+export async function saveMocPartsSheetToDb(input: {
+  mocId: string;
+  kind: "full" | "shortage";
+  skippedHeader: boolean;
+  items: ShortageResolveItem[];
+  sourceFileName?: string | null;
+}): Promise<SaveMocPartsSheetResult> {
+  return saveBuildPartsSheetToDb({
+    subjectKind: BUILD_SUBJECT_MOC,
+    subjectId: input.mocId,
+    kind: input.kind,
+    skippedHeader: input.skippedHeader,
+    items: input.items,
+    sourceFileName: input.sourceFileName,
+  });
+}
+
+export async function saveSetPartsSheetToDb(input: {
+  setNum: string;
+  kind: "full" | "shortage";
+  skippedHeader: boolean;
+  items: ShortageResolveItem[];
+  sourceFileName?: string | null;
+}): Promise<SaveBuildPartsSheetResult> {
+  return saveBuildPartsSheetToDb({
+    subjectKind: BUILD_SUBJECT_SET,
+    subjectId: input.setNum,
+    kind: input.kind,
+    skippedHeader: input.skippedHeader,
+    items: input.items,
+    sourceFileName: input.sourceFileName,
+  });
 }

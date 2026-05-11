@@ -5,41 +5,76 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
-import { saveMocPartsSheetToDb } from "@/app/mocs/moc-parts-sheet-actions";
+import { saveBuildPartsSheetToDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { PartsSheetImport } from "@/app/mocs/moc-parts-sheet-import";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
+import { buildSubjectListPath } from "@/lib/build-subject-paths";
+import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectUi } from "@/lib/build-ui";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
+type ListTab = "full" | "shortage" | "official";
+
 type Props = {
-  mocId: string;
+  subjectKind?: BuildSubjectKind;
+  subjectId: string;
   initialFull: InitialMocSheetFromServer | null;
   initialShortage: InitialMocSheetFromServer | null;
   initialMocLoadError: string | null;
+  /** 套装：与 CSV 并列展示的官方 `inventory_parts` 列表（已转为与缺货表相同的行结构） */
+  officialInventory?: {
+    items: ShortageResolveItem[];
+    inventoryId: number;
+    version: number;
+  } | null;
 };
 
 export function MocDetailPartsSection({
-  mocId,
+  subjectKind = BUILD_SUBJECT_MOC,
+  subjectId,
   initialFull,
   initialShortage,
   initialMocLoadError,
+  officialInventory = null,
 }: Props) {
+  const ui = buildSubjectUi(subjectKind);
+  const listHref = buildSubjectListPath(subjectKind);
   const router = useRouter();
-  const [listTab, setListTab] = useState<"full" | "shortage">(() => {
+  const hasOfficial = Boolean(officialInventory && officialInventory.items.length > 0);
+  /** 官方套装详情：有 Rebrickable 库存行时，只突出官方清单 + 缺件表，不提供「完整零件表」Tab（仍可上传完整 CSV） */
+  const isSetWithOfficial = subjectKind === BUILD_SUBJECT_SET && hasOfficial;
+
+  const [listTab, setListTab] = useState<ListTab>(() => {
+    if (isSetWithOfficial) return "official";
     if (initialFull) return "full";
     if (initialShortage) return "shortage";
+    if (hasOfficial) return "official";
     return "full";
   });
 
   useEffect(() => {
-    if (listTab === "full" && !initialFull && initialShortage) setListTab("shortage");
-    else if (listTab === "shortage" && !initialShortage && initialFull) setListTab("full");
-  }, [initialFull, initialShortage, listTab]);
+    if (isSetWithOfficial && listTab === "full") {
+      setListTab("official");
+      return;
+    }
+    if (listTab === "full" && !initialFull) {
+      if (initialShortage) setListTab("shortage");
+      else if (hasOfficial) setListTab("official");
+    } else if (listTab === "shortage" && !initialShortage) {
+      if (initialFull && !isSetWithOfficial) setListTab("full");
+      else if (hasOfficial) setListTab("official");
+    } else if (listTab === "official" && !hasOfficial) {
+      if (initialFull && !isSetWithOfficial) setListTab("full");
+      else if (initialShortage) setListTab("shortage");
+    }
+  }, [hasOfficial, initialFull, initialShortage, isSetWithOfficial, listTab]);
 
   const persistShortage = useCallback(
     async (items: ShortageResolveItem[], skippedHeader: boolean) => {
-      const result = await saveMocPartsSheetToDb({
-        mocId,
+      const result = await saveBuildPartsSheetToDb({
+        subjectKind,
+        subjectId,
         kind: "shortage",
         skippedHeader,
         items,
@@ -48,10 +83,16 @@ export function MocDetailPartsSection({
       if (result.ok) router.refresh();
       return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
     },
-    [mocId, router]
+    [router, subjectId, subjectKind]
   );
 
   const hasAnySheet = Boolean(initialFull || initialShortage);
+  const hasListArea = hasAnySheet || hasOfficial;
+
+  const officialMetaLine =
+    officialInventory != null
+      ? `Rebrickable 本地库存 · inventory_id ${officialInventory.inventoryId} · 版本 v${officialInventory.version}`
+      : "";
 
   return (
     <div id="moc-parts-sheet-tools" className="scroll-mt-24 border-t border-[var(--border-soft)] pt-8">
@@ -63,66 +104,131 @@ export function MocDetailPartsSection({
             <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
               rebrickable_parts_*_缺货表.csv
             </code>{" "}
-            相同结构。可分别上传完整零件表与缺件表；解析成功后写入本 MOC（两侧互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新 MOC 也可从{" "}
-            <Link href="/mocs" className="text-[var(--accent)] underline">
-              MOC 列表
+            相同结构。可分别上传完整零件表与缺件表；解析成功后写入本 {ui.noun}（两侧互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新记录也可从{" "}
+            <Link href={listHref} className="text-[var(--accent)] underline">
+              {ui.noun} 列表
             </Link>{" "}
-            顶部上传导入（默认写入完整表）。
+            顶部上传导入
+            {isSetWithOfficial ? "。" : "（默认写入完整表）。"}
+            {subjectKind === BUILD_SUBJECT_SET && hasOfficial ? (
+              <>
+                {" "}
+                「官方清单」与上方 CSV 使用同一套列表与筛选界面，数据来自本地已导入的{" "}
+                <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
+                  inventories
+                </code>
+                /
+                <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
+                  inventory_parts
+                </code>
+                ，与 CSV 写入的 SQLite 行并存、互不覆盖。
+              </>
+            ) : null}
           </p>
         </header>
 
         <PartsSheetImport
-          requestedLoadMocId={mocId}
+          buildSubjectKind={subjectKind}
+          requestedLoadMocId={subjectId}
           initialFullSheet={initialFull}
           initialShortageSheet={initialShortage}
           initialMocLoadError={initialMocLoadError}
           mocDetailEmbed
         />
 
-        {hasAnySheet ? (
+        {hasListArea ? (
           <div className="border-t border-[var(--border-soft)] pt-5">
             <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={!initialFull}
-                  title={!initialFull ? "尚未上传完整零件表" : undefined}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    listTab === "full"
-                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                      : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
-                  } ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
-                  onClick={() => {
-                    if (initialFull) setListTab("full");
-                  }}
-                >
-                  完整零件表
-                </button>
-                <button
-                  type="button"
-                  disabled={!initialShortage}
-                  title={!initialShortage ? "尚未上传缺件表" : undefined}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    listTab === "shortage"
-                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                      : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
-                  } ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
-                  onClick={() => {
-                    if (initialShortage) setListTab("shortage");
-                  }}
-                >
-                  缺件表
-                </button>
+                {isSetWithOfficial ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        listTab === "official"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                      }`}
+                      onClick={() => setListTab("official")}
+                    >
+                      官方清单
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!initialShortage}
+                      title={!initialShortage ? "尚未上传缺件表" : undefined}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        listTab === "shortage"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                      } ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (initialShortage) setListTab("shortage");
+                      }}
+                    >
+                      缺件表
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!initialFull}
+                      title={!initialFull ? "尚未上传完整零件表" : undefined}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        listTab === "full"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                      } ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (initialFull) setListTab("full");
+                      }}
+                    >
+                      完整零件表
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!initialShortage}
+                      title={!initialShortage ? "尚未上传缺件表" : undefined}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        listTab === "shortage"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                      } ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (initialShortage) setListTab("shortage");
+                      }}
+                    >
+                      缺件表
+                    </button>
+                    {hasOfficial ? (
+                      <button
+                        type="button"
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                          listTab === "official"
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                            : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                        }`}
+                        onClick={() => setListTab("official")}
+                      >
+                        官方清单
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
-              <MocDetailPartsListExportBar
-                mocId={mocId}
-                listTab={listTab}
-                initialFull={initialFull}
-                initialShortage={initialShortage}
-              />
+              {listTab === "full" || listTab === "shortage" ? (
+                <MocDetailPartsListExportBar
+                  subjectKind={subjectKind}
+                  subjectId={subjectId}
+                  listTab={listTab}
+                  initialFull={initialFull}
+                  initialShortage={initialShortage}
+                />
+              ) : null}
             </div>
 
-            {listTab === "full" && initialFull ? (
+            {listTab === "full" && initialFull && !isSetWithOfficial ? (
               <MocPartsList
                 items={initialFull.items}
                 skippedHeader={initialFull.skippedHeader}
@@ -139,8 +245,17 @@ export function MocDetailPartsSection({
                 shortageEditable={{ onPersist: persistShortage }}
               />
             ) : null}
+            {listTab === "official" && officialInventory ? (
+              <MocPartsList
+                items={officialInventory.items}
+                skippedHeader={false}
+                savedAt="2000-01-01T00:00:00.000Z"
+                sourceMetaLine={officialMetaLine}
+                totalPartQty={undefined}
+              />
+            ) : null}
 
-            {listTab === "full" && !initialFull ? (
+            {listTab === "full" && !initialFull && !isSetWithOfficial ? (
               <p className="text-sm text-[var(--muted)]">
                 尚未上传完整零件表，请使用上方「上传完整零件表 CSV」。
               </p>

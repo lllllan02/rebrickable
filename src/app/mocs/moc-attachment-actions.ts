@@ -2,12 +2,17 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { revalidatePath } from "next/cache";
 import { and, count, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { buildAttachments } from "@/db/schema";
-import { BUILD_SUBJECT_MOC, isBuildSubjectKind, isSafeBuildSubjectId } from "@/lib/build-subject";
+import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
+import {
+  BUILD_SUBJECT_MOC,
+  isBuildSubjectKind,
+  isSafeBuildSubjectId,
+  type BuildSubjectKind,
+} from "@/lib/build-subject";
 import {
   ensureBuildUploadDir,
   inferBuildAttachmentKindFromName,
@@ -19,26 +24,21 @@ import {
   resolveBuildAttachmentMime,
 } from "@/lib/build-upload-storage";
 
-function revalidateMocPage(mocId: string) {
-  revalidatePath(`/mocs/${mocId}`);
-  revalidatePath("/mocs");
-}
-
-export async function uploadMocAttachmentAction(
+export async function uploadBuildAttachmentAction(
   formData: FormData
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const kindRaw = String(formData.get("subjectKind") ?? "").trim();
-  const mocId = String(formData.get("subjectId") ?? "").trim();
+  const subjectId = String(formData.get("subjectId") ?? "").trim();
   const file = formData.get("file");
 
-  if (!mocId || mocId.length > BUILD_UPLOAD_MAX_ID_LEN) {
-    return { ok: false, error: "MOC ID 无效。" };
+  if (!subjectId || subjectId.length > BUILD_UPLOAD_MAX_ID_LEN) {
+    return { ok: false, error: "主体 ID 无效。" };
   }
-  if (!isBuildSubjectKind(kindRaw) || kindRaw !== BUILD_SUBJECT_MOC) {
+  if (!isBuildSubjectKind(kindRaw)) {
     return { ok: false, error: "主体无效。" };
   }
-  if (!isSafeBuildSubjectId(BUILD_SUBJECT_MOC, mocId)) {
-    return { ok: false, error: "MOC ID 含有非法字符。" };
+  if (!isSafeBuildSubjectId(kindRaw, subjectId)) {
+    return { ok: false, error: "主体 ID 含有非法字符。" };
   }
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "请选择文件。" };
@@ -64,24 +64,24 @@ export async function uploadMocAttachmentAction(
     const [cntRow] = await db
       .select({ n: count() })
       .from(buildAttachments)
-      .where(and(eq(buildAttachments.subjectKind, BUILD_SUBJECT_MOC), eq(buildAttachments.subjectId, mocId)));
+      .where(and(eq(buildAttachments.subjectKind, kindRaw), eq(buildAttachments.subjectId, subjectId)));
     const n = Number(cntRow?.n ?? 0);
     if (n >= BUILD_ATTACHMENT_MAX_FILES_PER_SUBJECT) {
       return {
         ok: false,
-        error: `每个 MOC 最多上传 ${BUILD_ATTACHMENT_MAX_FILES_PER_SUBJECT} 个附件。`,
+        error: `每个主体最多上传 ${BUILD_ATTACHMENT_MAX_FILES_PER_SUBJECT} 个附件。`,
       };
     }
 
     const buf = Buffer.from(await file.arrayBuffer());
-    const dir = await ensureBuildUploadDir(BUILD_SUBJECT_MOC, mocId);
+    const dir = await ensureBuildUploadDir(kindRaw, subjectId);
     const absPath = path.join(dir, storedFile);
     await fs.writeFile(absPath, buf);
 
     try {
       await db.insert(buildAttachments).values({
-        subjectKind: BUILD_SUBJECT_MOC,
-        subjectId: mocId,
+        subjectKind: kindRaw,
+        subjectId,
         storedFile,
         originalName: file.name.trim() || null,
         mimeType: mime,
@@ -93,23 +93,30 @@ export async function uploadMocAttachmentAction(
       return { ok: false, error: "写入记录失败。" };
     }
 
-    revalidateMocPage(mocId);
+    revalidateBuildSubjectPaths(kindRaw, subjectId);
     return { ok: true };
   } catch {
     return { ok: false, error: "上传失败，请重试。" };
   }
 }
 
-export async function deleteMocAttachmentAction(
-  mocIdRaw: string,
+export async function uploadMocAttachmentAction(
+  formData: FormData
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return uploadBuildAttachmentAction(formData);
+}
+
+export async function deleteBuildAttachmentAction(
+  subjectKind: BuildSubjectKind,
+  subjectIdRaw: string,
   attachmentId: number
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const mocId = mocIdRaw.trim();
-  if (!mocId || mocId.length > BUILD_UPLOAD_MAX_ID_LEN) {
-    return { ok: false, error: "MOC ID 无效。" };
+  const subjectId = subjectIdRaw.trim();
+  if (!subjectId || subjectId.length > BUILD_UPLOAD_MAX_ID_LEN) {
+    return { ok: false, error: "主体 ID 无效。" };
   }
-  if (!isSafeBuildSubjectId(BUILD_SUBJECT_MOC, mocId)) {
-    return { ok: false, error: "MOC ID 含有非法字符。" };
+  if (!isSafeBuildSubjectId(subjectKind, subjectId)) {
+    return { ok: false, error: "主体 ID 含有非法字符。" };
   }
   if (!Number.isFinite(attachmentId) || attachmentId <= 0) {
     return { ok: false, error: "附件 ID 无效。" };
@@ -123,8 +130,8 @@ export async function deleteMocAttachmentAction(
       .where(
         and(
           eq(buildAttachments.id, attachmentId),
-          eq(buildAttachments.subjectKind, BUILD_SUBJECT_MOC),
-          eq(buildAttachments.subjectId, mocId)
+          eq(buildAttachments.subjectKind, subjectKind),
+          eq(buildAttachments.subjectId, subjectId)
         )
       )
       .limit(1);
@@ -134,12 +141,19 @@ export async function deleteMocAttachmentAction(
     }
 
     await db.delete(buildAttachments).where(eq(buildAttachments.id, row.id));
-    const abs = path.join(buildUploadAbsoluteDir(BUILD_SUBJECT_MOC, mocId), row.storedFile);
+    const abs = path.join(buildUploadAbsoluteDir(subjectKind, subjectId), row.storedFile);
     await fs.unlink(abs).catch(() => {});
 
-    revalidateMocPage(mocId);
+    revalidateBuildSubjectPaths(subjectKind, subjectId);
     return { ok: true };
   } catch {
     return { ok: false, error: "删除失败，请重试。" };
   }
+}
+
+export async function deleteMocAttachmentAction(
+  mocIdRaw: string,
+  attachmentId: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return deleteBuildAttachmentAction(BUILD_SUBJECT_MOC, mocIdRaw, attachmentId);
 }

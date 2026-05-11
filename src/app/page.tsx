@@ -34,11 +34,11 @@ export default async function HomePage() {
   const stats = [
     { label: "零件种类", value: partsRow[0]?.c ?? 0, href: "/parts" },
     { label: "颜色", value: colorsRow[0]?.c ?? 0, href: "/colors" },
-    { label: "套装（去重 set_num）", value: setsRow[0]?.c ?? 0, href: "/sets" },
+    { label: "套装（去重 set_num）", value: setsRow[0]?.c ?? 0, href: "/sets/catalog" },
     {
       label: "库存行（套装零件表）",
       value: invPartsRow[0]?.c ?? 0,
-      href: "/sets",
+      href: "/sets/catalog",
     },
     { label: "元素（零件+颜色）", value: elementsRow[0]?.c ?? 0, href: "/parts" },
     { label: "零件关系", value: relRow[0]?.c ?? 0, href: "/parts" },
