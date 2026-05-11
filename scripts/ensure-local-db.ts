@@ -84,6 +84,14 @@ async function main() {
   await fs.promises.mkdir(path.dirname(DB_PATH), { recursive: true });
   const tmp = `${DB_PATH}.tmp`;
   await pipeline(createReadStream(GZ_PATH), createGunzip(), createWriteStream(tmp));
+  /* 覆盖主库前去掉旧 WAL/SHM，否则 SQLite 可能把旧会话的 WAL 套到新主文件上 */
+  for (const side of [`${DB_PATH}-wal`, `${DB_PATH}-shm`]) {
+    try {
+      await fs.promises.unlink(side);
+    } catch {
+      /* 无则忽略 */
+    }
+  }
   await fs.promises.rename(tmp, DB_PATH);
   try {
     await fs.promises.unlink(IMPORT_MARK_PATH);
