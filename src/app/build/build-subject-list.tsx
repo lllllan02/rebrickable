@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
@@ -6,12 +7,19 @@ import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { getDb } from "@/db/client";
 import { buildImages, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
-import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import type { BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
-export async function BuildSubjectListPage({ kind }: { kind: BuildSubjectKind }) {
+export async function BuildSubjectListPage({
+  kind,
+  officialCatalogSection,
+}: {
+  kind: BuildSubjectKind;
+  /** 插入在上传区之后（例如套装页的官方清单，布局与 MOC 列表卡片一致） */
+  officialCatalogSection?: ReactNode;
+}) {
   const ui = buildSubjectUi(kind);
   const db = getDb();
   const rows = await db
@@ -67,12 +75,27 @@ export async function BuildSubjectListPage({ kind }: { kind: BuildSubjectKind })
           {ui.noun} {ui.listTitleSuffix}
         </h1>
         <p className="page-description">
-          在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
-          <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
+          {officialCatalogSection != null ? (
+            <>
+              与 MOC 页相同：先使用下方上传入口导入缺货表 CSV，在预览页保存到本地 SQLite。上传区下方为已导入的 Rebrickable
+              官方套装（卡片列表，可搜索分页）；最下方为已存至本地的「已存零件表」。已存{ui.noun}
+              的封面取<strong className="font-medium text-[var(--text)]">最早上传</strong>
+              的参考图，可在详情页改显示名称与标签。
+            </>
+          ) : (
+            <>
+              在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
+              <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
+            </>
+          )}
         </p>
       </section>
       <BuildPartsSheetUpload kind={kind} />
+      {officialCatalogSection ?? null}
       <div className="table-shell">
+        {officialCatalogSection != null ? (
+          <h2 className="section-title mb-4 mt-10 text-[var(--text)]">已存零件表</h2>
+        ) : null}
         {rows.length === 0 ? (
           <p className="px-2 py-6 text-sm text-[var(--muted)]">
             尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
@@ -152,14 +175,6 @@ export async function BuildSubjectListPage({ kind }: { kind: BuildSubjectKind })
           </ul>
         )}
       </div>
-      {kind !== BUILD_SUBJECT_MOC ? (
-        <p className="text-center text-xs text-[var(--muted)]">
-          <Link href="/sets/catalog" className="text-[var(--accent)] underline underline-offset-2">
-            套装目录
-          </Link>
-          ：按 set_num 浏览导入的全部官方清单（与上方「已存零件表」独立）。
-        </p>
-      ) : null}
     </div>
   );
 }

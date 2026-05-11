@@ -84,6 +84,15 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
     CREATE INDEX IF NOT EXISTS build_attachments_subject_idx ON build_attachments(subject_kind, subject_id);
   `);
 
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS themes (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      parent_id INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS themes_parent_idx ON themes(parent_id);
+  `);
+
   if (tableExists(sqlite, "moc_saved_parts_sheets")) {
     sqlite.exec(`
       INSERT OR IGNORE INTO build_saved_parts_sheets (

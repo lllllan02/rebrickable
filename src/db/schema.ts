@@ -48,6 +48,17 @@ export const elements = sqliteTable(
   (t) => [index("elements_part_idx").on(t.partNum)]
 );
 
+/** Rebrickable themes.csv */
+export const legoThemes = sqliteTable(
+  "themes",
+  {
+    id: integer("id").primaryKey(),
+    name: text("name").notNull(),
+    parentId: integer("parent_id"),
+  },
+  (t) => [index("themes_parent_idx").on(t.parentId)]
+);
+
 /** Rebrickable sets.csv：含套装盒图 img_url（与 inventory 里的零件图不同） */
 export const legoSets = sqliteTable(
   "sets",
@@ -55,7 +66,7 @@ export const legoSets = sqliteTable(
     setNum: text("set_num").primaryKey(),
     name: text("name").notNull(),
     year: integer("year"),
-    themeId: integer("theme_id"),
+    themeId: integer("theme_id").references(() => legoThemes.id),
     numParts: integer("num_parts"),
     imgUrl: text("img_url"),
   },

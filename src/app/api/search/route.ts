@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, isNotNull, like, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, like, notInArray, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { colors, elements, legoSets, parts } from "@/db/schema";
+import { colors, elements, inventories, legoSets, parts } from "@/db/schema";
 import { colorDomId, elementDomId } from "@/lib/dom-anchors";
 import { likeFragment } from "@/lib/search";
 
@@ -35,16 +35,40 @@ export async function GET(req: Request) {
       .where(or(like(parts.name, pattern), like(parts.partNum, pattern)))
       .orderBy(asc(parts.partNum))
       .limit(LIMIT),
-    db
-      .select({
-        setNum: legoSets.setNum,
-        name: legoSets.name,
-        imgUrl: legoSets.imgUrl,
-      })
-      .from(legoSets)
-      .where(or(like(legoSets.name, pattern), like(legoSets.setNum, pattern)))
-      .orderBy(asc(legoSets.setNum))
-      .limit(LIMIT),
+    (async () => {
+      const fromLego = await db
+        .select({
+          setNum: legoSets.setNum,
+          name: legoSets.name,
+          imgUrl: legoSets.imgUrl,
+        })
+        .from(legoSets)
+        .where(or(like(legoSets.name, pattern), like(legoSets.setNum, pattern)))
+        .orderBy(asc(legoSets.setNum))
+        .limit(LIMIT);
+      const seen = new Set(fromLego.map((r) => r.setNum));
+      const need = LIMIT - fromLego.length;
+      if (need <= 0) return fromLego;
+      const invOnly = await db
+        .select({ setNum: inventories.setNum })
+        .from(inventories)
+        .where(
+          seen.size > 0
+            ? and(like(inventories.setNum, pattern), notInArray(inventories.setNum, [...seen]))
+            : like(inventories.setNum, pattern)
+        )
+        .groupBy(inventories.setNum)
+        .orderBy(asc(inventories.setNum))
+        .limit(need);
+      return [
+        ...fromLego,
+        ...invOnly.map((r) => ({
+          setNum: r.setNum,
+          name: "仅有官方清单（未在 sets.csv）",
+          imgUrl: null as string | null,
+        })),
+      ];
+    })(),
     db
       .select({
         id: colors.id,

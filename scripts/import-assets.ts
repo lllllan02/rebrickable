@@ -69,6 +69,7 @@ function ensureSchema(db: Database.Database) {
     DROP TABLE IF EXISTS elements;
     DROP TABLE IF EXISTS inventories;
     DROP TABLE IF EXISTS sets;
+    DROP TABLE IF EXISTS themes;
     DROP TABLE IF EXISTS parts;
     DROP TABLE IF EXISTS part_categories;
     DROP TABLE IF EXISTS colors;
@@ -105,6 +106,13 @@ function ensureSchema(db: Database.Database) {
       design_id TEXT
     );
     CREATE INDEX elements_part_idx ON elements(part_num);
+
+    CREATE TABLE themes (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      parent_id INTEGER
+    );
+    CREATE INDEX themes_parent_idx ON themes(parent_id);
 
     CREATE TABLE sets (
       set_num TEXT PRIMARY KEY,
@@ -267,6 +275,29 @@ async function loadElements(db: Database.Database) {
   if (buf.length) tx(buf);
 }
 
+async function loadThemes(db: Database.Database) {
+  const full = path.join(ASSETS, "themes.csv.gz");
+  if (!fs.existsSync(full)) {
+    console.warn(
+      "未找到 assets/themes.csv.gz，已跳过；套装列表中的「主题」名将无法显示（可从 Rebrickable 下载页获取该文件）。"
+    );
+    return;
+  }
+  const ins = db.prepare(`INSERT INTO themes (id, name, parent_id) VALUES (?, ?, ?)`);
+  const tx = db.transaction((rows: [number, string, number | null][]) => {
+    for (const r of rows) ins.run(...r);
+  });
+  const buf: [number, string, number | null][] = [];
+  for await (const row of readGzCsv("themes.csv.gz")) {
+    buf.push([intReq(row.id), textReq(row.name), intOrNull(row.parent_id)]);
+    if (buf.length >= BATCH) {
+      tx(buf);
+      buf.length = 0;
+    }
+  }
+  if (buf.length) tx(buf);
+}
+
 async function loadSets(db: Database.Database) {
   const full = path.join(ASSETS, "sets.csv.gz");
   if (!fs.existsSync(full)) {
@@ -405,6 +436,8 @@ async function main() {
   await loadParts(db);
   console.log("导入 elements…");
   await loadElements(db);
+  console.log("导入 themes（套装主题）…");
+  await loadThemes(db);
   console.log("导入 sets（套装元数据与盒图）…");
   await loadSets(db);
   console.log("导入 inventories…");

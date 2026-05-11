@@ -55,7 +55,7 @@ export default async function SetDetailPage({ params }: Props) {
       })
       .from(inventories)
       .where(eq(inventories.setNum, setNum))
-      .orderBy(desc(inventories.version))
+      .orderBy(desc(inventories.version), desc(inventories.id))
       .limit(1),
     db
       .select({
@@ -275,8 +275,8 @@ export default async function SetDetailPage({ params }: Props) {
             ) : null}
             <p className="mt-3 text-xs text-[var(--muted)]">
               其他套装请见{" "}
-              <Link href="/sets/catalog" className="text-[var(--accent)] underline underline-offset-2">
-                套装目录
+              <Link href="/sets" className="text-[var(--accent)] underline underline-offset-2">
+                套装列表
               </Link>
               。
             </p>

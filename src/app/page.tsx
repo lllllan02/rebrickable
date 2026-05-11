@@ -34,11 +34,11 @@ export default async function HomePage() {
   const stats = [
     { label: "零件种类", value: partsRow[0]?.c ?? 0, href: "/parts" },
     { label: "颜色", value: colorsRow[0]?.c ?? 0, href: "/colors" },
-    { label: "套装（去重 set_num）", value: setsRow[0]?.c ?? 0, href: "/sets/catalog" },
+    { label: "套装（去重 set_num）", value: setsRow[0]?.c ?? 0, href: "/sets" },
     {
       label: "库存行（套装零件表）",
       value: invPartsRow[0]?.c ?? 0,
-      href: "/sets/catalog",
+      href: "/sets",
     },
     { label: "元素（零件+颜色）", value: elementsRow[0]?.c ?? 0, href: "/parts" },
     { label: "零件关系", value: relRow[0]?.c ?? 0, href: "/parts" },
@@ -75,8 +75,9 @@ export default async function HomePage() {
           <li>
             将 Rebrickable 导出的 gz CSV 放入{" "}
             <code className="code-pill">assets/</code>
-            （建议包含 <code className="code-pill">sets.csv.gz</code>
-            ，以便套装列表与详情显示官方盒图）
+            （建议包含 <code className="code-pill">sets.csv.gz</code> 与{" "}
+            <code className="code-pill">themes.csv.gz</code>
+            ，以便套装列表显示盒图与主题名）
           </li>
           <li>
             运行 <code className="code-pill">pnpm install</code> 与{" "}
