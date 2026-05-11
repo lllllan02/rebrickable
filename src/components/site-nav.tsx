@@ -7,6 +7,7 @@ const links = [
   { href: "/parts", label: "零件" },
   { href: "/sets", label: "套装" },
   { href: "/colors", label: "颜色" },
+  { href: "/shortage", label: "缺件表" },
 ] as const;
 
 export function SiteNav() {
