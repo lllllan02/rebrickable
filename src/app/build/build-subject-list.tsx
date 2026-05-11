@@ -7,8 +7,9 @@ import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { getDb } from "@/db/client";
 import { buildImages, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
-import type { BuildSubjectKind } from "@/lib/build-subject";
+import { BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
+import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
@@ -36,6 +37,7 @@ export async function BuildSubjectListPage({
 
   const coverStored = new Map<string, string>();
   const profileBySubject = new Map<string, { displayName: string; tags: string[] }>();
+  let officialHeroBySet = new Map<string, string | null>();
 
   if (subjectIds.length > 0) {
     const [profiles, imgs] = await Promise.all([
@@ -65,6 +67,10 @@ export async function BuildSubjectListPage({
         coverStored.set(im.subjectId, im.storedFile);
       }
     }
+
+    if (kind === BUILD_SUBJECT_SET) {
+      officialHeroBySet = await batchSetCatalogHeroUrls(subjectIds);
+    }
   }
 
   return (
@@ -78,9 +84,10 @@ export async function BuildSubjectListPage({
           {officialCatalogSection != null ? (
             <>
               与 MOC 页相同：先使用下方上传入口导入缺货表 CSV，在预览页保存到本地 SQLite。上传区下方为已导入的 Rebrickable
-              官方套装（卡片列表，可搜索分页）；最下方为已存至本地的「已存零件表」。已存{ui.noun}
-              的封面取<strong className="font-medium text-[var(--text)]">最早上传</strong>
-              的参考图，可在详情页改显示名称与标签。
+              官方套装（卡片列表，可搜索分页）；最下方为已存至本地的「已存零件表」。已存套装的列表封面与详情轮播首张一致：有官方盒图或清单零件图时取
+              <strong className="font-medium text-[var(--text)]">官方图</strong>
+              ，否则取<strong className="font-medium text-[var(--text)]">最早上传</strong>
+              的参考图。可在详情页改显示名称与标签。
             </>
           ) : (
             <>
@@ -108,7 +115,12 @@ export async function BuildSubjectListPage({
               const title = displayName || `${ui.noun} ${r.subjectId}`;
               const tags = prof?.tags ?? [];
               const stored = coverStored.get(r.subjectId);
-              const coverUrl = stored ? buildImagePublicPath(kind, r.subjectId, stored) : null;
+              const uploadCoverUrl = stored ? buildImagePublicPath(kind, r.subjectId, stored) : null;
+              const officialUrl = kind === BUILD_SUBJECT_SET ? officialHeroBySet.get(r.subjectId) ?? null : null;
+              const coverUrl =
+                kind === BUILD_SUBJECT_SET
+                  ? (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl
+                  : uploadCoverUrl;
               const detailHref = buildSubjectDetailPath(kind, r.subjectId);
               const savedAt = r.updatedAt.slice(0, 19).replace("T", " ");
 

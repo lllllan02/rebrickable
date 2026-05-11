@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 
 import { deleteBuildImageAction, uploadBuildImageAction } from "@/app/mocs/moc-detail-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
@@ -46,13 +46,34 @@ export type MocGalleryImage = {
   createdAt: string;
 };
 
+/** 轮播首张：官方目录图（不可通过本组件删除） */
+export type CatalogLeadCover = {
+  url: string;
+  alt: string;
+  heroIsSetBox: boolean;
+};
+
+type CarouselSlide =
+  | { kind: "catalog"; url: string; alt: string; heroIsSetBox: boolean }
+  | { kind: "upload"; id: number; url: string; originalName: string | null; createdAt: string };
+
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
   images: MocGalleryImage[];
+  /** 插在最前；与上传图共用同一轮播，第 1 张即封面 */
+  catalogLeadCover?: CatalogLeadCover | null;
+  /** `set`：空状态与无障碍说明按套装场景措辞 */
+  galleryKind?: "default" | "set";
 };
 
-export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, images }: Props) {
+export function MocImageCarousel({
+  subjectKind = BUILD_SUBJECT_MOC,
+  subjectId,
+  images,
+  catalogLeadCover = null,
+  galleryKind = "default",
+}: Props) {
   const ui = buildSubjectUi(subjectKind);
   const router = useRouter();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -63,13 +84,33 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const slides: CarouselSlide[] = useMemo(() => {
+    const uploads: CarouselSlide[] = images.map((im) => ({ kind: "upload" as const, ...im }));
+    const c = catalogLeadCover;
+    const lead = c?.url?.trim();
+    if (lead && c) {
+      return [
+        {
+          kind: "catalog" as const,
+          url: lead,
+          alt: c.alt,
+          heroIsSetBox: c.heroIsSetBox,
+        },
+        ...uploads,
+      ];
+    }
+    return uploads;
+  }, [catalogLeadCover, images]);
+
+  const slideCount = slides.length;
+
   useEffect(() => {
-    if (images.length === 0) {
+    if (slideCount === 0) {
       setIdx(0);
       return;
     }
-    setIdx((i) => Math.min(i, images.length - 1));
-  }, [images.length]);
+    setIdx((i) => Math.min(i, slideCount - 1));
+  }, [slideCount]);
 
   useEffect(() => {
     thumbRefs.current[idx]?.scrollIntoView({
@@ -127,10 +168,10 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
 
   const go = useCallback(
     (delta: number) => {
-      if (images.length === 0) return;
-      setIdx((i) => (i + delta + images.length) % images.length);
+      if (slideCount === 0) return;
+      setIdx((i) => (i + delta + slideCount) % slideCount);
     },
-    [images.length]
+    [slideCount]
   );
 
   useEffect(() => {
@@ -151,8 +192,8 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
   }, [go]);
 
   const onDeleteCurrent = useCallback(() => {
-    const cur = images[idx];
-    if (!cur) return;
+    const cur = slides[idx];
+    if (!cur || cur.kind !== "upload") return;
     setMessage(null);
     setError(null);
     startTransition(async () => {
@@ -164,9 +205,10 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
         setError(r.error);
       }
     });
-  }, [images, idx, router, subjectId, subjectKind]);
+  }, [slides, idx, router, subjectId, subjectKind]);
 
-  const current = images[idx] ?? null;
+  const current = slides[idx] ?? null;
+  const currentIsUpload = current?.kind === "upload";
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -179,22 +221,39 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
         className="relative min-h-[min(52vw,22rem)] outline-none ring-[var(--accent)]/40 focus-visible:ring-2 sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]"
       >
         <p id={regionId} className="sr-only">
-          {ui.noun} 参考图轮播，左右方向键切换；本区域聚焦时可使用键盘。
+          {galleryKind === "set"
+            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图），左右方向键切换；本区域聚焦时可使用键盘。`
+            : `${ui.noun} 参考图轮播，左右方向键切换；本区域聚焦时可使用键盘。`}
         </p>
 
-        {images.length === 0 ? (
+        {slideCount === 0 ? (
           <div className="flex min-h-[min(52vw,22rem)] flex-col items-center justify-center gap-4 rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-10 text-center sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]">
-            <p className="max-w-sm text-sm text-[var(--muted)]">
-              尚无参考图。支持 JPEG / PNG / WebP / GIF，单张不超过 8 MB；可{" "}
-              <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
-                ⌘V
-              </kbd>{" "}
-              /{" "}
-              <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
-                Ctrl+V
-              </kbd>{" "}
-              粘贴截图。列表封面使用上传时间最早的一张。
-            </p>
+            {galleryKind === "set" ? (
+              <p className="max-w-sm text-sm text-[var(--muted)]">
+                尚无套装官方图与参考图。支持 JPEG / PNG / WebP / GIF，单张不超过 8 MB；可{" "}
+                <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
+                  ⌘V
+                </kbd>{" "}
+                /{" "}
+                <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
+                  Ctrl+V
+                </kbd>{" "}
+                粘贴截图。导入目录并存在官方盒图或清单零件图时，轮播首张即为封面；否则以{" "}
+                <strong className="font-medium text-[var(--text)]">上传时间最早</strong> 的一张参考图为首张与列表封面。
+              </p>
+            ) : (
+              <p className="max-w-sm text-sm text-[var(--muted)]">
+                尚无参考图。支持 JPEG / PNG / WebP / GIF，单张不超过 8 MB；可{" "}
+                <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
+                  ⌘V
+                </kbd>{" "}
+                /{" "}
+                <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
+                  Ctrl+V
+                </kbd>{" "}
+                粘贴截图。列表封面使用上传时间最早的一张。
+              </p>
+            )}
           </div>
         ) : (
           <div className="relative overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-3)]">
@@ -202,16 +261,20 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
               {current ? (
                 <Image
                   src={current.url}
-                  alt={current.originalName ?? `${ui.noun} 参考图`}
+                  alt={
+                    current.kind === "catalog"
+                      ? current.alt
+                      : (current.originalName ?? `${ui.noun} 参考图`)
+                  }
                   fill
                   className="object-contain p-2"
                   sizes="(max-width: 1024px) 100vw, 66vw"
                   priority={idx === 0}
-                  unoptimized
+                  unoptimized={current.kind === "upload"}
                 />
               ) : null}
             </div>
-            {images.length > 1 ? (
+            {slideCount > 1 ? (
               <>
                 <button
                   type="button"
@@ -234,24 +297,32 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
               </>
             ) : null}
 
-            {images.length > 1 ? (
+            {slideCount > 1 ? (
               <div
                 className="flex gap-2 overflow-x-auto border-t border-[var(--border-soft)] bg-[var(--surface-2)]/80 px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:thin]"
                 role="tablist"
                 aria-label="缩略图，点击切换大图"
               >
-                {images.map((img, i) => (
+                {slides.map((img, i) => (
                   <button
-                    key={img.id}
+                    key={img.kind === "catalog" ? "__catalog_lead__" : img.id}
                     ref={(el) => {
                       thumbRefs.current[i] = el;
                     }}
                     type="button"
                     role="tab"
                     aria-selected={i === idx}
-                    aria-label={`第 ${i + 1} 张${img.originalName ? `：${img.originalName}` : ""}`}
+                    aria-label={
+                      img.kind === "catalog"
+                        ? `第 1 张：官方目录图（封面）`
+                        : `第 ${i + 1} 张${img.originalName ? `：${img.originalName}` : ""}`
+                    }
                     disabled={pending}
-                    title={img.originalName ?? `图片 ${i + 1}`}
+                    title={
+                      img.kind === "catalog"
+                        ? "官方目录图（封面）"
+                        : (img.originalName ?? `图片 ${i + 1}`)
+                    }
                     className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-50 ${
                       i === idx
                         ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--surface-2)]"
@@ -265,7 +336,7 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
                       fill
                       className="object-cover"
                       sizes="56px"
-                      unoptimized
+                      unoptimized={img.kind === "upload"}
                     />
                   </button>
                 ))}
@@ -290,7 +361,7 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
           />
           {pending ? "处理中…" : "上传图片"}
         </label>
-        {images.length > 0 ? (
+        {currentIsUpload ? (
           <button
             type="button"
             className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-red-400/40 hover:bg-[var(--danger-soft)] hover:text-red-200/95 sm:text-sm"
@@ -300,14 +371,16 @@ export function MocImageCarousel({ subjectKind = BUILD_SUBJECT_MOC, subjectId, i
             删除当前图
           </button>
         ) : null}
-        {images.length > 0 ? (
+        {slideCount > 0 ? (
           <span className="text-xs text-[var(--muted)] tabular-nums">
-            {idx + 1} / {images.length}
+            {idx + 1} / {slideCount}
           </span>
         ) : null}
       </div>
 
-      {current?.originalName ? (
+      {current?.kind === "catalog" ? (
+        <p className="truncate text-center text-[11px] text-[var(--muted)]">官方目录图（封面）</p>
+      ) : current?.originalName ? (
         <p className="truncate text-center text-[11px] text-[var(--muted)]" title={current.originalName}>
           {current.originalName}
         </p>

@@ -1,11 +1,9 @@
-import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq, isNotNull, min, ne } from "drizzle-orm";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadBuildPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
-import { MocDetailEditorial } from "@/app/mocs/moc-detail-editorial";
+import { MocDetailEditorial, type SetDetailOfficialMeta } from "@/app/mocs/moc-detail-editorial";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import type { MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import type { MocGalleryImage } from "@/app/mocs/moc-image-carousel";
@@ -196,6 +194,19 @@ export default async function SetDetailPage({ params }: Props) {
   const spareQty = lines.reduce((a, l) => a + (l.isSpare ? l.quantity : 0), 0);
   const uniqueParts = new Set(lines.map((l) => l.partNum)).size;
 
+  const setOfficial: SetDetailOfficialMeta = {
+    setNum,
+    catalogName: catalog?.name ?? null,
+    year: catalog?.year ?? null,
+    invVersion: inv.version,
+    invId: inv.id,
+    uniqueParts,
+    sumQty,
+    spareQty,
+    heroThumb,
+    heroIsSetBox,
+  };
+
   return (
     <div className="page-stack">
       <MocDetailEditorial
@@ -206,83 +217,8 @@ export default async function SetDetailPage({ params }: Props) {
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}
+        setOfficial={setOfficial}
       />
-
-      <section className="hero-panel">
-        <p className="page-kicker">Rebrickable 目录</p>
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-          <div className="media-box media-box-lg mx-auto shrink-0 sm:mx-0 sm:w-56">
-            {heroThumb ? (
-              <Image
-                src={heroThumb}
-                alt={
-                  heroIsSetBox
-                    ? `${setNum} 套装盒照`
-                    : `${setNum} 清单中的零件示意图`
-                }
-                width={224}
-                height={224}
-                className="box-border h-full w-full object-contain p-3"
-                sizes="(max-width: 640px) 100vw, 224px"
-                priority
-              />
-            ) : (
-              <div
-                className="flex aspect-square h-full min-h-[12rem] w-full items-center justify-center px-4 text-center text-sm text-[var(--muted)]"
-                title="无盒图且无清单零件图；可将 Rebrickable 的 sets.csv.gz 放入 assets 后执行 pnpm db:import"
-              >
-                无图
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold text-[var(--text)]">官方元数据与库存</h2>
-            <p className="mt-1 font-mono text-2xl font-extrabold tracking-tight text-[var(--accent)]">{setNum}</p>
-            {catalog?.name ? <p className="mt-1 text-base text-[var(--text)]">{catalog.name}</p> : null}
-            <dl className="meta-row mt-4 text-sm">
-              {catalog?.year != null ? (
-                <div>
-                  <dt className="inline text-[var(--text)]">年份：</dt>
-                  <dd className="inline">{catalog.year}</dd>
-                </div>
-              ) : null}
-              <div>
-                <dt className="inline text-[var(--text)]">库存版本：</dt>
-                <dd className="inline">{inv.version}</dd>
-              </div>
-              <div>
-                <dt className="inline text-[var(--text)]">inventory_id：</dt>
-                <dd className="inline font-mono">{inv.id}</dd>
-              </div>
-              <div>
-                <dt className="inline text-[var(--text)]">零件种类：</dt>
-                <dd className="inline">{uniqueParts.toLocaleString("zh-CN")}</dd>
-              </div>
-              <div>
-                <dt className="inline text-[var(--text)]">主件：</dt>
-                <dd className="inline">{sumQty.toLocaleString("zh-CN")} 粒</dd>
-              </div>
-              <div>
-                <dt className="inline text-[var(--text)]">备用件：</dt>
-                <dd className="inline">{spareQty.toLocaleString("zh-CN")} 粒</dd>
-              </div>
-            </dl>
-            {!heroIsSetBox && heroThumb ? (
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                当前为清单中的零件示意图；导入 <code className="code-pill">sets.csv.gz</code> 并重新执行{" "}
-                <code className="code-pill">pnpm db:import</code> 后可显示官方套装盒图。
-              </p>
-            ) : null}
-            <p className="mt-3 text-xs text-[var(--muted)]">
-              其他套装请见{" "}
-              <Link href="/sets" className="text-[var(--accent)] underline underline-offset-2">
-                套装列表
-              </Link>
-              。
-            </p>
-          </div>
-        </div>
-      </section>
 
       <MocDetailPartsSection
         subjectKind={BUILD_SUBJECT_SET}

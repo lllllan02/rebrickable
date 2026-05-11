@@ -9,6 +9,20 @@ import { buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
 
+/** 套装详情：与 Rebrickable 目录同步的官方封面与库存元数据（并入主面板侧栏 / 主图区） */
+export type SetDetailOfficialMeta = {
+  setNum: string;
+  catalogName: string | null;
+  year: number | null;
+  invVersion: number;
+  invId: number;
+  uniqueParts: number;
+  sumQty: number;
+  spareQty: number;
+  heroThumb: string | null;
+  heroIsSetBox: boolean;
+};
+
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
@@ -18,6 +32,8 @@ type Props = {
   initialTags: string[];
   /** 已存零件表各行列 quantity 之和；无表时为 null */
   partTotalQty: number | null;
+  /** 仅套装：官方盒图 / 占位与目录元数据，与 MOC 主面板同栅格展示 */
+  setOfficial?: SetDetailOfficialMeta | null;
 };
 
 export function MocDetailEditorial({
@@ -28,16 +44,39 @@ export function MocDetailEditorial({
   initialDisplayName,
   initialTags,
   partTotalQty,
+  setOfficial = null,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const rbHref = ui.rebrickableUrl(subjectId);
   const listHref = buildSubjectListPath(subjectKind);
+  const o = setOfficial;
 
   return (
     <section className="hero-panel">
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-start lg:gap-10">
-        <div className="min-w-0 lg:col-span-2">
-          <MocImageCarousel subjectKind={subjectKind} subjectId={subjectId} images={images} />
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+          {o ? <p className="page-kicker">Rebrickable 目录</p> : null}
+          <MocImageCarousel
+            subjectKind={subjectKind}
+            subjectId={subjectId}
+            images={images}
+            catalogLeadCover={
+              o && o.heroThumb
+                ? {
+                    url: o.heroThumb,
+                    alt: o.heroIsSetBox ? `${o.setNum} 套装盒照` : `${o.setNum} 清单中的零件示意图`,
+                    heroIsSetBox: o.heroIsSetBox,
+                  }
+                : null
+            }
+            galleryKind={o ? "set" : "default"}
+          />
+          {o && !o.heroIsSetBox && o.heroThumb ? (
+            <p className="text-xs text-[var(--muted)]">
+              轮播首张为清单中的零件示意图；导入 <code className="code-pill">sets.csv.gz</code> 并重新执行{" "}
+              <code className="code-pill">pnpm db:import</code> 后可显示官方套装盒图。
+            </p>
+          ) : null}
         </div>
 
         <aside className="flex min-w-0 flex-col gap-5 border-t border-[var(--border-soft)] pt-6 lg:col-span-1 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
@@ -50,6 +89,49 @@ export function MocDetailEditorial({
             initialTags={initialTags}
             partTotalQty={partTotalQty}
           />
+
+          {o ? (
+            <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] pt-4">
+              <h2 className="text-base font-semibold text-[var(--text)]">官方元数据与库存</h2>
+              <p className="font-mono text-xl font-extrabold tracking-tight text-[var(--accent)]">{o.setNum}</p>
+              {o.catalogName ? <p className="text-sm text-[var(--text)]">{o.catalogName}</p> : null}
+              <dl className="meta-row text-sm">
+                {o.year != null ? (
+                  <div>
+                    <dt className="inline text-[var(--text)]">年份：</dt>
+                    <dd className="inline">{o.year}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="inline text-[var(--text)]">库存版本：</dt>
+                  <dd className="inline">{o.invVersion}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-[var(--text)]">inventory_id：</dt>
+                  <dd className="inline font-mono">{o.invId}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-[var(--text)]">零件种类：</dt>
+                  <dd className="inline">{o.uniqueParts.toLocaleString("zh-CN")}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-[var(--text)]">主件：</dt>
+                  <dd className="inline">{o.sumQty.toLocaleString("zh-CN")} 粒</dd>
+                </div>
+                <div>
+                  <dt className="inline text-[var(--text)]">备用件：</dt>
+                  <dd className="inline">{o.spareQty.toLocaleString("zh-CN")} 粒</dd>
+                </div>
+              </dl>
+              <p className="text-xs text-[var(--muted)]">
+                其他套装请见{" "}
+                <Link href="/sets" className="text-[var(--accent)] underline underline-offset-2">
+                  套装列表
+                </Link>
+                。
+              </p>
+            </div>
+          ) : null}
 
           <MocAttachmentsPanel subjectKind={subjectKind} subjectId={subjectId} attachments={attachments} />
 
