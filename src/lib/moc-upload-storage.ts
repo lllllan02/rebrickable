@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
 
-/** 与 `parts-sheet/actions` 中 MOC ID 上限一致 */
+/** 与 `moc-parts-sheet-actions` 中 MOC ID 上限一致 */
 export const MOC_UPLOAD_MAX_ID_LEN = 128;
 
 export const MOC_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;

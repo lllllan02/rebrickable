@@ -28,6 +28,23 @@ export type LoadMocPartsSheetResult =
   | { ok: true; mocId: string; skippedHeader: boolean; items: ShortageResolveItem[]; savedAt: string }
   | { ok: false; error: string };
 
+/** 是否已有该 MOC 的已存零件表（用于列表直传前的重复提示） */
+export async function mocHasSavedPartsSheet(mocIdRaw: string): Promise<boolean> {
+  const mocId = mocIdRaw.trim();
+  if (!mocId || mocId.length > MAX_MOC_ID_LEN) return false;
+  try {
+    const db = getDb();
+    const rows = await db
+      .select({ mocId: mocSavedPartsSheets.mocId })
+      .from(mocSavedPartsSheets)
+      .where(eq(mocSavedPartsSheets.mocId, mocId))
+      .limit(1);
+    return Boolean(rows[0]);
+  } catch {
+    return false;
+  }
+}
+
 export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMocPartsSheetResult> {
   const mocId = mocIdRaw.trim();
   if (!mocId || mocId.length > MAX_MOC_ID_LEN) {
@@ -163,6 +180,7 @@ export async function saveMocPartsSheetToDb(input: {
     });
 
     revalidatePath("/mocs");
+    revalidatePath("/mocs/import");
     revalidatePath(`/mocs/${encodeURIComponent(mocId)}`);
     return { ok: true, savedAt };
   } catch {

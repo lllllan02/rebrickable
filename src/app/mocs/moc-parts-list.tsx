@@ -16,7 +16,7 @@ type Props = {
   items: ShortageResolveItem[];
   skippedHeader: boolean;
   savedAt: string;
-  /** 链到零件表（含 loadMoc），便于对照编辑 */
+  /** 链到导入页（含 loadMoc），便于对照编辑 */
   partsSheetHref?: string;
 };
 
@@ -55,12 +55,12 @@ export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref }: 
       </div>
 
       <p className="text-xs leading-relaxed text-[var(--muted)]">
-        分类与「零件表」页一致：未收录零件不参与分类；仅作浏览筛选。
+        分类与导入页一致：未收录零件不参与分类；仅作浏览筛选。
         {partsSheetHref ? (
           <>
             {" "}
             <Link href={partsSheetHref} className="text-[var(--accent)] underline underline-offset-2">
-              在零件表中编辑
+              打开导入页编辑
             </Link>
             。
           </>

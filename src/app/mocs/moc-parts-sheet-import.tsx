@@ -2,20 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { parseMocIdFromFilename } from "@/lib/parts-sheet-moc-id";
+import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 
 import {
   type InitialMocSheetFromServer,
   loadMocPartsSheetFromDb,
   saveMocPartsSheetToDb,
-} from "./actions";
-import {
-  PARTS_SHEET_TAG_LABELS,
-  PARTS_SHEET_TAG_ORDER,
-  type PartsSheetTag,
-} from "@/lib/parts-sheet-tags";
+} from "./moc-parts-sheet-actions";
+import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 import {
@@ -23,11 +21,6 @@ import {
   rowMatchesSheetListFilter,
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
-
-type ResolveResponse = {
-  skippedHeader: boolean;
-  items: ShortageResolveItem[];
-};
 
 type ShortageRow = ShortageResolveItem & { rowId: string };
 
@@ -52,37 +45,6 @@ function rowsToCsv(rows: ShortageRow[], includeHeader: boolean): string {
     })),
     { includeHeader }
   );
-}
-
-async function postResolve(csv: string): Promise<ResolveResponse & { error?: string; lineNumber?: number | null }> {
-  const res = await fetch("/api/parts-sheet/resolve", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ csv }),
-  });
-  const data: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const err =
-      typeof data === "object" &&
-      data !== null &&
-      "error" in data &&
-      typeof (data as { error: unknown }).error === "string"
-        ? (data as { error: string }).error
-        : `请求失败（${res.status}）`;
-    const ln =
-      typeof data === "object" &&
-      data !== null &&
-      "lineNumber" in data &&
-      typeof (data as { lineNumber: unknown }).lineNumber === "number"
-        ? (data as { lineNumber: number }).lineNumber
-        : null;
-    return { skippedHeader: false, items: [], error: err, lineNumber: ln };
-  }
-  const ok = data as ResolveResponse;
-  return {
-    skippedHeader: Boolean(ok.skippedHeader),
-    items: Array.isArray(ok.items) ? ok.items : [],
-  };
 }
 
 function downloadText(filename: string, text: string) {
@@ -126,13 +88,17 @@ type PartsSheetImportProps = {
   requestedLoadMocId?: string;
   initialMocSheet?: InitialMocSheetFromServer | null;
   initialMocLoadError?: string | null;
+  /** 在 `/mocs/import`：保存成功后跳转 MOC 详情 */
+  mocImportMode?: boolean;
 };
 
 export function PartsSheetImport({
   requestedLoadMocId,
   initialMocSheet,
   initialMocLoadError,
+  mocImportMode = false,
 }: PartsSheetImportProps) {
+  const router = useRouter();
   const clearedByEditRef = useRef(false);
   const [items, setItems] = useState<ShortageRow[] | null>(null);
   const [skippedHeader, setSkippedHeader] = useState(false);
@@ -263,7 +229,7 @@ export function PartsSheetImport({
     if (fromName) setMocId(fromName);
     try {
       const csv = await file.text();
-      const result = await postResolve(csv);
+      const result = await postResolvePartsSheetCsv(csv);
       if ("error" in result && result.error) {
         setError(result.error);
         setLineNumber(result.lineNumber ?? null);
@@ -310,7 +276,7 @@ export function PartsSheetImport({
     setLineNumber(null);
     colorDialogRef.current?.close();
     try {
-      const result = await postResolve(csv);
+      const result = await postResolvePartsSheetCsv(csv);
       if ("error" in result && result.error) {
         setError(result.error);
         setLineNumber(result.lineNumber ?? null);
@@ -410,6 +376,10 @@ export function PartsSheetImport({
       }
       setError(null);
       setLineNumber(null);
+      if (mocImportMode) {
+        router.push(`/mocs/${encodeURIComponent(id)}`);
+        return;
+      }
       setMocLocalMessage(`已写入数据库（MOC ${id}，同一 ID 再次保存会覆盖）。`);
       scrollMocFeedbackIntoView();
     } catch {
@@ -419,7 +389,7 @@ export function PartsSheetImport({
     } finally {
       setMocActionBusy(false);
     }
-  }, [fileName, items, mocId, skippedHeader, scrollMocFeedbackIntoView]);
+  }, [fileName, items, mocId, skippedHeader, mocImportMode, router, scrollMocFeedbackIntoView]);
 
   const loadPartsSheetFromMocDb = useCallback(async () => {
     setMocLocalMessage(null);
@@ -945,7 +915,7 @@ export function PartsSheetImport({
             disabled={loading || exportBusy || mocActionBusy}
             onClick={() => void savePartsSheetToMocDb()}
           >
-            保存到数据库（按 MOC）
+            {mocImportMode ? "保存 MOC 零件表" : "保存到数据库（按 MOC）"}
           </button>
         </div>
         {mocLocalMessage ? (

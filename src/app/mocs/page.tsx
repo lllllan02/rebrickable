@@ -7,6 +7,8 @@ import { mocImages, mocProfiles, mocSavedPartsSheets } from "@/db/schema";
 import { mocImagePublicPath } from "@/lib/moc-image-public-path";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
+import { MocsPartsSheetUpload } from "./mocs-parts-sheet-upload";
+
 export const dynamic = "force-dynamic";
 
 export default async function MocsPage() {
@@ -56,20 +58,17 @@ export default async function MocsPage() {
     <div className="page-stack">
       <section className="hero-panel">
         <p className="page-kicker">MOC</p>
-        <h1 className="page-title">已存零件表（按 MOC）</h1>
+        <h1 className="page-title">MOC 与已存零件表</h1>
         <p className="page-description">
-          在{" "}
-          <Link href="/parts-sheet" className="underline">
-            零件表
-          </Link>{" "}
-          中编辑后可通过「保存到数据库」写入本地 SQLite；此处列出全部记录。封面取该 MOC{" "}
+          在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存 MOC。封面取该 MOC{" "}
           <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
         </p>
       </section>
+      <MocsPartsSheetUpload />
       <div className="table-shell">
         {rows.length === 0 ? (
           <p className="px-2 py-6 text-sm text-[var(--muted)]">
-            尚无已存记录。请打开零件表导入 CSV 后保存到数据库。
+            尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
           </p>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

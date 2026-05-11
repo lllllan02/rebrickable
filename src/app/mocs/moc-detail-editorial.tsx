@@ -43,7 +43,7 @@ export function MocDetailEditorial({
               在 Rebrickable 打开 MOC-{mocId}
             </a>
             <Link href={partsSheetHref} className="text-[var(--accent)] underline underline-offset-2">
-              在零件表中编辑并保存
+              编辑零件表并保存
             </Link>
             <Link href="/mocs" className="text-[var(--muted)] underline-offset-2 hover:text-[var(--text)] hover:underline">
               返回 MOC 列表

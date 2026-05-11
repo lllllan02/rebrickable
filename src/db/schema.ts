@@ -115,7 +115,7 @@ export const partRelationships = sqliteTable(
   ]
 );
 
-/** 零件表页按 MOC ID 保存的解析结果（JSON），同一 ID 再次保存即覆盖 */
+/** MOC 导入页按 MOC ID 保存的解析结果（JSON），同一 ID 再次保存即覆盖 */
 export const mocSavedPartsSheets = sqliteTable(
   "moc_saved_parts_sheets",
   {

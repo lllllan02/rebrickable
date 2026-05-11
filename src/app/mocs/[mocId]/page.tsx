@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 
-import { loadMocPartsSheetFromDb } from "@/app/parts-sheet/actions";
+import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { getDb } from "@/db/client";
 import { mocImages, mocProfiles } from "@/db/schema";
 import { mocImagePublicPath } from "@/lib/moc-image-public-path";
@@ -47,7 +47,7 @@ export default async function MocDetailPage({ params }: Props) {
   }));
 
   const rbHref = `https://rebrickable.com/mocs/MOC-${encodeURIComponent(mocId)}/`;
-  const partsSheetHref = `/parts-sheet?loadMoc=${encodeURIComponent(mocId)}`;
+  const partsSheetHref = `/mocs/import?loadMoc=${encodeURIComponent(mocId)}`;
 
   return (
     <div className="page-stack">
@@ -74,10 +74,10 @@ export default async function MocDetailPage({ params }: Props) {
           <p>暂无已存零件表：{sheet.error}</p>
           <p className="mt-2">
             可在{" "}
-            <Link href="/parts-sheet" className="text-[var(--accent)] underline">
-              零件表
+            <Link href="/mocs/import" className="text-[var(--accent)] underline">
+              零件表导入
             </Link>{" "}
-            导入 CSV 后保存到该 MOC ID。
+            页导入 CSV 后保存到该 MOC ID。
           </p>
         </section>
       )}
