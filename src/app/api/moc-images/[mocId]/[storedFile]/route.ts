@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db/client";
 import { mocImages } from "@/db/schema";
-import { mocUploadAbsoluteDir } from "@/lib/moc-upload-storage";
+import { isSafeMocIdForUploadPath, mocUploadAbsoluteDir } from "@/lib/moc-upload-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,10 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { mocId: rawMoc, storedFile: rawFile } = await ctx.params;
   const mocId = decodeURIComponent(rawMoc);
   const storedFile = decodeURIComponent(rawFile);
+
+  if (!isSafeMocIdForUploadPath(mocId)) {
+    return new NextResponse("Not found", { status: 404 });
+  }
 
   const db = getDb();
   const [row] = await db

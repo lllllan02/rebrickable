@@ -25,11 +25,6 @@
 .DS_Store
 .eslintcache
 *.pem
-/data/*.db
-/data/*.db-journal
-/data/*.db-shm
-/data/*.db-wal
-/data/moc-uploads/
 
 # debug
 npm-debug.log*
@@ -46,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local SQLite（体积大，由导入脚本生成，勿提交）
+/data/rebrickable.db

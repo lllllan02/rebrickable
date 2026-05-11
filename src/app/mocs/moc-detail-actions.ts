@@ -10,6 +10,7 @@ import { mocImages } from "@/db/schema";
 import {
   ensureMocUploadDir,
   isAllowedMocImageMime,
+  isSafeMocIdForUploadPath,
   makeStoredImageFileName,
   mocUploadAbsoluteDir,
   MOC_UPLOAD_MAX_BYTES,
@@ -44,6 +45,9 @@ export async function uploadMocImageAction(
 
   if (!mocId || mocId.length > MOC_UPLOAD_MAX_ID_LEN) {
     return { ok: false, error: "MOC ID 无效。" };
+  }
+  if (!isSafeMocIdForUploadPath(mocId)) {
+    return { ok: false, error: "MOC ID 含有非法字符。" };
   }
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "请选择图片文件。" };
@@ -106,6 +110,9 @@ export async function deleteMocImageAction(
   const mocId = mocIdRaw.trim();
   if (!mocId || mocId.length > MOC_UPLOAD_MAX_ID_LEN) {
     return { ok: false, error: "MOC ID 无效。" };
+  }
+  if (!isSafeMocIdForUploadPath(mocId)) {
+    return { ok: false, error: "MOC ID 含有非法字符。" };
   }
   if (!Number.isFinite(imageId) || imageId <= 0) {
     return { ok: false, error: "图片 ID 无效。" };

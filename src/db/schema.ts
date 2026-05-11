@@ -140,7 +140,7 @@ export const mocProfiles = sqliteTable(
   (t) => [index("moc_profiles_updated_idx").on(t.profileUpdatedAt)]
 );
 
-/** MOC 详情页用户上传的参考图（二进制在 data/moc-uploads/ 下，按 moc_id 哈希分子目录） */
+/** MOC 详情页用户上传的参考图（二进制在 data/moc-uploads/<moc_id>/ 下） */
 export const mocImages = sqliteTable(
   "moc_images",
   {

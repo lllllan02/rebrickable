@@ -16,8 +16,12 @@ const ALLOWED_MIME = new Set([
   "image/gif",
 ]);
 
-export function mocUploadDirSlug(mocId: string): string {
-  return crypto.createHash("sha256").update(mocId, "utf8").digest("hex");
+/** 作为单级目录名使用，禁止路径分隔与 `..` 以免逃出 `data/moc-uploads/` */
+export function isSafeMocIdForUploadPath(mocId: string): boolean {
+  if (!mocId || mocId.length > MOC_UPLOAD_MAX_ID_LEN) return false;
+  if (mocId === "." || mocId === "..") return false;
+  if (mocId.includes("/") || mocId.includes("\\") || mocId.includes("..")) return false;
+  return true;
 }
 
 export function mocUploadRootDir(cwd = process.cwd()): string {
@@ -25,7 +29,10 @@ export function mocUploadRootDir(cwd = process.cwd()): string {
 }
 
 export function mocUploadAbsoluteDir(mocId: string, cwd = process.cwd()): string {
-  return path.join(mocUploadRootDir(cwd), mocUploadDirSlug(mocId));
+  if (!isSafeMocIdForUploadPath(mocId)) {
+    throw new Error("Invalid MOC ID for upload path");
+  }
+  return path.join(mocUploadRootDir(cwd), mocId);
 }
 
 export function extFromImageMime(mime: string): string | null {
