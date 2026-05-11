@@ -18,6 +18,11 @@ import {
 } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
+import {
+  getSheetFilterOptionsFromItems,
+  rowMatchesSheetListFilter,
+  type SheetListFilter,
+} from "@/lib/parts-sheet-list-filter";
 
 type ResolveResponse = {
   skippedHeader: boolean;
@@ -25,15 +30,6 @@ type ResolveResponse = {
 };
 
 type ShortageRow = ShortageResolveItem & { rowId: string };
-
-type SheetListFilter = "all" | PartsSheetTag | "plain";
-
-function rowMatchesSheetFilter(r: ShortageRow, f: SheetListFilter): boolean {
-  if (f === "all") return true;
-  if (!r.partFound) return false;
-  if (f === "plain") return r.sheetTags.length === 0;
-  return r.sheetTags.includes(f);
-}
 
 type ColorOption = {
   id: number;
@@ -658,33 +654,7 @@ export function PartsSheetImport({
   const missingParts = items?.filter((i) => !i.partFound).length ?? 0;
   const noImage = items?.filter((i) => i.partFound && !i.imgUrl).length ?? 0;
 
-  const sheetCategoryPresence = useMemo(() => {
-    if (!items?.length) {
-      return { printed: false, minifig: false, sticker: false, plain: false };
-    }
-    let printed = false;
-    let minifig = false;
-    let sticker = false;
-    let plain = false;
-    for (const r of items) {
-      if (!r.partFound) continue;
-      if (r.sheetTags.includes("printed")) printed = true;
-      if (r.sheetTags.includes("minifig")) minifig = true;
-      if (r.sheetTags.includes("sticker")) sticker = true;
-      if (r.sheetTags.length === 0) plain = true;
-    }
-    return { printed, minifig, sticker, plain };
-  }, [items]);
-
-  const sheetFilterOptions = useMemo(() => {
-    const p = sheetCategoryPresence;
-    const opts: { id: SheetListFilter; label: string }[] = [{ id: "all", label: "全部" }];
-    if (p.printed) opts.push({ id: "printed", label: PARTS_SHEET_TAG_LABELS.printed });
-    if (p.minifig) opts.push({ id: "minifig", label: PARTS_SHEET_TAG_LABELS.minifig });
-    if (p.sticker) opts.push({ id: "sticker", label: PARTS_SHEET_TAG_LABELS.sticker });
-    if (p.plain) opts.push({ id: "plain", label: "普通" });
-    return opts;
-  }, [sheetCategoryPresence]);
+  const sheetFilterOptions = useMemo(() => getSheetFilterOptionsFromItems(items ?? []), [items]);
 
   useEffect(() => {
     if (sheetListFilter === "all") return;
@@ -694,7 +664,7 @@ export function PartsSheetImport({
 
   const listFiltered = useMemo(() => {
     if (!items?.length) return [];
-    return items.filter((r) => rowMatchesSheetFilter(r, sheetListFilter));
+    return items.filter((r) => rowMatchesSheetListFilter(r, sheetListFilter));
   }, [items, sheetListFilter]);
 
   const exportBarPercent =

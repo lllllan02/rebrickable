@@ -9,6 +9,8 @@ import { createGunzip } from "zlib";
 import { parse } from "csv-parse";
 import Database from "better-sqlite3";
 
+import { ensureMocImagesTable } from "../src/db/ensure-moc-images-table";
+import { ensureMocProfilesTable } from "../src/db/ensure-moc-profiles-table";
 import { ensureMocSavedPartsSheetTable } from "../src/db/ensure-moc-saved-parts-sheet-table";
 
 const ROOT = path.join(__dirname, "..");
@@ -143,6 +145,8 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX pr_child_idx ON part_relationships(child_part_num);
   `);
   ensureMocSavedPartsSheetTable(db);
+  ensureMocImagesTable(db);
+  ensureMocProfilesTable(db);
 }
 
 async function loadPartCategories(db: Database.Database) {

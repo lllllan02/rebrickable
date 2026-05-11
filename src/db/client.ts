@@ -5,6 +5,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import fs from "fs";
 import path from "path";
 
+import { ensureMocImagesTable } from "./ensure-moc-images-table";
+import { ensureMocProfilesTable } from "./ensure-moc-profiles-table";
 import { ensureMocSavedPartsSheetTable } from "./ensure-moc-saved-parts-sheet-table";
 import * as schema from "./schema";
 
@@ -19,6 +21,8 @@ function openDb() {
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   ensureMocSavedPartsSheetTable(sqlite);
+  ensureMocImagesTable(sqlite);
+  ensureMocProfilesTable(sqlite);
   return drizzle(sqlite, { schema });
 }
 

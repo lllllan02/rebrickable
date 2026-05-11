@@ -127,3 +127,30 @@ export const mocSavedPartsSheets = sqliteTable(
   },
   (t) => [index("moc_saved_parts_updated_idx").on(t.updatedAt)]
 );
+
+/** MOC 显示名称与自定义标签（moc_id 与已存零件表、图片表一致） */
+export const mocProfiles = sqliteTable(
+  "moc_profiles",
+  {
+    mocId: text("moc_id").primaryKey(),
+    displayName: text("display_name").notNull().default(""),
+    tagsJson: text("tags_json").notNull(),
+    profileUpdatedAt: text("profile_updated_at").notNull(),
+  },
+  (t) => [index("moc_profiles_updated_idx").on(t.profileUpdatedAt)]
+);
+
+/** MOC 详情页用户上传的参考图（二进制在 data/moc-uploads/ 下，按 moc_id 哈希分子目录） */
+export const mocImages = sqliteTable(
+  "moc_images",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    mocId: text("moc_id").notNull(),
+    storedFile: text("stored_file").notNull().unique(),
+    originalName: text("original_name"),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("moc_images_moc_idx").on(t.mocId)]
+);

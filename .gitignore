@@ -29,6 +29,7 @@
 /data/*.db-journal
 /data/*.db-shm
 /data/*.db-wal
+/data/moc-uploads/
 
 # debug
 npm-debug.log*
