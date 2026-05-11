@@ -18,6 +18,8 @@ type Props = {
   variant?: "default" | "sidebar";
 };
 
+type OptimisticProfile = { displayName: string; tags: string[] };
+
 export function MocProfileForm({
   mocId,
   initialDisplayName,
@@ -27,6 +29,8 @@ export function MocProfileForm({
   const router = useRouter();
   const formTitleId = useId();
   const tagInputId = useId();
+  const [editing, setEditing] = useState(false);
+  const [optimistic, setOptimistic] = useState<OptimisticProfile | null>(null);
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [tags, setTags] = useState<string[]>(() => [...initialTags]);
   const [tagDraft, setTagDraft] = useState("");
@@ -39,10 +43,36 @@ export function MocProfileForm({
   const isSidebar = variant === "sidebar";
 
   const tagsSyncKey = initialTags.join("\u0001");
+  const optimisticTagsKey = optimistic?.tags.join("\u0001") ?? "";
+
   useEffect(() => {
-    setDisplayName(initialDisplayName);
-    setTags([...initialTags]);
-  }, [initialDisplayName, tagsSyncKey]);
+    if (!optimistic) return;
+    const match =
+      optimistic.displayName.trim() === initialDisplayName.trim() &&
+      optimisticTagsKey === tagsSyncKey;
+    if (match) setOptimistic(null);
+  }, [initialDisplayName, optimistic, optimisticTagsKey, tagsSyncKey]);
+
+  const viewDisplayName = optimistic?.displayName ?? initialDisplayName;
+  const viewTags = optimistic?.tags ?? initialTags;
+  const viewTitle = viewDisplayName.trim() || `MOC ${mocId}`;
+
+  const enterEdit = useCallback(() => {
+    const baseName = (optimistic?.displayName ?? initialDisplayName).slice(0, MOC_PROFILE_MAX_DISPLAY_NAME);
+    setDisplayName(baseName);
+    setTags([...(optimistic?.tags ?? initialTags)]);
+    setTagDraft("");
+    setError(null);
+    setMessage(null);
+    setEditing(true);
+  }, [initialDisplayName, initialTags, optimistic]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+    setError(null);
+    setMessage(null);
+    setTagDraft("");
+  }, []);
 
   const addTag = useCallback(() => {
     const t = tagDraft.trim();
@@ -74,7 +104,9 @@ export function MocProfileForm({
     startTransition(async () => {
       const r = await saveMocProfileAction({ mocId, displayName, tags });
       if (r.ok) {
+        setOptimistic({ displayName, tags: [...tags] });
         setMessage("已保存。");
+        setEditing(false);
         router.refresh();
       } else {
         setError(r.error);
@@ -82,7 +114,65 @@ export function MocProfileForm({
     });
   }, [displayName, mocId, router, tags]);
 
-  const fields = (
+  const readOnlyBlock = (
+    <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
+      <div>
+        <p
+          id={isSidebar ? formTitleId : undefined}
+          className={
+            isSidebar
+              ? "text-xl font-extrabold tracking-tight text-[var(--text)] sm:text-2xl"
+              : "text-lg font-semibold text-[var(--text)]"
+          }
+        >
+          {viewTitle}
+        </p>
+        <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">MOC ID · {mocId}</p>
+        {!isSidebar ? (
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            显示名称仅用于本应用列表与标题；MOC ID（<span className="font-mono">{mocId}</span>）不变。
+          </p>
+        ) : null}
+      </div>
+
+      <div>
+        <p className="text-xs text-[var(--muted)]">
+          标签（<span className="tabular-nums">{viewTags.length}</span> / {MOC_PROFILE_MAX_TAGS}）
+        </p>
+        {viewTags.length === 0 ? (
+          <p className="mt-1.5 text-xs text-[var(--muted-2)]">暂无标签</p>
+        ) : (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {viewTags.map((t, i) => (
+              <span
+                key={`${t}-${i}`}
+                className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] text-[var(--text)]"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-3)] sm:text-sm"
+          onClick={enterEdit}
+        >
+          编辑
+        </button>
+        {message ? (
+          <span className="text-xs text-emerald-200/95" role="status">
+            {message}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const editFields = (
     <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
       <div>
         <label className={isSidebar ? "block" : "block text-xs text-[var(--muted)]"}>
@@ -110,9 +200,7 @@ export function MocProfileForm({
           <p className="mt-1 text-xs text-[var(--muted)]">
             显示名称仅用于本应用列表与标题；MOC ID（<span className="font-mono">{mocId}</span>）不变。
           </p>
-        ) : (
-          <p className="mt-1 text-[11px] text-[var(--muted)]">留空时标题与列表中显示为「MOC {mocId}」。</p>
-        )}
+        ) : null}
       </div>
 
       <div>
@@ -169,11 +257,14 @@ export function MocProfileForm({
         <button type="button" className="button-primary text-xs sm:text-sm" disabled={pending} onClick={onSave}>
           {pending ? "保存中…" : "保存名称与标签"}
         </button>
-        {message ? (
-          <span className="text-xs text-emerald-200/95" role="status">
-            {message}
-          </span>
-        ) : null}
+        <button
+          type="button"
+          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] sm:text-sm"
+          disabled={pending}
+          onClick={cancelEdit}
+        >
+          取消
+        </button>
         {error ? (
           <span className="text-xs text-red-200/95" role="alert">
             {error}
@@ -184,7 +275,7 @@ export function MocProfileForm({
   );
 
   if (isSidebar) {
-    return <div className="min-w-0">{fields}</div>;
+    return <div className="min-w-0">{editing ? editFields : readOnlyBlock}</div>;
   }
 
   return (
@@ -195,7 +286,7 @@ export function MocProfileForm({
       <h2 id={formTitleId} className="text-sm font-semibold text-[var(--text)]">
         名称与标签
       </h2>
-      {fields}
+      {editing ? editFields : readOnlyBlock}
     </section>
   );
 }

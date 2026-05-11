@@ -66,96 +66,84 @@ export default async function MocsPage() {
           <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
         </p>
       </section>
-      <div className="table-shell overflow-x-auto">
+      <div className="table-shell">
         {rows.length === 0 ? (
           <p className="px-2 py-6 text-sm text-[var(--muted)]">
             尚无已存记录。请打开零件表导入 CSV 后保存到数据库。
           </p>
         ) : (
-          <table className="data-table min-w-[720px]">
-            <thead>
-              <tr>
-                <th className="w-16 px-2 py-2 text-left">封面</th>
-                <th className="px-2 py-2 text-left">名称</th>
-                <th className="px-2 py-2 text-left">MOC ID</th>
-                <th className="px-2 py-2 text-left">标签</th>
-                <th className="px-2 py-2 text-right">行数</th>
-                <th className="px-2 py-2 text-left">最近保存</th>
-                <th className="px-2 py-2 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {rows.map((r) => {
-                const prof = profileByMoc.get(r.mocId);
-                const displayName = prof?.displayName?.trim() ?? "";
-                const title = displayName || `MOC ${r.mocId}`;
-                const tags = prof?.tags ?? [];
-                const stored = coverStoredByMoc.get(r.mocId);
-                const coverUrl = stored ? mocImagePublicPath(r.mocId, stored) : null;
-                const detailHref = `/mocs/${encodeURIComponent(r.mocId)}`;
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {rows.map((r) => {
+              const prof = profileByMoc.get(r.mocId);
+              const displayName = prof?.displayName?.trim() ?? "";
+              const title = displayName || `MOC ${r.mocId}`;
+              const tags = prof?.tags ?? [];
+              const stored = coverStoredByMoc.get(r.mocId);
+              const coverUrl = stored ? mocImagePublicPath(r.mocId, stored) : null;
+              const detailHref = `/mocs/${encodeURIComponent(r.mocId)}`;
+              const savedAt = r.updatedAt.slice(0, 19).replace("T", " ");
 
-                return (
-                  <tr key={r.mocId}>
-                    <td className="px-2 py-1.5 align-middle">
+              return (
+                <li key={r.mocId} className="result-card flex flex-col gap-0 overflow-hidden p-0">
+                  <Link
+                    href={detailHref}
+                    className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]"
+                    aria-label={`${title} 封面`}
+                  >
+                    {coverUrl ? (
+                      <Image
+                        src={coverUrl}
+                        alt=""
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                        unoptimized
+                      />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
+                        无参考图
+                      </span>
+                    )}
+                  </Link>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
+                    <div className="min-w-0">
                       <Link
                         href={detailHref}
-                        className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface-3)]"
-                        aria-label={`${title} 封面`}
+                        className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
                       >
-                        {coverUrl ? (
-                          <Image
-                            src={coverUrl}
-                            alt=""
-                            fill
-                            className="object-cover"
-                            sizes="56px"
-                            unoptimized
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
-                            无图
-                          </span>
-                        )}
-                      </Link>
-                    </td>
-                    <td className="px-2 py-1.5 align-middle">
-                      <Link href={detailHref} className="text-sm font-medium text-[var(--text)] underline-offset-2 hover:underline">
                         {title}
                       </Link>
-                    </td>
-                    <td className="px-2 py-1.5 align-middle font-mono text-sm text-[var(--muted)]">{r.mocId}</td>
-                    <td className="max-w-[12rem] px-2 py-1.5 align-middle">
-                      {tags.length === 0 ? (
-                        <span className="text-xs text-[var(--muted-2)]">—</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {tags.map((t, i) => (
-                            <span
-                              key={`${r.mocId}-${t}-${i}`}
-                              className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-1.5 py-px text-[10px] text-[var(--text)]"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-right align-middle font-mono text-sm tabular-nums text-[var(--text)]">
-                      {r.lineCount.toLocaleString("zh-CN")}
-                    </td>
-                    <td className="px-2 py-1.5 align-middle text-sm text-[var(--muted)]">
-                      {r.updatedAt.slice(0, 19).replace("T", " ")}
-                    </td>
-                    <td className="px-2 py-1.5 text-right align-middle">
-                      <Link href={detailHref} className="text-sm text-[var(--accent)] underline">
-                        打开
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]" title={r.mocId}>
+                        {r.mocId}
+                      </p>
+                    </div>
+                    {tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {tags.map((t, i) => (
+                          <span
+                            key={`${r.mocId}-${t}-${i}`}
+                            className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="mt-auto flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
+                      <span className="tabular-nums text-[var(--text)]">
+                        <span className="text-[var(--muted-2)]">零件行数 </span>
+                        {r.lineCount.toLocaleString("zh-CN")}
+                      </span>
+                      <span className="shrink-0 text-right tabular-nums">
+                        <span className="text-[var(--muted-2)]">保存时间 </span>
+                        <time dateTime={r.updatedAt}>{savedAt}</time>
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </div>

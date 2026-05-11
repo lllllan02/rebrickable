@@ -2,6 +2,7 @@
  * 从用户上传的缺货表文件名中尽量解析 Rebrickable MOC 数字 ID（仅启发式，不调用 API）。
  */
 
+import { MOC_PROFILE_MAX_DISPLAY_NAME } from "@/lib/moc-profile-parse";
 import type { PartsSheetTag } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
@@ -23,6 +24,53 @@ export function parseMocIdFromFilename(fileName: string): string | null {
 
   const lone = base.match(/^(\d{4,})(?:[^0-9].*)?\.csv$/i);
   if (lone?.[1]) return lone[1];
+
+  return null;
+}
+
+function escapeRegExpChars(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 将文件名中的 slug 片段整理为可读标题（空格、长度上限） */
+function slugFragmentToDisplayTitle(fragment: string): string {
+  const t = fragment
+    .replace(/\.csv$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return "";
+  return t.length > MOC_PROFILE_MAX_DISPLAY_NAME ? t.slice(0, MOC_PROFILE_MAX_DISPLAY_NAME).trim() : t;
+}
+
+/**
+ * 在已知 `mocId` 的前提下，从文件名中尽量解析 MOC 显示名称（与 {@link parseMocIdFromFilename} 常见格式一致）。
+ * 若文件名与当前 ID 无法对应则返回 null；不覆盖用户已在详情页写好的名称（由调用方判断）。
+ */
+export function parseMocDisplayNameFromFilename(fileName: string, mocId: string): string | null {
+  const base = fileName.replace(/\\/g, "/").split("/").pop() ?? fileName;
+  const id = mocId.trim();
+  if (!id) return null;
+
+  const idRe = escapeRegExpChars(id);
+
+  const rb = base.match(new RegExp(`^rebrickable_parts_${idRe}_(.+)\\.csv$`, "i"));
+  if (rb?.[1]) {
+    const title = slugFragmentToDisplayTitle(rb[1]);
+    return title || null;
+  }
+
+  const mocWord = base.match(new RegExp(`(?:^|[^0-9a-z])moc[_-]?${idRe}[_-](.+)\\.csv$`, "i"));
+  if (mocWord?.[1]) {
+    const title = slugFragmentToDisplayTitle(mocWord[1]);
+    return title || null;
+  }
+
+  const lone = base.match(new RegExp(`^${idRe}(?:[^0-9A-Za-z](.+))?\\.csv$`, "i"));
+  if (lone?.[1]) {
+    const title = slugFragmentToDisplayTitle(lone[1]);
+    return title || null;
+  }
 
   return null;
 }

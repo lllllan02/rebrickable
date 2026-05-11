@@ -1,10 +1,13 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { mocSavedPartsSheets } from "@/db/schema";
+import { mocProfiles, mocSavedPartsSheets } from "@/db/schema";
+import { MOC_PROFILE_MAX_DISPLAY_NAME, serializeTagsJson } from "@/lib/moc-profile-parse";
 import {
+  parseMocDisplayNameFromFilename,
   parseMocSheetItems,
   parseStoredMocPartsSheet,
   type MocPartsSheetPayloadV1,
@@ -74,6 +77,8 @@ export async function saveMocPartsSheetToDb(input: {
   mocId: string;
   skippedHeader: boolean;
   items: ShortageResolveItem[];
+  /** 原始导入文件名：用于在尚无显示名时写入 `moc_profiles.display_name` */
+  sourceFileName?: string | null;
 }): Promise<SaveMocPartsSheetResult> {
   const mocId = input.mocId.trim();
   if (!mocId || mocId.length > MAX_MOC_ID_LEN) {
@@ -100,27 +105,65 @@ export async function saveMocPartsSheetToDb(input: {
     savedAt,
   };
 
+  const rawSourceName = input.sourceFileName;
+  const sourceFileName = typeof rawSourceName === "string" ? rawSourceName : "";
+  const fromFileTitle =
+    sourceFileName.trim().length > 0
+      ? parseMocDisplayNameFromFilename(sourceFileName, mocId)?.trim().slice(0, MOC_PROFILE_MAX_DISPLAY_NAME) ?? ""
+      : "";
+
   try {
     const db = getDb();
-    await db
-      .insert(mocSavedPartsSheets)
-      .values({
-        mocId,
-        skippedHeader: input.skippedHeader,
-        payloadJson: JSON.stringify(payload),
-        lineCount: items.length,
-        updatedAt: savedAt,
-      })
-      .onConflictDoUpdate({
-        target: mocSavedPartsSheets.mocId,
-        set: {
+    db.transaction((tx) => {
+      tx.insert(mocSavedPartsSheets)
+        .values({
+          mocId,
           skippedHeader: input.skippedHeader,
           payloadJson: JSON.stringify(payload),
           lineCount: items.length,
           updatedAt: savedAt,
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: mocSavedPartsSheets.mocId,
+          set: {
+            skippedHeader: input.skippedHeader,
+            payloadJson: JSON.stringify(payload),
+            lineCount: items.length,
+            updatedAt: savedAt,
+          },
+        })
+        .run();
 
+      if (!fromFileTitle) return;
+
+      const profRows = tx
+        .select({ displayName: mocProfiles.displayName, tagsJson: mocProfiles.tagsJson })
+        .from(mocProfiles)
+        .where(eq(mocProfiles.mocId, mocId))
+        .limit(1)
+        .all();
+      const prof = profRows[0];
+      if ((prof?.displayName ?? "").trim() !== "") return;
+
+      tx.insert(mocProfiles)
+        .values({
+          mocId,
+          displayName: fromFileTitle,
+          tagsJson: prof?.tagsJson ?? serializeTagsJson([]),
+          profileUpdatedAt: savedAt,
+        })
+        .onConflictDoUpdate({
+          target: mocProfiles.mocId,
+          set: {
+            displayName: fromFileTitle,
+            profileUpdatedAt: savedAt,
+          },
+        })
+        .run();
+    });
+
+    revalidatePath("/mocs");
+    revalidatePath(`/mocs/${encodeURIComponent(mocId)}`);
     return { ok: true, savedAt };
   } catch {
     return { ok: false, error: "写入数据库失败。" };

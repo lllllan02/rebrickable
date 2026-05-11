@@ -396,6 +396,7 @@ export function PartsSheetImport({
       const result = await saveMocPartsSheetToDb({
         mocId: id,
         skippedHeader,
+        sourceFileName: fileName,
         items: items.map(({ rowId, ...rest }) => {
           void rowId;
           return rest;
@@ -418,7 +419,7 @@ export function PartsSheetImport({
     } finally {
       setMocActionBusy(false);
     }
-  }, [items, mocId, skippedHeader, scrollMocFeedbackIntoView]);
+  }, [fileName, items, mocId, skippedHeader, scrollMocFeedbackIntoView]);
 
   const loadPartsSheetFromMocDb = useCallback(async () => {
     setMocLocalMessage(null);
