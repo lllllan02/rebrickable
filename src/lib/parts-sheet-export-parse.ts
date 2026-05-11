@@ -1,10 +1,17 @@
 import type { PartsSheetXlsxRow } from "@/lib/build-parts-sheet-xlsx";
+import type { PartsSheetTag } from "@/lib/parts-sheet-tags";
 
 export const MAX_EXPORT_ROWS = 2500;
 export const MAX_EXPORT_JSON_BYTES = 4_000_000;
 
 function isImgSource(v: unknown): v is PartsSheetXlsxRow["imgSource"] {
   return v === null || v === "color" || v === "part";
+}
+
+const SHEET_TAG_SET = new Set<PartsSheetTag>(["printed", "minifig", "sticker"]);
+
+function isSheetTag(v: unknown): v is PartsSheetTag {
+  return typeof v === "string" && SHEET_TAG_SET.has(v as PartsSheetTag);
 }
 
 export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
@@ -23,6 +30,10 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       typeof o.rest !== "string" ||
       typeof o.partFound !== "boolean" ||
       (o.partName !== null && typeof o.partName !== "string") ||
+      (o.partCatName !== null && typeof o.partCatName !== "string") ||
+      typeof o.isPrinted !== "boolean" ||
+      !Array.isArray(o.sheetTags) ||
+      !o.sheetTags.every(isSheetTag) ||
       (o.colorName !== null && typeof o.colorName !== "string") ||
       typeof o.elementKnown !== "boolean" ||
       (o.imgUrl !== null && typeof o.imgUrl !== "string") ||
@@ -38,6 +49,9 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       rest: o.rest,
       partFound: o.partFound,
       partName: o.partName as string | null,
+      partCatName: o.partCatName as string | null,
+      isPrinted: o.isPrinted,
+      sheetTags: o.sheetTags as PartsSheetTag[],
       colorName: o.colorName as string | null,
       elementKnown: o.elementKnown,
       imgUrl: o.imgUrl as string | null,

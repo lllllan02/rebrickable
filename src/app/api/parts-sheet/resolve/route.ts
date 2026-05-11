@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { and, inArray, isNotNull, min, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, min, ne } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
+import { classifyPartsSheetRow } from "@/lib/parts-sheet-tags";
 import { parseShortageCsv } from "@/lib/parse-shortage-csv";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
-import { colors, elements, inventoryParts, parts } from "@/db/schema";
+import {
+  colors,
+  elements,
+  inventoryParts,
+  partCategories,
+  partRelationships,
+  parts,
+} from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -65,11 +73,16 @@ export async function POST(req: Request) {
   const partNums = [...new Set(parsed.rows.map((r) => r.partNum))];
   const colorIds = [...new Set(parsed.rows.map((r) => r.colorId))];
 
-  const [partRows, colorRows, thumbByPartColor, thumbByPart] =
+  const [partRows, colorRows, thumbByPartColor, thumbByPart, printedRows] =
     await Promise.all([
       db
-        .select({ partNum: parts.partNum, name: parts.name })
+        .select({
+          partNum: parts.partNum,
+          name: parts.name,
+          catName: partCategories.name,
+        })
         .from(parts)
+        .leftJoin(partCategories, eq(parts.partCatId, partCategories.id))
         .where(inArray(parts.partNum, partNums)),
       db
         .select({ id: colors.id, name: colors.name })
@@ -104,11 +117,27 @@ export async function POST(req: Request) {
           )
         )
         .groupBy(inventoryParts.partNum),
+      partNums.length > 0
+        ? db
+            .select({ partNum: partRelationships.childPartNum })
+            .from(partRelationships)
+            .where(
+              and(
+                eq(partRelationships.relType, "P"),
+                inArray(partRelationships.childPartNum, partNums)
+              )
+            )
+            .groupBy(partRelationships.childPartNum)
+        : Promise.resolve([] as { partNum: string }[]),
     ]);
 
   const partNameByNum = new Map(
     partRows.map((r) => [r.partNum, r.name] as const)
   );
+  const partCatNameByNum = new Map(
+    partRows.map((r) => [r.partNum, r.catName] as const)
+  );
+  const printedPartNums = new Set(printedRows.map((r) => r.partNum));
   const colorNameById = new Map(
     colorRows.map((r) => [r.id, r.name] as const)
   );
@@ -143,6 +172,9 @@ export async function POST(req: Request) {
   const items: ShortageResolveItem[] = parsed.rows.map((r) => {
     const partFound = partNameByNum.has(r.partNum);
     const partName = partNameByNum.get(r.partNum) ?? null;
+    const partCatName = partCatNameByNum.get(r.partNum) ?? null;
+    const isPrinted = printedPartNums.has(r.partNum);
+    const sheetTags = classifyPartsSheetRow({ partFound, partCatName, isPrinted });
     const colorName = colorNameById.get(r.colorId) ?? null;
     const key = `${r.partNum}\t${r.colorId}`;
     const colorThumb = thumbPc.get(key) ?? null;
@@ -165,6 +197,9 @@ export async function POST(req: Request) {
       rest: r.rest,
       partFound,
       partName,
+      partCatName,
+      isPrinted,
+      sheetTags,
       colorName,
       elementKnown: elementKnownSet.has(key),
       imgUrl,

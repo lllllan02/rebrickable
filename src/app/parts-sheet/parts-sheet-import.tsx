@@ -4,6 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
+import {
+  PARTS_SHEET_TAG_LABELS,
+  PARTS_SHEET_TAG_ORDER,
+  type PartsSheetTag,
+} from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
@@ -13,6 +18,15 @@ type ResolveResponse = {
 };
 
 type ShortageRow = ShortageResolveItem & { rowId: string };
+
+type SheetListFilter = "all" | PartsSheetTag | "plain";
+
+function rowMatchesSheetFilter(r: ShortageRow, f: SheetListFilter): boolean {
+  if (f === "all") return true;
+  if (!r.partFound) return false;
+  if (f === "plain") return r.sheetTags.length === 0;
+  return r.sheetTags.includes(f);
+}
 
 type ColorOption = {
   id: number;
@@ -119,6 +133,7 @@ export function PartsSheetImport() {
   const [colorsLoading, setColorsLoading] = useState(false);
   const [colorsLoadError, setColorsLoadError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportProgress, setExportProgress] = useState<{
     jobId: string;
@@ -235,6 +250,7 @@ export function PartsSheetImport() {
         return;
       }
       setSkippedHeader(result.skippedHeader);
+      setSheetListFilter("all");
       setItems(withRowIds(result.items));
     } catch {
       setError("读取或上传失败，请重试。");
@@ -496,6 +512,45 @@ export function PartsSheetImport() {
 
   const missingParts = items?.filter((i) => !i.partFound).length ?? 0;
   const noImage = items?.filter((i) => i.partFound && !i.imgUrl).length ?? 0;
+
+  const sheetCategoryPresence = useMemo(() => {
+    if (!items?.length) {
+      return { printed: false, minifig: false, sticker: false, plain: false };
+    }
+    let printed = false;
+    let minifig = false;
+    let sticker = false;
+    let plain = false;
+    for (const r of items) {
+      if (!r.partFound) continue;
+      if (r.sheetTags.includes("printed")) printed = true;
+      if (r.sheetTags.includes("minifig")) minifig = true;
+      if (r.sheetTags.includes("sticker")) sticker = true;
+      if (r.sheetTags.length === 0) plain = true;
+    }
+    return { printed, minifig, sticker, plain };
+  }, [items]);
+
+  const sheetFilterOptions = useMemo(() => {
+    const p = sheetCategoryPresence;
+    const opts: { id: SheetListFilter; label: string }[] = [{ id: "all", label: "全部" }];
+    if (p.printed) opts.push({ id: "printed", label: PARTS_SHEET_TAG_LABELS.printed });
+    if (p.minifig) opts.push({ id: "minifig", label: PARTS_SHEET_TAG_LABELS.minifig });
+    if (p.sticker) opts.push({ id: "sticker", label: PARTS_SHEET_TAG_LABELS.sticker });
+    if (p.plain) opts.push({ id: "plain", label: "普通" });
+    return opts;
+  }, [sheetCategoryPresence]);
+
+  useEffect(() => {
+    if (sheetListFilter === "all") return;
+    const ids = new Set(sheetFilterOptions.map((o) => o.id));
+    if (!ids.has(sheetListFilter)) setSheetListFilter("all");
+  }, [sheetListFilter, sheetFilterOptions]);
+
+  const listFiltered = useMemo(() => {
+    if (!items?.length) return [];
+    return items.filter((r) => rowMatchesSheetFilter(r, sheetListFilter));
+  }, [items, sheetListFilter]);
 
   const exportBarPercent =
     exportProgress === null
@@ -773,8 +828,32 @@ export function PartsSheetImport() {
 
       {items !== null && items.length > 0 ? (
         <>
-          <div className="meta-row text-xs text-[var(--muted)]">
-            <span>共 {items.length} 条</span>
+          <div className="meta-row flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)]">
+            <span>
+              共 {items.length} 条
+              {sheetListFilter !== "all" && listFiltered.length !== items.length
+                ? `，当前筛选 ${listFiltered.length} 条`
+                : null}
+            </span>
+            {sheetFilterOptions.length > 1 ? (
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                <span className="text-[var(--muted-2)]">分类：</span>
+                {sheetFilterOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                      sheetListFilter === opt.id
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                        : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                    }`}
+                    onClick={() => setSheetListFilter(opt.id)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </span>
+            ) : null}
             {skippedHeader ? (
               <span>导出 CSV 时将保留表头行；Excel 前四列与 CSV 表头一致（Part, Color, Quantity, Rest）</span>
             ) : null}
@@ -787,8 +866,13 @@ export function PartsSheetImport() {
               <span>有收录但无库存图：{noImage} 条</span>
             ) : null}
           </div>
-          <ul className="content-grid">
-            {items.map((r) => (
+          {listFiltered.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              当前分类下没有匹配条目。未收录零件不会参与分类筛选；可点「全部」查看完整列表。
+            </p>
+          ) : (
+            <ul className="content-grid">
+            {listFiltered.map((r) => (
               <li key={r.rowId} className="result-card">
                 <div className="media-box media-box-sm">
                   {r.imgUrl ? (
@@ -851,10 +935,32 @@ export function PartsSheetImport() {
                             图·异色
                           </span>
                         ) : null}
+                        {r.partFound
+                          ? PARTS_SHEET_TAG_ORDER.filter((t) => r.sheetTags.includes(t)).map((t) => (
+                              <span
+                                key={t}
+                                className="rounded border border-amber-400/35 bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-100/95"
+                                title={
+                                  t === "printed"
+                                    ? "在零件关系表中为印刷子件（rel_type P）"
+                                    : t === "minifig"
+                                      ? "零件大类名含 Minifig（Rebrickable 分类）"
+                                      : "零件大类名含 Sticker"
+                                }
+                              >
+                                {PARTS_SHEET_TAG_LABELS[t]}
+                              </span>
+                            ))
+                          : null}
                       </div>
                       <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text)]">
                         {r.partFound && r.partName ? (
-                          r.partName
+                          <>
+                            {r.partName}
+                            {r.partCatName ? (
+                              <span className="text-[var(--muted)]"> · {r.partCatName}</span>
+                            ) : null}
+                          </>
                         ) : r.partFound ? (
                           <span className="text-[var(--muted)]">（无名称）</span>
                         ) : (
@@ -887,7 +993,8 @@ export function PartsSheetImport() {
                 </div>
               </li>
             ))}
-          </ul>
+            </ul>
+          )}
         </>
       ) : null}
     </div>

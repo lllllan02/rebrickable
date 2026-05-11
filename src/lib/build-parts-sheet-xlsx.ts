@@ -1,3 +1,5 @@
+import { sheetTagsDisplayZh, type PartsSheetTag } from "@/lib/parts-sheet-tags";
+
 type ExcelJSModule = typeof import("exceljs");
 
 /** 与 {@link ShortageResolveItem} 一致，用于导出（不含 rowId） */
@@ -9,6 +11,9 @@ export type PartsSheetXlsxRow = {
   rest: string;
   partFound: boolean;
   partName: string | null;
+  partCatName: string | null;
+  isPrinted: boolean;
+  sheetTags: PartsSheetTag[];
   colorName: string | null;
   elementKnown: boolean;
   imgUrl: string | null;
@@ -20,7 +25,7 @@ const THUMB_PX = 64;
 const DATA_ROW_HEIGHT_PT = 52;
 
 /** 缩略图所在列（0-based），置于「导入列 + 追加列」之后 */
-const IMAGE_COL_INDEX = 10;
+const IMAGE_COL_INDEX = 11;
 
 function isAllowedImgUrl(url: string): boolean {
   try {
@@ -98,6 +103,7 @@ export async function buildPartsSheetXlsxBuffer(
     { width: 10 },
     { width: 10 },
     { width: 12 },
+    { width: 18 },
     { width: 11 },
     { width: 12 },
   ];
@@ -112,6 +118,7 @@ export async function buildPartsSheetXlsxBuffer(
     "本地收录",
     "elements",
     "图来源",
+    "分类",
     "原CSV行号",
     "缩略图",
   ];
@@ -133,6 +140,7 @@ export async function buildPartsSheetXlsxBuffer(
       row.partFound ? "是" : "否",
       row.elementKnown ? "是" : "否",
       imgSourceLabel(row.imgSource),
+      sheetTagsDisplayZh(row.sheetTags) || (row.partFound ? "—" : ""),
       row.lineNumber,
       "",
     ]);
