@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import { randomUUID } from "node:crypto";
 import fs from "fs/promises";
 import path from "path";
 
@@ -55,7 +55,7 @@ export function isAllowedBuildImageMime(mime: string): boolean {
 export function makeStoredImageFileName(mime: string): string | null {
   const ext = extFromImageMime(mime);
   if (!ext) return null;
-  return `${crypto.randomUUID()}${ext}`;
+  return `${randomUUID()}${ext}`;
 }
 
 export async function ensureBuildUploadDir(
@@ -93,5 +93,5 @@ export function resolveBuildAttachmentMime(file: File, kind: BuildAttachmentKind
 }
 
 export function makeStoredAttachmentFileName(kind: BuildAttachmentKind): string {
-  return `${crypto.randomUUID()}.${kind}`;
+  return `${randomUUID()}.${kind}`;
 }

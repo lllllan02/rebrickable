@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 export type ExportJobRecord = {
   stem: string;
   total: number;
@@ -48,7 +50,7 @@ function prune(aggressive: boolean) {
 export function createExportJob(stem: string, total: number): string {
   const jobs = getJobStore();
   prune(false);
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   jobs.set(id, {
     stem,
     total,

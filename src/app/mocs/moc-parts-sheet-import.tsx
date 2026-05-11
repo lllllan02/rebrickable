@@ -19,6 +19,7 @@ import {
   rowMatchesSheetListFilter,
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
+import { randomUUID } from "@/lib/random-uuid";
 
 type ShortageRow = ShortageResolveItem & { rowId: string };
 
@@ -30,7 +31,7 @@ type ColorOption = {
 };
 
 function withRowIds(items: ShortageResolveItem[]): ShortageRow[] {
-  return items.map((r) => ({ ...r, rowId: crypto.randomUUID() }));
+  return items.map((r) => ({ ...r, rowId: randomUUID() }));
 }
 
 function rowsToCsv(rows: ShortageRow[], includeHeader: boolean): string {
@@ -365,7 +366,7 @@ export function PartsSheetImport({
       setSkippedHeader(result.skippedHeader);
       const mapped = result.items.map((r, i) => ({
         ...r,
-        rowId: prevIds[i] ?? crypto.randomUUID(),
+        rowId: prevIds[i] ?? randomUUID(),
       }));
       setItems(mapped);
     } catch {
