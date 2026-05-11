@@ -37,7 +37,8 @@ export function MocAttachmentsPanel({ mocId, attachments }: Props) {
       setError(null);
       startTransition(async () => {
         const fd = new FormData();
-        fd.set("mocId", mocId);
+        fd.set("subjectKind", "moc");
+        fd.set("subjectId", mocId);
         fd.set("file", file);
         const r = await uploadMocAttachmentAction(fd);
         if (!r.ok) {

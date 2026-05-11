@@ -26,6 +26,6 @@ start: dev
 # 压缩 db → 若有变更则自动提交（带时间戳）→ push
 pack:
 	$(PNPM) db:pack
-	git add .
+	git add data/
 	git diff --cached --quiet || git commit -m "chore(db): $$(date +%Y-%m-%dT%H%M%S)"
 	git push

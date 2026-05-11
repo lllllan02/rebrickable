@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
 import { getDb } from "@/db/client";
-import { mocProfiles } from "@/db/schema";
+import { buildProfiles } from "@/db/schema";
+import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import {
   MOC_PROFILE_MAX_DISPLAY_NAME,
   normalizeMocTags,
   serializeTagsJson,
 } from "@/lib/moc-profile-parse";
-import { MOC_UPLOAD_MAX_ID_LEN } from "@/lib/moc-upload-storage";
+import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
 
 export type SaveMocProfileResult = { ok: true } | { ok: false; error: string };
 
@@ -18,7 +20,7 @@ export async function saveMocProfileAction(input: {
   tags: unknown;
 }): Promise<SaveMocProfileResult> {
   const mocId = input.mocId.trim();
-  if (!mocId || mocId.length > MOC_UPLOAD_MAX_ID_LEN) {
+  if (!mocId || mocId.length > BUILD_UPLOAD_MAX_ID_LEN) {
     return { ok: false, error: "MOC ID 无效。" };
   }
 
@@ -36,15 +38,16 @@ export async function saveMocProfileAction(input: {
   try {
     const db = getDb();
     await db
-      .insert(mocProfiles)
+      .insert(buildProfiles)
       .values({
-        mocId,
+        subjectKind: BUILD_SUBJECT_MOC,
+        subjectId: mocId,
         displayName,
         tagsJson,
         profileUpdatedAt,
       })
       .onConflictDoUpdate({
-        target: mocProfiles.mocId,
+        target: [buildProfiles.subjectKind, buildProfiles.subjectId],
         set: {
           displayName,
           tagsJson,

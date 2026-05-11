@@ -84,7 +84,8 @@ export function MocImageCarousel({ mocId, images }: Props) {
       startTransition(async () => {
         for (const file of list) {
           const fd = new FormData();
-          fd.set("mocId", mocId);
+          fd.set("subjectKind", "moc");
+          fd.set("subjectId", mocId);
           fd.set("file", file);
           const r = await uploadMocImageAction(fd);
           if (!r.ok) {

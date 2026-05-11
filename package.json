@@ -10,7 +10,6 @@
     "lint": "eslint .",
     "db:import": "tsx scripts/import-assets.ts",
     "db:pack": "tsx scripts/pack-local-db.ts",
-    "db:migrate-moc-uploads": "tsx scripts/migrate-moc-upload-dirs.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

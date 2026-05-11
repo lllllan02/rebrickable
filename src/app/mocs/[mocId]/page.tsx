@@ -1,12 +1,13 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import { getDb } from "@/db/client";
-import { mocAttachments, mocImages, mocProfiles } from "@/db/schema";
-import { mocAttachmentPublicPath } from "@/lib/moc-attachment-public-path";
-import { mocImagePublicPath } from "@/lib/moc-image-public-path";
+import { buildAttachments, buildImages, buildProfiles } from "@/db/schema";
+import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
+import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
+import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
 import { MocDetailEditorial } from "../moc-detail-editorial";
@@ -22,30 +23,37 @@ export default async function MocDetailPage({ params }: Props) {
   const mocId = decodeURIComponent(raw);
 
   const db = getDb();
+  const mocKey = and(eq(buildImages.subjectKind, BUILD_SUBJECT_MOC), eq(buildImages.subjectId, mocId));
+  const mocAttKey = and(
+    eq(buildAttachments.subjectKind, BUILD_SUBJECT_MOC),
+    eq(buildAttachments.subjectId, mocId)
+  );
+  const mocProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
+
   const [imgRows, attRows, sheet, profileRow] = await Promise.all([
     db
       .select({
-        id: mocImages.id,
-        storedFile: mocImages.storedFile,
-        originalName: mocImages.originalName,
-        createdAt: mocImages.createdAt,
+        id: buildImages.id,
+        storedFile: buildImages.storedFile,
+        originalName: buildImages.originalName,
+        createdAt: buildImages.createdAt,
       })
-      .from(mocImages)
-      .where(eq(mocImages.mocId, mocId))
-      .orderBy(asc(mocImages.createdAt), asc(mocImages.id)),
+      .from(buildImages)
+      .where(mocKey)
+      .orderBy(asc(buildImages.createdAt), asc(buildImages.id)),
     db
       .select({
-        id: mocAttachments.id,
-        storedFile: mocAttachments.storedFile,
-        originalName: mocAttachments.originalName,
-        byteSize: mocAttachments.byteSize,
-        createdAt: mocAttachments.createdAt,
+        id: buildAttachments.id,
+        storedFile: buildAttachments.storedFile,
+        originalName: buildAttachments.originalName,
+        byteSize: buildAttachments.byteSize,
+        createdAt: buildAttachments.createdAt,
       })
-      .from(mocAttachments)
-      .where(eq(mocAttachments.mocId, mocId))
-      .orderBy(asc(mocAttachments.createdAt), asc(mocAttachments.id)),
+      .from(buildAttachments)
+      .where(mocAttKey)
+      .orderBy(asc(buildAttachments.createdAt), asc(buildAttachments.id)),
     loadMocPartsSheetFromDb(mocId),
-    db.select().from(mocProfiles).where(eq(mocProfiles.mocId, mocId)).limit(1),
+    db.select().from(buildProfiles).where(mocProfKey).limit(1),
   ]);
 
   const profile = profileRow[0];
@@ -54,14 +62,14 @@ export default async function MocDetailPage({ params }: Props) {
 
   const galleryImages: MocGalleryImage[] = imgRows.map((r) => ({
     id: r.id,
-    url: mocImagePublicPath(mocId, r.storedFile),
+    url: buildImagePublicPath(BUILD_SUBJECT_MOC, mocId, r.storedFile),
     originalName: r.originalName,
     createdAt: r.createdAt,
   }));
 
   const attachmentRows: MocAttachmentRow[] = attRows.map((r) => ({
     id: r.id,
-    url: mocAttachmentPublicPath(mocId, r.storedFile),
+    url: buildAttachmentPublicPath(BUILD_SUBJECT_MOC, mocId, r.storedFile),
     originalName: r.originalName,
     byteSize: r.byteSize,
     createdAt: r.createdAt,

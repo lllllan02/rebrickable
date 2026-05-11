@@ -6,17 +6,17 @@ import { revalidatePath } from "next/cache";
 import { and, count, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { mocImages } from "@/db/schema";
+import { buildImages } from "@/db/schema";
+import { BUILD_SUBJECT_MOC, isBuildSubjectKind, isSafeBuildSubjectId } from "@/lib/build-subject";
 import {
-  ensureMocUploadDir,
-  isAllowedMocImageMime,
-  isSafeMocIdForUploadPath,
+  ensureBuildUploadDir,
+  isAllowedBuildImageMime,
   makeStoredImageFileName,
-  mocUploadAbsoluteDir,
-  MOC_UPLOAD_MAX_BYTES,
-  MOC_UPLOAD_MAX_FILES_PER_MOC,
-  MOC_UPLOAD_MAX_ID_LEN,
-} from "@/lib/moc-upload-storage";
+  buildUploadAbsoluteDir,
+  BUILD_IMAGE_UPLOAD_MAX_BYTES,
+  BUILD_IMAGE_UPLOAD_MAX_FILES_PER_SUBJECT,
+  BUILD_UPLOAD_MAX_ID_LEN,
+} from "@/lib/build-upload-storage";
 
 function revalidateMocPage(mocId: string) {
   revalidatePath(`/mocs/${mocId}`);
@@ -33,27 +33,36 @@ function inferMimeFromName(fileName: string): string | null {
 }
 
 function resolveImageMime(file: File): string | null {
-  if (file.type && isAllowedMocImageMime(file.type)) return file.type;
+  if (file.type && isAllowedBuildImageMime(file.type)) return file.type;
   return inferMimeFromName(file.name);
+}
+
+function parseSubjectFromForm(formData: FormData): { kind: typeof BUILD_SUBJECT_MOC; id: string } | null {
+  const kindRaw = String(formData.get("subjectKind") ?? "").trim();
+  const id = String(formData.get("subjectId") ?? "").trim();
+  if (!id || id.length > BUILD_UPLOAD_MAX_ID_LEN) return null;
+  if (!isBuildSubjectKind(kindRaw) || kindRaw !== BUILD_SUBJECT_MOC) return null;
+  if (!isSafeBuildSubjectId(BUILD_SUBJECT_MOC, id)) return null;
+  return { kind: BUILD_SUBJECT_MOC, id };
 }
 
 export async function uploadMocImageAction(
   formData: FormData
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const mocId = String(formData.get("mocId") ?? "").trim();
+  const sub = parseSubjectFromForm(formData);
   const file = formData.get("file");
 
-  if (!mocId || mocId.length > MOC_UPLOAD_MAX_ID_LEN) {
-    return { ok: false, error: "MOC ID 无效。" };
-  }
-  if (!isSafeMocIdForUploadPath(mocId)) {
-    return { ok: false, error: "MOC ID 含有非法字符。" };
+  if (!sub) {
+    return { ok: false, error: "主体无效。" };
   }
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "请选择图片文件。" };
   }
-  if (file.size > MOC_UPLOAD_MAX_BYTES) {
-    return { ok: false, error: `单张图片不超过 ${Math.round(MOC_UPLOAD_MAX_BYTES / (1024 * 1024))} MB。` };
+  if (file.size > BUILD_IMAGE_UPLOAD_MAX_BYTES) {
+    return {
+      ok: false,
+      error: `单张图片不超过 ${Math.round(BUILD_IMAGE_UPLOAD_MAX_BYTES / (1024 * 1024))} MB。`,
+    };
   }
 
   const mime = resolveImageMime(file);
@@ -70,21 +79,25 @@ export async function uploadMocImageAction(
     const db = getDb();
     const [cntRow] = await db
       .select({ n: count() })
-      .from(mocImages)
-      .where(eq(mocImages.mocId, mocId));
+      .from(buildImages)
+      .where(and(eq(buildImages.subjectKind, sub.kind), eq(buildImages.subjectId, sub.id)));
     const n = Number(cntRow?.n ?? 0);
-    if (n >= MOC_UPLOAD_MAX_FILES_PER_MOC) {
-      return { ok: false, error: `每个 MOC 最多上传 ${MOC_UPLOAD_MAX_FILES_PER_MOC} 张图。` };
+    if (n >= BUILD_IMAGE_UPLOAD_MAX_FILES_PER_SUBJECT) {
+      return {
+        ok: false,
+        error: `每个 MOC 最多上传 ${BUILD_IMAGE_UPLOAD_MAX_FILES_PER_SUBJECT} 张图。`,
+      };
     }
 
     const buf = Buffer.from(await file.arrayBuffer());
-    const dir = await ensureMocUploadDir(mocId);
+    const dir = await ensureBuildUploadDir(sub.kind, sub.id);
     const absPath = path.join(dir, storedFile);
     await fs.writeFile(absPath, buf);
 
     try {
-      await db.insert(mocImages).values({
-        mocId,
+      await db.insert(buildImages).values({
+        subjectKind: sub.kind,
+        subjectId: sub.id,
         storedFile,
         originalName: file.name.trim() || null,
         mimeType: mime,
@@ -96,7 +109,7 @@ export async function uploadMocImageAction(
       return { ok: false, error: "写入记录失败。" };
     }
 
-    revalidateMocPage(mocId);
+    revalidateMocPage(sub.id);
     return { ok: true };
   } catch {
     return { ok: false, error: "上传失败，请重试。" };
@@ -108,10 +121,10 @@ export async function deleteMocImageAction(
   imageId: number
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const mocId = mocIdRaw.trim();
-  if (!mocId || mocId.length > MOC_UPLOAD_MAX_ID_LEN) {
+  if (!mocId || mocId.length > BUILD_UPLOAD_MAX_ID_LEN) {
     return { ok: false, error: "MOC ID 无效。" };
   }
-  if (!isSafeMocIdForUploadPath(mocId)) {
+  if (!isSafeBuildSubjectId(BUILD_SUBJECT_MOC, mocId)) {
     return { ok: false, error: "MOC ID 含有非法字符。" };
   }
   if (!Number.isFinite(imageId) || imageId <= 0) {
@@ -121,17 +134,23 @@ export async function deleteMocImageAction(
   try {
     const db = getDb();
     const [row] = await db
-      .select({ id: mocImages.id, storedFile: mocImages.storedFile })
-      .from(mocImages)
-      .where(and(eq(mocImages.id, imageId), eq(mocImages.mocId, mocId)))
+      .select({ id: buildImages.id, storedFile: buildImages.storedFile })
+      .from(buildImages)
+      .where(
+        and(
+          eq(buildImages.id, imageId),
+          eq(buildImages.subjectKind, BUILD_SUBJECT_MOC),
+          eq(buildImages.subjectId, mocId)
+        )
+      )
       .limit(1);
 
     if (!row) {
       return { ok: false, error: "未找到该图片。" };
     }
 
-    await db.delete(mocImages).where(eq(mocImages.id, row.id));
-    const abs = path.join(mocUploadAbsoluteDir(mocId), row.storedFile);
+    await db.delete(buildImages).where(eq(buildImages.id, row.id));
+    const abs = path.join(buildUploadAbsoluteDir(BUILD_SUBJECT_MOC, mocId), row.storedFile);
     await fs.unlink(abs).catch(() => {});
 
     revalidateMocPage(mocId);

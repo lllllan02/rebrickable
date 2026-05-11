@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { mocProfiles, mocSavedPartsSheets } from "@/db/schema";
+import { buildProfiles, buildSavedPartsSheets } from "@/db/schema";
+import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { MOC_PROFILE_MAX_DISPLAY_NAME, serializeTagsJson } from "@/lib/moc-profile-parse";
 import {
   parseMocDisplayNameFromFilename,
@@ -17,6 +18,17 @@ import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 const MAX_MOC_ID_LEN = 128;
 const MAX_ITEMS = 100_000;
+
+function mocSheetKey(mocId: string) {
+  return and(
+    eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_MOC),
+    eq(buildSavedPartsSheets.subjectId, mocId)
+  );
+}
+
+function mocProfileKey(mocId: string) {
+  return and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
+}
 
 export type InitialMocSheetFromServer = {
   mocId: string;
@@ -65,9 +77,9 @@ export async function mocHasSavedPartsSheet(mocIdRaw: string): Promise<boolean> 
   try {
     const db = getDb();
     const rows = await db
-      .select({ mocId: mocSavedPartsSheets.mocId })
-      .from(mocSavedPartsSheets)
-      .where(eq(mocSavedPartsSheets.mocId, mocId))
+      .select({ subjectId: buildSavedPartsSheets.subjectId })
+      .from(buildSavedPartsSheets)
+      .where(mocSheetKey(mocId))
       .limit(1);
     return Boolean(rows[0]);
   } catch {
@@ -84,9 +96,9 @@ export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMoc
   try {
     const db = getDb();
     const rows = await db
-      .select({ payloadJson: mocSavedPartsSheets.payloadJson })
-      .from(mocSavedPartsSheets)
-      .where(eq(mocSavedPartsSheets.mocId, mocId))
+      .select({ payloadJson: buildSavedPartsSheets.payloadJson })
+      .from(buildSavedPartsSheets)
+      .where(mocSheetKey(mocId))
       .limit(1);
 
     const row = rows[0];
@@ -141,11 +153,10 @@ function aggregateRowFromDual(dual: StoredMocDualSheets): {
 
 export async function saveMocPartsSheetToDb(input: {
   mocId: string;
-  /** 写入完整零件表或缺件表；另一侧在库中保留 */
   kind: "full" | "shortage";
   skippedHeader: boolean;
   items: ShortageResolveItem[];
-  /** 原始导入文件名：用于在尚无显示名时写入 `moc_profiles.display_name`（仅 kind=full 时尝试） */
+  /** 原始导入文件名：尚无显示名时写入 `build_profiles.display_name`（仅 kind=full） */
   sourceFileName?: string | null;
 }): Promise<SaveMocPartsSheetResult> {
   const mocId = input.mocId.trim();
@@ -187,9 +198,9 @@ export async function saveMocPartsSheetToDb(input: {
     const db = getDb();
     db.transaction((tx) => {
       const existingRows = tx
-        .select({ payloadJson: mocSavedPartsSheets.payloadJson })
-        .from(mocSavedPartsSheets)
-        .where(eq(mocSavedPartsSheets.mocId, mocId))
+        .select({ payloadJson: buildSavedPartsSheets.payloadJson })
+        .from(buildSavedPartsSheets)
+        .where(mocSheetKey(mocId))
         .limit(1)
         .all();
       const existingJson = existingRows[0]?.payloadJson;
@@ -200,7 +211,7 @@ export async function saveMocPartsSheetToDb(input: {
           const prev = parseStoredMocDualSheets(parsed);
           if (prev) dual = prev;
         } catch {
-          /* 忽略损坏的旧行，以下方新数据为准 */
+          /* 忽略损坏的旧行 */
         }
       }
 
@@ -217,9 +228,10 @@ export async function saveMocPartsSheetToDb(input: {
       const payload = dualSheetsToPayloadV2(dual);
       const { skippedHeader, lineCount, totalPartQty } = aggregateRowFromDual(dual);
 
-      tx.insert(mocSavedPartsSheets)
+      tx.insert(buildSavedPartsSheets)
         .values({
-          mocId,
+          subjectKind: BUILD_SUBJECT_MOC,
+          subjectId: mocId,
           skippedHeader,
           payloadJson: JSON.stringify(payload),
           lineCount,
@@ -227,7 +239,7 @@ export async function saveMocPartsSheetToDb(input: {
           updatedAt: savedAt,
         })
         .onConflictDoUpdate({
-          target: mocSavedPartsSheets.mocId,
+          target: [buildSavedPartsSheets.subjectKind, buildSavedPartsSheets.subjectId],
           set: {
             skippedHeader,
             payloadJson: JSON.stringify(payload),
@@ -241,23 +253,24 @@ export async function saveMocPartsSheetToDb(input: {
       if (!fromFileTitle) return;
 
       const profRows = tx
-        .select({ displayName: mocProfiles.displayName, tagsJson: mocProfiles.tagsJson })
-        .from(mocProfiles)
-        .where(eq(mocProfiles.mocId, mocId))
+        .select({ displayName: buildProfiles.displayName, tagsJson: buildProfiles.tagsJson })
+        .from(buildProfiles)
+        .where(mocProfileKey(mocId))
         .limit(1)
         .all();
       const prof = profRows[0];
       if ((prof?.displayName ?? "").trim() !== "") return;
 
-      tx.insert(mocProfiles)
+      tx.insert(buildProfiles)
         .values({
-          mocId,
+          subjectKind: BUILD_SUBJECT_MOC,
+          subjectId: mocId,
           displayName: fromFileTitle,
           tagsJson: prof?.tagsJson ?? serializeTagsJson([]),
           profileUpdatedAt: savedAt,
         })
         .onConflictDoUpdate({
-          target: mocProfiles.mocId,
+          target: [buildProfiles.subjectKind, buildProfiles.subjectId],
           set: {
             displayName: fromFileTitle,
             profileUpdatedAt: savedAt,

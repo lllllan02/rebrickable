@@ -1,10 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { asc, desc, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { mocImages, mocProfiles, mocSavedPartsSheets } from "@/db/schema";
-import { mocImagePublicPath } from "@/lib/moc-image-public-path";
+import { buildImages, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
+import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
+import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
 import { MocsPartsSheetUpload } from "./mocs-parts-sheet-upload";
@@ -15,12 +16,13 @@ export default async function MocsPage() {
   const db = getDb();
   const rows = await db
     .select({
-      mocId: mocSavedPartsSheets.mocId,
-      totalPartQty: mocSavedPartsSheets.totalPartQty,
-      updatedAt: mocSavedPartsSheets.updatedAt,
+      mocId: buildSavedPartsSheets.subjectId,
+      totalPartQty: buildSavedPartsSheets.totalPartQty,
+      updatedAt: buildSavedPartsSheets.updatedAt,
     })
-    .from(mocSavedPartsSheets)
-    .orderBy(desc(mocSavedPartsSheets.updatedAt));
+    .from(buildSavedPartsSheets)
+    .where(eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_MOC))
+    .orderBy(desc(buildSavedPartsSheets.updatedAt));
 
   const mocIds = rows.map((r) => r.mocId);
 
@@ -29,20 +31,25 @@ export default async function MocsPage() {
 
   if (mocIds.length > 0) {
     const [profiles, imgs] = await Promise.all([
-      db.select().from(mocProfiles).where(inArray(mocProfiles.mocId, mocIds)),
+      db
+        .select()
+        .from(buildProfiles)
+        .where(
+          and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), inArray(buildProfiles.subjectId, mocIds))
+        ),
       db
         .select({
-          mocId: mocImages.mocId,
-          storedFile: mocImages.storedFile,
-          createdAt: mocImages.createdAt,
+          mocId: buildImages.subjectId,
+          storedFile: buildImages.storedFile,
+          createdAt: buildImages.createdAt,
         })
-        .from(mocImages)
-        .where(inArray(mocImages.mocId, mocIds))
-        .orderBy(asc(mocImages.createdAt)),
+        .from(buildImages)
+        .where(and(eq(buildImages.subjectKind, BUILD_SUBJECT_MOC), inArray(buildImages.subjectId, mocIds)))
+        .orderBy(asc(buildImages.createdAt)),
     ]);
 
     for (const p of profiles) {
-      profileByMoc.set(p.mocId, {
+      profileByMoc.set(p.subjectId, {
         displayName: (p.displayName ?? "").trim(),
         tags: parseTagsJson(p.tagsJson),
       });
@@ -78,7 +85,7 @@ export default async function MocsPage() {
               const title = displayName || `MOC ${r.mocId}`;
               const tags = prof?.tags ?? [];
               const stored = coverStoredByMoc.get(r.mocId);
-              const coverUrl = stored ? mocImagePublicPath(r.mocId, stored) : null;
+              const coverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.mocId, stored) : null;
               const detailHref = `/mocs/${encodeURIComponent(r.mocId)}`;
               const savedAt = r.updatedAt.slice(0, 19).replace("T", " ");
 

@@ -9,9 +9,7 @@ import { createGunzip } from "zlib";
 import { parse } from "csv-parse";
 import Database from "better-sqlite3";
 
-import { ensureMocImagesTable } from "../src/db/ensure-moc-images-table";
-import { ensureMocProfilesTable } from "../src/db/ensure-moc-profiles-table";
-import { ensureMocSavedPartsSheetTable } from "../src/db/ensure-moc-saved-parts-sheet-table";
+import { ensureBuildTables } from "../src/db/ensure-build-tables";
 
 const ROOT = path.join(__dirname, "..");
 const ASSETS = path.join(ROOT, "assets");
@@ -144,9 +142,7 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX pr_parent_idx ON part_relationships(parent_part_num);
     CREATE INDEX pr_child_idx ON part_relationships(child_part_num);
   `);
-  ensureMocSavedPartsSheetTable(db);
-  ensureMocImagesTable(db);
-  ensureMocProfilesTable(db);
+  ensureBuildTables(db, ROOT);
 }
 
 async function loadPartCategories(db: Database.Database) {

@@ -115,59 +115,68 @@ export const partRelationships = sqliteTable(
   ]
 );
 
-/** MOC 导入页按 MOC ID 保存的解析结果（JSON），同一 ID 再次保存即覆盖 */
-export const mocSavedPartsSheets = sqliteTable(
-  "moc_saved_parts_sheets",
+/** 本地 MOC / 官方套装编号 共用的已存零件表（JSON），主键为 (subject_kind, subject_id) */
+export const buildSavedPartsSheets = sqliteTable(
+  "build_saved_parts_sheets",
   {
-    mocId: text("moc_id").primaryKey(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
     skippedHeader: integer("skipped_header", { mode: "boolean" }).notNull(),
     payloadJson: text("payload_json").notNull(),
     lineCount: integer("line_count").notNull(),
-    /** 各行列 quantity 之和（零件总个数），非行数 */
     totalPartQty: integer("total_part_qty").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (t) => [index("moc_saved_parts_updated_idx").on(t.updatedAt)]
+  (t) => [
+    primaryKey({ columns: [t.subjectKind, t.subjectId] }),
+    index("build_saved_parts_updated_idx").on(t.updatedAt),
+  ]
 );
 
-/** MOC 显示名称与自定义标签（moc_id 与已存零件表、图片表一致） */
-export const mocProfiles = sqliteTable(
-  "moc_profiles",
+/** 显示名与标签（与零件表、图、附件同一主体） */
+export const buildProfiles = sqliteTable(
+  "build_profiles",
   {
-    mocId: text("moc_id").primaryKey(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
     displayName: text("display_name").notNull().default(""),
     tagsJson: text("tags_json").notNull(),
     profileUpdatedAt: text("profile_updated_at").notNull(),
   },
-  (t) => [index("moc_profiles_updated_idx").on(t.profileUpdatedAt)]
+  (t) => [
+    primaryKey({ columns: [t.subjectKind, t.subjectId] }),
+    index("build_profiles_updated_idx").on(t.profileUpdatedAt),
+  ]
 );
 
-/** MOC 详情页用户上传的参考图（二进制在 data/moc-uploads/<moc_id>/ 下） */
-export const mocImages = sqliteTable(
-  "moc_images",
+/** 用户上传参考图；文件在 data/build-uploads/<kind>/<subject_id>/ */
+export const buildImages = sqliteTable(
+  "build_images",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    mocId: text("moc_id").notNull(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
     storedFile: text("stored_file").notNull().unique(),
     originalName: text("original_name"),
     mimeType: text("mime_type").notNull(),
     byteSize: integer("byte_size").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [index("moc_images_moc_idx").on(t.mocId)]
+  (t) => [index("build_images_subject_idx").on(t.subjectKind, t.subjectId)]
 );
 
-/** MOC 说明书 PDF、Studio 源文件等（与参考图同目录 data/moc-uploads/<moc_id>/） */
-export const mocAttachments = sqliteTable(
-  "moc_attachments",
+/** 说明书 PDF、Studio .io 等 */
+export const buildAttachments = sqliteTable(
+  "build_attachments",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    mocId: text("moc_id").notNull(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
     storedFile: text("stored_file").notNull().unique(),
     originalName: text("original_name"),
     mimeType: text("mime_type").notNull(),
     byteSize: integer("byte_size").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [index("moc_attachments_moc_idx").on(t.mocId)]
+  (t) => [index("build_attachments_subject_idx").on(t.subjectKind, t.subjectId)]
 );
