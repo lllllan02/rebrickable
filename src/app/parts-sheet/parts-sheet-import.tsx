@@ -70,6 +70,10 @@ async function postResolve(csv: string): Promise<ResolveResponse & { error?: str
 
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  downloadBlob(filename, blob);
+}
+
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -115,10 +119,29 @@ export function PartsSheetImport() {
   const [colorsLoading, setColorsLoading] = useState(false);
   const [colorsLoadError, setColorsLoadError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    jobId: string;
+    total: number;
+    current: number;
+    writingFile: boolean;
+  } | null>(null);
   const colorDialogRef = useRef<HTMLDialogElement>(null);
   const imageDialogRef = useRef<HTMLDialogElement>(null);
+  const exportProgressDialogRef = useRef<HTMLDialogElement>(null);
+  const exportPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const exportPollTickRef = useRef(false);
   const colorLabelId = useId();
   const imageTitleId = useId();
+  const exportProgressTitleId = useId();
+
+  const clearExportPoll = useCallback(() => {
+    if (exportPollRef.current) {
+      clearInterval(exportPollRef.current);
+      exportPollRef.current = null;
+    }
+    exportPollTickRef.current = false;
+  }, []);
 
   const loadColors = useCallback(async () => {
     setColorsLoading(true);
@@ -165,6 +188,14 @@ export function PartsSheetImport() {
     const d = imageDialogRef.current;
     if (d && !d.open) d.showModal();
   }, [previewUrl]);
+
+  useEffect(() => {
+    if (!exportProgress) return;
+    const d = exportProgressDialogRef.current;
+    if (d && !d.open) d.showModal();
+  }, [exportProgress]);
+
+  useEffect(() => () => clearExportPoll(), [clearExportPoll]);
 
   const openColorDialog = useCallback((row: ShortageRow) => {
     setColorFilter("");
@@ -264,16 +295,219 @@ export function PartsSheetImport() {
     }
   }, [colorEditRow, items, selectedColorId, skippedHeader]);
 
-  const onExport = useCallback(() => {
+  const exportStem = useMemo(
+    () => (fileName?.replace(/\.csv$/i, "") ?? "parts-sheet") + "-edited",
+    [fileName]
+  );
+
+  const onExportCsv = useCallback(() => {
     if (!items || items.length === 0) return;
-    const base =
-      (fileName?.replace(/\.csv$/i, "") ?? "parts-sheet") + "-edited.csv";
     const text = rowsToCsv(items, skippedHeader);
-    downloadText(base, text);
-  }, [fileName, items, skippedHeader]);
+    downloadText(`${exportStem}.csv`, text);
+  }, [exportStem, items, skippedHeader]);
+
+  const onExportXlsx = useCallback(async () => {
+    if (!items || items.length === 0) return;
+    clearExportPoll();
+    setExportBusy(true);
+    setError(null);
+    setLineNumber(null);
+    const payload = {
+      filenameStem: exportStem,
+      items: items.map((r) => {
+        const { rowId, ...rest } = r;
+        void rowId;
+        return rest;
+      }),
+    };
+
+    try {
+      const res = await fetch("/api/parts-sheet/export-xlsx/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        let msg =
+          typeof data === "object" &&
+          data !== null &&
+          "error" in data &&
+          typeof (data as { error: unknown }).error === "string"
+            ? (data as { error: string }).error
+            : `导出失败（${res.status}）`;
+        const detail =
+          typeof data === "object" &&
+          data !== null &&
+          "detail" in data &&
+          typeof (data as { detail: unknown }).detail === "string"
+            ? (data as { detail: string }).detail.trim()
+            : "";
+        if (detail) msg = `${msg}（${detail}）`;
+        setError(msg);
+        setExportBusy(false);
+        return;
+      }
+      const jobId =
+        typeof data === "object" &&
+        data !== null &&
+        "jobId" in data &&
+        typeof (data as { jobId: unknown }).jobId === "string"
+          ? (data as { jobId: string }).jobId
+          : null;
+      const totalFromApi =
+        typeof data === "object" &&
+        data !== null &&
+        "total" in data &&
+        typeof (data as { total: unknown }).total === "number"
+          ? (data as { total: number }).total
+          : items.length;
+      if (!jobId) {
+        setError("导出任务创建失败。");
+        setExportBusy(false);
+        return;
+      }
+
+      setExportProgress({
+        jobId,
+        total: totalFromApi,
+        current: 0,
+        writingFile: false,
+      });
+
+      const deadline = Date.now() + 10 * 60 * 1000;
+
+      exportPollRef.current = setInterval(() => {
+        void (async () => {
+          if (exportPollTickRef.current) return;
+          exportPollTickRef.current = true;
+          try {
+            if (Date.now() > deadline) {
+              clearExportPoll();
+              setError("导出超时，请减少行数或稍后重试。");
+              exportProgressDialogRef.current?.close();
+              setExportProgress(null);
+              setExportBusy(false);
+              return;
+            }
+
+            const sr = await fetch(
+              `/api/parts-sheet/export-xlsx/status?jobId=${encodeURIComponent(jobId)}`
+            );
+            const st: unknown = await sr.json().catch(() => null);
+            if (!sr.ok) return;
+
+            const status =
+              typeof st === "object" &&
+              st !== null &&
+              "status" in st &&
+              typeof (st as { status: unknown }).status === "string"
+                ? (st as { status: string }).status
+                : "";
+            const current =
+              typeof st === "object" &&
+              st !== null &&
+              "current" in st &&
+              typeof (st as { current: unknown }).current === "number"
+                ? (st as { current: number }).current
+                : 0;
+            const total =
+              typeof st === "object" &&
+              st !== null &&
+              "total" in st &&
+              typeof (st as { total: unknown }).total === "number"
+                ? (st as { total: number }).total
+                : totalFromApi;
+            const writingFile =
+              typeof st === "object" &&
+              st !== null &&
+              "writingFile" in st &&
+              typeof (st as { writingFile: unknown }).writingFile === "boolean"
+                ? (st as { writingFile: boolean }).writingFile
+                : false;
+
+            if (status === "running") {
+              setExportProgress((p) =>
+                p && p.jobId === jobId
+                  ? { ...p, current, total, writingFile }
+                  : p
+              );
+              return;
+            }
+
+            if (status === "error") {
+              clearExportPoll();
+              const errMsg =
+                typeof st === "object" &&
+                st !== null &&
+                "error" in st &&
+                typeof (st as { error: unknown }).error === "string"
+                  ? (st as { error: string }).error
+                  : "生成 Excel 失败。";
+              setError(errMsg);
+              exportProgressDialogRef.current?.close();
+              setExportProgress(null);
+              setExportBusy(false);
+              return;
+            }
+
+            if (status === "done") {
+              clearExportPoll();
+              const dr = await fetch(
+                `/api/parts-sheet/export-xlsx/download?jobId=${encodeURIComponent(jobId)}`
+              );
+              if (!dr.ok) {
+                const errBody: unknown = await dr.json().catch(() => null);
+                const errMsg =
+                  typeof errBody === "object" &&
+                  errBody !== null &&
+                  "error" in errBody &&
+                  typeof (errBody as { error: unknown }).error === "string"
+                    ? (errBody as { error: string }).error
+                    : `下载失败（${dr.status}）`;
+                setError(errMsg);
+                exportProgressDialogRef.current?.close();
+                setExportProgress(null);
+                setExportBusy(false);
+                return;
+              }
+              const blob = await dr.blob();
+              downloadBlob(`${exportStem}.xlsx`, blob);
+              exportProgressDialogRef.current?.close();
+              setExportProgress(null);
+              setExportBusy(false);
+            }
+          } catch {
+            clearExportPoll();
+            setError("导出过程中断，请重试。");
+            exportProgressDialogRef.current?.close();
+            setExportProgress(null);
+            setExportBusy(false);
+          } finally {
+            exportPollTickRef.current = false;
+          }
+        })();
+      }, 250);
+    } catch {
+      setError("导出 Excel 失败，请重试。");
+      setExportBusy(false);
+    }
+  }, [clearExportPoll, exportStem, items]);
 
   const missingParts = items?.filter((i) => !i.partFound).length ?? 0;
   const noImage = items?.filter((i) => i.partFound && !i.imgUrl).length ?? 0;
+
+  const exportBarPercent =
+    exportProgress === null
+      ? 0
+      : exportProgress.writingFile
+        ? 97
+        : exportProgress.total > 0
+          ? Math.min(
+              94,
+              Math.round((exportProgress.current / exportProgress.total) * 94)
+            )
+          : 0;
 
   return (
     <div className="space-y-6">
@@ -308,6 +542,45 @@ export function PartsSheetImport() {
               unoptimized
               className="mx-auto max-h-[min(85vh,900px)] w-auto max-w-full object-contain"
             />
+          </div>
+        ) : null}
+      </dialog>
+
+      <dialog
+        ref={exportProgressDialogRef}
+        className="fixed left-1/2 top-1/2 z-[210] m-0 w-[min(100vw-1.5rem,22rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/55"
+        aria-labelledby={exportProgressTitleId}
+        aria-busy={exportBusy}
+        onClose={() => {
+          clearExportPoll();
+          setExportBusy(false);
+          setExportProgress(null);
+        }}
+      >
+        {exportProgress ? (
+          <div className="space-y-3">
+            <h2 id={exportProgressTitleId} className="text-sm font-semibold">
+              导出 Excel
+            </h2>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
+              <div
+                className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200 ease-out"
+                style={{ width: `${exportBarPercent}%` }}
+              />
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              {exportProgress.writingFile
+                ? "正在写入工作簿…"
+                : `处理行：${exportProgress.current} / ${exportProgress.total}（含拉取缩略图）`}
+            </p>
+            <p className="text-[11px] text-[var(--muted-2)]">完成后将自动下载。</p>
+            <button
+              type="button"
+              className="w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--surface-2)]"
+              onClick={() => exportProgressDialogRef.current?.close()}
+            >
+              取消等待
+            </button>
           </div>
         ) : null}
       </dialog>
@@ -447,14 +720,24 @@ export function PartsSheetImport() {
           {loading ? "解析中…" : "选择零件表 CSV"}
         </label>
         {items !== null && items.length > 0 ? (
-          <button
-            type="button"
-            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
-            disabled={loading}
-            onClick={onExport}
-          >
-            导出当前 CSV
-          </button>
+          <>
+            <button
+              type="button"
+              className="button-primary text-sm"
+              disabled={loading || exportBusy}
+              onClick={() => void onExportXlsx()}
+            >
+              {exportBusy ? "导出中…" : "导出 Excel（含缩略图）"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
+              disabled={loading || exportBusy}
+              onClick={onExportCsv}
+            >
+              导出 CSV（无图，可再导入）
+            </button>
+          </>
         ) : null}
         {fileName ? (
           <span className="text-xs text-[var(--muted)]">{fileName}</span>
@@ -492,7 +775,9 @@ export function PartsSheetImport() {
         <>
           <div className="meta-row text-xs text-[var(--muted)]">
             <span>共 {items.length} 条</span>
-            {skippedHeader ? <span>导出时将保留表头行</span> : null}
+            {skippedHeader ? (
+              <span>导出 CSV 时将保留表头行；Excel 前四列与 CSV 表头一致（Part, Color, Quantity, Rest）</span>
+            ) : null}
             {missingParts > 0 ? (
               <span className="text-amber-200/90">
                 本地库未收录：{missingParts} 条

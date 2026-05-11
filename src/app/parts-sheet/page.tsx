@@ -16,6 +16,7 @@ export default function PartsSheetPage() {
           在本地库中精确匹配零件，并尽量按{" "}
           <span className="font-medium text-[var(--text)]">颜色 ID</span>{" "}
           从库存数据中选取缩略图（若无同色图则退化为该零件任意一色图片）。
+          编辑后可导出 Excel（前四列与 CSV 一致便于再导入，缩略图与说明列在右侧），或导出 CSV。
         </p>
       </section>
       <PartsSheetImport />
