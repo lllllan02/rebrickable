@@ -123,6 +123,8 @@ export const mocSavedPartsSheets = sqliteTable(
     skippedHeader: integer("skipped_header", { mode: "boolean" }).notNull(),
     payloadJson: text("payload_json").notNull(),
     lineCount: integer("line_count").notNull(),
+    /** 各行列 quantity 之和（零件总个数），非行数 */
+    totalPartQty: integer("total_part_qty").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [index("moc_saved_parts_updated_idx").on(t.updatedAt)]

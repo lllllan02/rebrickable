@@ -18,9 +18,11 @@ type Props = {
   savedAt: string;
   /** 链到导入页（含 loadMoc），便于对照编辑 */
   partsSheetHref?: string;
+  /** 各行列 quantity 之和；不传则由 items 现场累加 */
+  totalPartQty?: number;
 };
 
-export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref }: Props) {
+export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref, totalPartQty: totalPartQtyProp }: Props) {
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
 
   const sheetFilterOptions = useMemo(() => getSheetFilterOptionsFromItems(items), [items]);
@@ -36,6 +38,13 @@ export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref }: 
     [items, sheetListFilter]
   );
 
+  const totalPartQty = useMemo(() => {
+    if (typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
+      return totalPartQtyProp;
+    }
+    return items.reduce((s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0), 0);
+  }, [items, totalPartQtyProp]);
+
   const missingParts = items.filter((i) => !i.partFound).length;
   const noImage = items.filter((i) => i.partFound && !i.imgUrl).length;
 
@@ -44,7 +53,8 @@ export function MocPartsList({ items, skippedHeader, savedAt, partsSheetHref }: 
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-[var(--text)]">零件列表</h2>
         <p className="text-xs text-[var(--muted)]">
-          共 {items.length} 行
+          共 {totalPartQty.toLocaleString("zh-CN")} 个零件
+          <span className="text-[var(--muted-2)]">（{items.length.toLocaleString("zh-CN")} 行）</span>
           {sheetListFilter !== "all" && listFiltered.length !== items.length
             ? `，当前分类 ${listFiltered.length} 条`
             : ""}

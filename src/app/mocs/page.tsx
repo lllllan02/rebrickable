@@ -16,7 +16,7 @@ export default async function MocsPage() {
   const rows = await db
     .select({
       mocId: mocSavedPartsSheets.mocId,
-      lineCount: mocSavedPartsSheets.lineCount,
+      totalPartQty: mocSavedPartsSheets.totalPartQty,
       updatedAt: mocSavedPartsSheets.updatedAt,
     })
     .from(mocSavedPartsSheets)
@@ -130,8 +130,8 @@ export default async function MocsPage() {
                     ) : null}
                     <div className="mt-auto flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
                       <span className="tabular-nums text-[var(--text)]">
-                        <span className="text-[var(--muted-2)]">零件行数 </span>
-                        {r.lineCount.toLocaleString("zh-CN")}
+                        <span className="text-[var(--muted-2)]">零件总数 </span>
+                        {r.totalPartQty.toLocaleString("zh-CN")}
                       </span>
                       <span className="shrink-0 text-right tabular-nums">
                         <span className="text-[var(--muted-2)]">保存时间 </span>

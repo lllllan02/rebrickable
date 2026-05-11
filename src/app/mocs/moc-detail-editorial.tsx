@@ -12,6 +12,8 @@ type Props = {
   images: MocGalleryImage[];
   initialDisplayName: string;
   initialTags: string[];
+  /** 已存零件表各行列 quantity 之和；无表时为 null */
+  partTotalQty: number | null;
 };
 
 export function MocDetailEditorial({
@@ -21,6 +23,7 @@ export function MocDetailEditorial({
   images,
   initialDisplayName,
   initialTags,
+  partTotalQty,
 }: Props) {
   return (
     <section className="hero-panel">
@@ -37,6 +40,13 @@ export function MocDetailEditorial({
             initialDisplayName={initialDisplayName}
             initialTags={initialTags}
           />
+
+          {partTotalQty !== null ? (
+            <p className="text-sm tabular-nums text-[var(--text)]">
+              <span className="text-[var(--muted)]">零件总数 </span>
+              {partTotalQty.toLocaleString("zh-CN")}
+            </p>
+          ) : null}
 
           <nav className="flex flex-col gap-2 border-t border-[var(--border-soft)] pt-4 text-sm">
             <a href={rbHref} className="text-[var(--accent)] underline underline-offset-2" target="_blank" rel="noreferrer">

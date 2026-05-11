@@ -25,7 +25,15 @@ export type InitialMocSheetFromServer = {
 };
 
 export type LoadMocPartsSheetResult =
-  | { ok: true; mocId: string; skippedHeader: boolean; items: ShortageResolveItem[]; savedAt: string }
+  | {
+      ok: true;
+      mocId: string;
+      skippedHeader: boolean;
+      items: ShortageResolveItem[];
+      savedAt: string;
+      /** 各行列 quantity 之和 */
+      totalPartQty: number;
+    }
   | { ok: false; error: string };
 
 /** 是否已有该 MOC 的已存零件表（用于列表直传前的重复提示） */
@@ -76,12 +84,18 @@ export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMoc
       return { ok: false, error: "已存数据无效或为空。" };
     }
 
+    const totalPartQty = payload.items.reduce(
+      (s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0),
+      0
+    );
+
     return {
       ok: true,
       mocId,
       skippedHeader: payload.skippedHeader,
       items: payload.items,
       savedAt: payload.savedAt,
+      totalPartQty,
     };
   } catch {
     return { ok: false, error: "读取数据库失败。" };
@@ -114,6 +128,8 @@ export async function saveMocPartsSheetToDb(input: {
     return { ok: false, error: `行数超过上限 ${MAX_ITEMS}。` };
   }
 
+  const totalPartQty = items.reduce((s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0), 0);
+
   const savedAt = new Date().toISOString();
   const payload: MocPartsSheetPayloadV1 = {
     version: 1,
@@ -138,6 +154,7 @@ export async function saveMocPartsSheetToDb(input: {
           skippedHeader: input.skippedHeader,
           payloadJson: JSON.stringify(payload),
           lineCount: items.length,
+          totalPartQty,
           updatedAt: savedAt,
         })
         .onConflictDoUpdate({
@@ -146,6 +163,7 @@ export async function saveMocPartsSheetToDb(input: {
             skippedHeader: input.skippedHeader,
             payloadJson: JSON.stringify(payload),
             lineCount: items.length,
+            totalPartQty,
             updatedAt: savedAt,
           },
         })

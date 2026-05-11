@@ -48,6 +48,7 @@ export default async function MocDetailPage({ params }: Props) {
 
   const rbHref = `https://rebrickable.com/mocs/MOC-${encodeURIComponent(mocId)}/`;
   const partsSheetHref = `/mocs/import?loadMoc=${encodeURIComponent(mocId)}`;
+  const partTotalQty = sheet.ok ? sheet.totalPartQty : null;
 
   return (
     <div className="page-stack">
@@ -58,6 +59,7 @@ export default async function MocDetailPage({ params }: Props) {
         images={galleryImages}
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
+        partTotalQty={partTotalQty}
       />
 
       {sheet.ok ? (
@@ -67,6 +69,7 @@ export default async function MocDetailPage({ params }: Props) {
             skippedHeader={sheet.skippedHeader}
             savedAt={sheet.savedAt}
             partsSheetHref={partsSheetHref}
+            totalPartQty={sheet.totalPartQty}
           />
         </div>
       ) : (
