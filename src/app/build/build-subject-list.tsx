@@ -75,18 +75,18 @@ export async function BuildSubjectListPage({
 
   return (
     <div className="page-stack">
-      <section className="hero-panel">
-        <p className="page-kicker">{ui.listKicker}</p>
-        <h1 className="page-title">
-          {ui.noun} {ui.listTitleSuffix}
-        </h1>
-        {officialCatalogSection == null ? (
+      {officialCatalogSection == null ? (
+        <section className="hero-panel">
+          <p className="page-kicker">{ui.listKicker}</p>
+          <h1 className="page-title">
+            {ui.noun} {ui.listTitleSuffix}
+          </h1>
           <p className="page-description">
             在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
             <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
           </p>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
       {officialCatalogSection == null ? <BuildPartsSheetUpload kind={kind} /> : null}
       {officialCatalogSection ?? null}
       <div className="table-shell">

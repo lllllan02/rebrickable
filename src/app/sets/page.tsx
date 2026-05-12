@@ -4,7 +4,7 @@ import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ q?: string; page?: string }> };
+type Props = { searchParams: Promise<{ q?: string; page?: string; theme?: string }> };
 
 export default async function SetsIndexPage({ searchParams }: Props) {
   const sp = await searchParams;
