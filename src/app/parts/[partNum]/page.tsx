@@ -198,7 +198,7 @@ export default async function PartDetailPage({ params }: Props) {
 
       <section className="space-y-2">
         <h2 className="section-title">颜色 / 元素</h2>
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
           {elemRows.map((e) => {
             const colorThumb = thumbByColor.get(e.colorId);
             return (

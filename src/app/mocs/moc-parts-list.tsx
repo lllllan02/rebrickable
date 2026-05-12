@@ -12,6 +12,7 @@ import {
   rowMatchesSheetListFilter,
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
+import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 function MocPartDetailBody({
@@ -457,14 +458,15 @@ export function MocPartsList({
           当前分类下没有匹配条目。未收录零件不参与分类筛选；可点「全部」查看完整列表。
         </p>
       ) : (
-        <div
-          className="grid gap-2"
-          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))" }}
-        >
+        <div className="tiles-grid">
           {listFiltered.map((r, idx) => {
-            const tileClass =
-              "group relative flex flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-1 pb-1.5 text-left shadow-[var(--shadow)] transition-[border-color,transform,background-color] duration-150 hover:-translate-y-px hover:border-amber-400/45 hover:bg-[linear-gradient(180deg,rgba(247,200,75,0.08),rgba(255,255,255,0.025))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]" +
-              (shortageEditable ? " pb-6" : "");
+            const tileClass = [
+              PART_GRID_TILE_CLASS_BASE,
+              parentSubjectOwned ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
+              shortageEditable ? "pb-6" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             const inner = (
               <>
                 {r.imgSource === "part" ? (

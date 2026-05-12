@@ -748,15 +748,48 @@ select {
   transform: translateY(-1px);
 }
 
-/* 「我的拥有」：分类标题与卡片同处一块面板内；卡片 hover 保持中性描边（避免与未悬停卡片黄/灰不一致） */
+/* 已标记「拥有」：与 --accent 同系的金色描边（避免偏红的「警示橙」） */
+.result-card--owned,
 .owned-grid .result-card {
-  border: 1px solid var(--border);
+  border: 2px solid rgba(247, 200, 75, 0.5);
+  background: linear-gradient(180deg, rgba(247, 200, 75, 0.1), rgba(255, 255, 255, 0.018));
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px rgba(247, 200, 75, 0.1);
 }
 
+.result-card--owned:hover,
 .owned-grid .result-card:hover {
-  border-color: var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border-color: rgba(255, 220, 130, 0.72);
+  background: linear-gradient(180deg, rgba(247, 200, 75, 0.14), rgba(255, 255, 255, 0.028));
   transform: translateY(-1px);
+}
+
+/* 零件方格缩略图列表：统一间距与列宽 */
+.tiles-grid {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 0.625rem;
+  grid-template-columns: repeat(auto-fill, minmax(5.75rem, 1fr));
+}
+
+/* 套装 / MOC 等卡片栅格：略加大屏间距 */
+.list-cards-grid {
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .list-cards-grid {
+    gap: 1.125rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .list-cards-grid {
+    gap: 1.25rem;
+  }
 }
 
 .media-box {

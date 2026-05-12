@@ -151,7 +151,7 @@ export async function BuildSubjectListPage({
             查看全部。
           </p>
         ) : (
-          <ul className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredRows.map((r) => {
               const prof = profileBySubject.get(r.subjectId);
               const displayName = prof?.displayName?.trim() ?? "";
@@ -167,8 +167,12 @@ export async function BuildSubjectListPage({
               const detailHref = buildSubjectDetailPath(kind, r.subjectId);
               const savedAt = r.updatedAt.slice(0, 19).replace("T", " ");
 
+              const owned = ownedSubjectIds.has(r.subjectId);
               return (
-                <li key={r.subjectId} className="result-card flex flex-col gap-0 overflow-hidden p-0">
+                <li
+                  key={r.subjectId}
+                  className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : ""}`}
+                >
                   <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
                     <Link
                       href={detailHref}

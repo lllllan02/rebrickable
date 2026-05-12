@@ -124,7 +124,7 @@ function SetsThemePickerGrid({
 
   return (
     <ul
-      className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
+      className="list-cards-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
       role="list"
     >
       {roots.map((t) => {
@@ -627,7 +627,7 @@ export async function SetsOfficialCatalogSection({
         </button>
       </form>
       <div className="table-shell">
-        <ul className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {rows.map((r) => {
             const thumb =
               usableImgUrl(r.setBoxImg)
@@ -638,8 +638,12 @@ export async function SetsOfficialCatalogSection({
             const themeLabel = (r.themeName ?? "").trim();
             const title = (r.setName ?? "").trim() || `套装 ${r.setNum}`;
             const href = detailPath(r.setNum);
+            const owned = ownedPageSetNums.has(r.setNum);
             return (
-              <li key={r.setNum} className="result-card flex flex-col gap-0 overflow-hidden p-0">
+              <li
+                key={r.setNum}
+                className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : ""}`}
+              >
                 <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
                   <Link
                     href={href}

@@ -21,12 +21,15 @@ import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
 import {
+  buildOwnedSubjects,
   elements,
   inventoryParts,
   partCategories,
   partRelationships,
   parts,
 } from "@/db/schema";
+import { OWNED_SUBJECT_PART } from "@/lib/build-owned-subject";
+import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 import { likeFragment } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +85,7 @@ function PartsCategoryPickerGrid({
 
   return (
     <ul
-      className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
+      className="list-cards-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
       role="list"
     >
       {list.map((c) => {
@@ -340,9 +343,10 @@ export default async function PartsPage({ searchParams }: Props) {
   const printedPartNums = new Set<string>();
   const matchedElementsByPart = new Map<string, string[]>();
   const elementMatchTruncated = new Set<string>();
+  const ownedPartNums = new Set<string>();
 
   if (partNums.length > 0) {
-    const [thumbRows, countRows, colorRows, printedRows, matchRows] =
+    const [thumbRows, countRows, colorRows, printedRows, matchRows, ownedRows] =
       await Promise.all([
         db
           .select({
@@ -402,8 +406,20 @@ export default async function PartsPage({ searchParams }: Props) {
           : Promise.resolve(
               [] as { partNum: string; elementId: string }[]
             ),
+        db
+          .select({ subjectId: buildOwnedSubjects.subjectId })
+          .from(buildOwnedSubjects)
+          .where(
+            and(
+              eq(buildOwnedSubjects.subjectKind, OWNED_SUBJECT_PART),
+              inArray(buildOwnedSubjects.subjectId, partNums)
+            )
+          ),
       ]);
 
+    for (const o of ownedRows) {
+      ownedPartNums.add(o.subjectId);
+    }
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
@@ -513,21 +529,19 @@ export default async function PartsPage({ searchParams }: Props) {
           搜索
         </button>
       </form>
-      <ul
-        className="grid list-none gap-2 p-0"
-        style={{
-          gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))",
-        }}
-        role="list"
-      >
+      <ul className="tiles-grid" role="list">
         {rows.map((r) => {
           const thumb = thumbByPart.get(r.partNum);
           const elemCount = elemCountByPart.get(r.partNum) ?? 0;
           const colorCount = colorCountByPart.get(r.partNum) ?? 0;
           const isPrinted = printedPartNums.has(r.partNum);
           const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
-          const tileClass =
-            "group relative flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-1 pb-1.5 text-left shadow-[var(--shadow)] transition-[border-color,transform,background-color] duration-150 hover:-translate-y-px hover:border-amber-400/45 hover:bg-[linear-gradient(180deg,rgba(247,200,75,0.08),rgba(255,255,255,0.025))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+          const tileClass = [
+            PART_GRID_TILE_CLASS_BASE,
+            ownedPartNums.has(r.partNum) ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
           const title = [
             r.partNum,
             r.name,

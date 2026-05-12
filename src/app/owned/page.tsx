@@ -21,6 +21,7 @@ import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { aggregateOwnedPartInventory } from "@/lib/owned-inventory-aggregate";
+import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 
 export const dynamic = "force-dynamic";
 
@@ -206,8 +207,7 @@ export default async function OwnedCollectionPage() {
     }
   }
 
-  const partTileClass =
-    "group relative flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-1 pb-1.5 text-left shadow-[var(--shadow)] transition-[border-color,transform,background-color] duration-150 hover:-translate-y-px hover:border-amber-400/45 hover:bg-[linear-gradient(180deg,rgba(247,200,75,0.08),rgba(255,255,255,0.025))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+  const partTileOwnedClass = `${PART_GRID_TILE_CLASS_BASE} ${PART_GRID_TILE_OWNED_HIGHLIGHT}`;
 
   return (
     <div className="page-stack">
@@ -246,7 +246,7 @@ export default async function OwnedCollectionPage() {
       {mocRows.length > 0 ? (
         <section className="section-panel owned-category">
           <h2 className="section-title mb-4 text-[var(--text)]">MOC（{mocRows.length.toLocaleString("zh-CN")}）</h2>
-          <ul className="owned-grid grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="owned-grid list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {mocRows.map((r) => {
               const prof = mocProfileById.get(r.subjectId);
               const displayName = prof?.displayName?.trim() ?? "";
@@ -323,7 +323,7 @@ export default async function OwnedCollectionPage() {
       {setRows.length > 0 ? (
         <section className="section-panel owned-category">
           <h2 className="section-title mb-4 text-[var(--text)]">套装（{setRows.length.toLocaleString("zh-CN")}）</h2>
-          <ul className="owned-grid grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="owned-grid list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {setRows.map((r) => {
               const catalogName = setNameByNum.get(r.subjectId) ?? "";
               const title = catalogName || `套装 ${r.subjectId}`;
@@ -392,11 +392,7 @@ export default async function OwnedCollectionPage() {
             </Link>{" "}
             相同的方格缩略图；右上角数字为散装拥有数量，修改请打开零件详情页。
           </p>
-          <ul
-            className="grid list-none gap-2 p-0"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))" }}
-            role="list"
-          >
+          <ul className="tiles-grid" role="list">
             {partRows.map((r) => {
               const partNum = r.subjectId;
               const name = partNameByNum.get(partNum) ?? "";
@@ -422,7 +418,7 @@ export default async function OwnedCollectionPage() {
                 <li key={`part-${partNum}`} className="min-w-0">
                   <Link
                     href={detailHref}
-                    className={`${partTileClass} block text-inherit no-underline`}
+                    className={`${partTileOwnedClass} block text-inherit no-underline`}
                     title={`${title} · 散装 ×${qty} · 标记 ${formatMarkedAt(r.markedAt)}`}
                   >
                     <span
@@ -484,11 +480,7 @@ export default async function OwnedCollectionPage() {
             </p>
           ) : (
             <>
-              <ul
-                className="grid list-none gap-2 p-0"
-                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))" }}
-                role="list"
-              >
+              <ul className="tiles-grid" role="list">
                 {invAggRows.map((row) => {
                   const nm = invAggNameByNum.get(row.partNum) ?? "";
                   const thumb = invAggThumbByNum.get(row.partNum) ?? null;
@@ -507,7 +499,7 @@ export default async function OwnedCollectionPage() {
                     <li key={`agg-${row.partNum}`} className="min-w-0">
                       <Link
                         href={detailHref}
-                        className={`${partTileClass} block text-inherit no-underline`}
+                        className={`${partTileOwnedClass} block text-inherit no-underline`}
                         title={titleTip}
                       >
                         <span
