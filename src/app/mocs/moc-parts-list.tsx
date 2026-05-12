@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -14,6 +13,7 @@ import {
 } from "@/lib/parts-sheet-list-filter";
 import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
+import { RemoteCoverImage } from "@/components/remote-cover-image";
 
 function MocPartDetailBody({
   item,
@@ -47,13 +47,13 @@ function MocPartDetailBody({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto flex aspect-square w-full max-w-[14rem] items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
           {item.imgUrl ? (
-            <Image
+            <RemoteCoverImage
               src={item.imgUrl}
-              alt=""
               width={224}
               height={224}
               className="h-full w-full object-contain p-2"
               sizes="(max-width:640px)70vw,14rem"
+              fallbackLabel="无图"
             />
           ) : (
             <span className="text-xs text-[var(--muted)]">{item.partFound ? "无图" : "未收录"}</span>
@@ -510,12 +510,13 @@ export function MocPartsList({
                 ) : null}
                 <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
                   {r.imgUrl ? (
-                    <Image
+                    <RemoteCoverImage
                       src={r.imgUrl}
-                      alt=""
                       fill
                       className="object-contain p-0.5"
                       sizes="(max-width:640px)20vw,4.5rem"
+                      fallbackLabel={r.partFound ? "无图" : "?"}
+                      fallbackClassName="!text-[9px]"
                     />
                   ) : (
                     <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
