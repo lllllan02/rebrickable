@@ -12,5 +12,11 @@ export default async function SetsIndexPage({ searchParams }: Props) {
     searchParams: sp,
     actionBase: "/sets",
   });
-  return <BuildSubjectListPage kind={BUILD_SUBJECT_SET} officialCatalogSection={official} />;
+  return (
+    <BuildSubjectListPage
+      kind={BUILD_SUBJECT_SET}
+      officialCatalogSection={official}
+      listFilterQ={sp.q}
+    />
+  );
 }

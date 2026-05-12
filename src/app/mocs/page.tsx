@@ -1,9 +1,11 @@
-import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
-
 import { BuildSubjectListPage } from "@/app/build/build-subject-list";
+import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
 export const dynamic = "force-dynamic";
 
-export default function MocsPage() {
-  return <BuildSubjectListPage kind={BUILD_SUBJECT_MOC} />;
+type Props = { searchParams: Promise<{ q?: string }> };
+
+export default async function MocsPage({ searchParams }: Props) {
+  const sp = await searchParams;
+  return <BuildSubjectListPage kind={BUILD_SUBJECT_MOC} listFilterQ={sp.q} />;
 }

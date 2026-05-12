@@ -6,20 +6,24 @@ import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
 import { buildImages, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
-import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
+import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
+import { likeFragment } from "@/lib/search";
 
 export async function BuildSubjectListPage({
   kind,
   officialCatalogSection,
+  listFilterQ,
 }: {
   kind: BuildSubjectKind;
   /** 插入在上传区之后（例如套装页的官方清单，布局与 MOC 列表卡片一致） */
   officialCatalogSection?: ReactNode;
+  /** 与全站搜索一致：匹配 subject_id、显示名、标签（仅过滤「已存零件表」卡片） */
+  listFilterQ?: string;
 }) {
   const ui = buildSubjectUi(kind);
   const db = getDb();
@@ -73,6 +77,24 @@ export async function BuildSubjectListPage({
     }
   }
 
+  const needle = likeFragment(listFilterQ ?? "").toLowerCase();
+  const filteredRows =
+    needle.length === 0
+      ? rows
+      : rows.filter((r) => {
+          const prof = profileBySubject.get(r.subjectId);
+          const dn = (prof?.displayName ?? "").toLowerCase();
+          const tags = prof?.tags ?? [];
+          const tagStr = tags.join(" ").toLowerCase();
+          const sid = r.subjectId.toLowerCase();
+          return (
+            sid.includes(needle) || dn.includes(needle) || tagStr.includes(needle)
+          );
+        });
+
+  const listPath = buildSubjectListPath(kind);
+  const clearListHref = listPath;
+
   return (
     <div className="page-stack">
       {officialCatalogSection == null ? (
@@ -93,13 +115,34 @@ export async function BuildSubjectListPage({
         {officialCatalogSection != null ? (
           <h2 className="section-title mb-4 mt-10 text-[var(--text)]">已存零件表</h2>
         ) : null}
+        {needle ? (
+          <p className="mb-4 px-2 text-sm text-[var(--muted)]">
+            已存列表按关键词「<span className="font-mono text-[var(--text)]">{needle}</span>」筛选，
+            共 {filteredRows.length.toLocaleString("zh-CN")} 条
+            {filteredRows.length < rows.length
+              ? `（未筛选共 ${rows.length.toLocaleString("zh-CN")} 条）`
+              : ""}
+            {" · "}
+            <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+              清除筛选
+            </Link>
+          </p>
+        ) : null}
         {rows.length === 0 ? (
           <p className="px-2 py-6 text-sm text-[var(--muted)]">
             尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
           </p>
+        ) : filteredRows.length === 0 ? (
+          <p className="px-2 py-6 text-sm text-[var(--muted)]">
+            没有匹配的已存{ui.noun}。可调整关键词或{" "}
+            <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+              清除筛选
+            </Link>
+            查看全部。
+          </p>
         ) : (
           <ul className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {rows.map((r) => {
+            {filteredRows.map((r) => {
               const prof = profileBySubject.get(r.subjectId);
               const displayName = prof?.displayName?.trim() ?? "";
               const title = displayName || `${ui.noun} ${r.subjectId}`;

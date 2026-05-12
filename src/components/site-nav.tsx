@@ -2,12 +2,10 @@ import Link from "next/link";
 
 import { GlobalSearch } from "@/components/global-search";
 
-const links = [
-  { href: "/", label: "首页" },
-  { href: "/parts", label: "零件" },
-  { href: "/sets", label: "套装" },
-  { href: "/colors", label: "颜色" },
-  { href: "/mocs", label: "MOC" },
+const trailingLinks = [
+  { href: "/mocs", label: "MOCs" },
+  { href: "/sets", label: "Sets" },
+  { href: "/parts", label: "Parts" },
 ] as const;
 
 export function SiteNav() {
@@ -17,14 +15,16 @@ export function SiteNav() {
         <Link href="/" className="site-brand">
           Rebrickable 本地库
         </Link>
-        <GlobalSearch />
-        <nav className="site-links site-links-end">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href} className="site-link">
-              {l.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="site-nav-trailing">
+          <nav className="site-links" aria-label="主要栏目">
+            {trailingLinks.map((l) => (
+              <Link key={l.href} href={l.href} className="site-link">
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+          <GlobalSearch />
+        </div>
       </div>
     </header>
   );

@@ -1,68 +1,28 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
-
-type PartHit = {
-  type: "part";
-  title: string;
-  subtitle: string;
-  href: string;
-};
-
-type SetHit = {
-  type: "set";
-  title: string;
-  subtitle: string;
-  href: string;
-  imgUrl: string | null;
-};
-
-type ColorHit = {
-  type: "color";
-  title: string;
-  subtitle: string;
-  href: string;
-  rgb: string;
-};
-
-type ElementHit = {
-  type: "element";
-  title: string;
-  subtitle: string;
-  href: string;
-};
-
-type SearchPayload = {
-  parts: PartHit[];
-  sets: SetHit[];
-  colors: ColorHit[];
-  elements: ElementHit[];
-};
-
-const emptyPayload: SearchPayload = {
-  parts: [],
-  sets: [],
-  colors: [],
-  elements: [],
-};
+import type { GlobalSearchPayload } from "@/lib/global-search-types";
+import { emptyGlobalSearchPayload } from "@/lib/global-search-types";
 
 export function GlobalSearch() {
+  const router = useRouter();
   const listId = useId();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<SearchPayload>(emptyPayload);
+  const [data, setData] = useState<GlobalSearchPayload>(emptyGlobalSearchPayload());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqRef = useRef(0);
 
   const runSearch = useCallback((raw: string) => {
     const trimmed = raw.trim();
     if (!trimmed) {
-      setData(emptyPayload);
+      setData(emptyGlobalSearchPayload());
       setLoading(false);
       return;
     }
@@ -76,11 +36,11 @@ export function GlobalSearch() {
           { signal: ac.signal }
         );
         if (!res.ok) throw new Error(String(res.status));
-        const json = (await res.json()) as SearchPayload;
+        const json = (await res.json()) as GlobalSearchPayload;
         if (seqRef.current === my) setData(json);
       } catch (e) {
         if (e instanceof Error && e.name === "AbortError") return;
-        if (seqRef.current === my) setData(emptyPayload);
+        if (seqRef.current === my) setData(emptyGlobalSearchPayload());
       } finally {
         if (seqRef.current === my) setLoading(false);
       }
@@ -95,7 +55,7 @@ export function GlobalSearch() {
   useEffect(() => {
     if (!q.trim()) {
       seqRef.current += 1;
-      setData(emptyPayload);
+      setData(emptyGlobalSearchPayload());
       setLoading(false);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       return;
@@ -127,19 +87,31 @@ export function GlobalSearch() {
   }, [open]);
 
   const total =
-    data.parts.length +
+    data.mocs.length +
     data.sets.length +
+    data.parts.length +
     data.colors.length +
     data.elements.length;
 
   return (
     <div ref={wrapRef} className="global-search">
-      <div className="global-search-field-wrap">
+      <form
+        role="search"
+        className="global-search-field-wrap"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const trimmed = q.trim();
+          if (!trimmed) return;
+          router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+          setOpen(false);
+        }}
+      >
         <label htmlFor={listId} className="sr-only">
           全站搜索
         </label>
         <input
           id={listId}
+          name="q"
           type="search"
           value={q}
           onChange={(e) => {
@@ -147,11 +119,10 @@ export function GlobalSearch() {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="零件、套装、颜色、元素…"
+          placeholder="MOC、套装、零件、颜色、元素…"
           className="global-search-input field"
           autoComplete="off"
           spellCheck={false}
-          aria-expanded={open}
           aria-controls="global-search-panel"
         />
         {loading ? (
@@ -159,7 +130,7 @@ export function GlobalSearch() {
             搜索中…
           </span>
         ) : null}
-      </div>
+      </form>
       {open && q.trim() ? (
         <div
           id="global-search-panel"
@@ -170,21 +141,32 @@ export function GlobalSearch() {
           {total === 0 && !loading ? (
             <p className="global-search-empty">无匹配结果</p>
           ) : null}
-          {data.parts.length > 0 ? (
+          {data.mocs.length > 0 ? (
             <section className="global-search-group">
-              <h3 className="global-search-group-title">零件</h3>
+              <h3 className="global-search-group-title">MOC</h3>
               <ul className="global-search-list">
-                {data.parts.map((h) => (
+                {data.mocs.map((h) => (
                   <li key={h.href}>
                     <Link
                       href={h.href}
-                      className="global-search-hit"
+                      className="global-search-hit global-search-hit-row"
                       onClick={() => setOpen(false)}
                     >
-                      <span className="global-search-hit-title font-mono">
-                        {h.title}
-                      </span>
-                      <span className="global-search-hit-sub">{h.subtitle}</span>
+                      <div className="global-search-thumb relative">
+                        <RemoteCoverImage
+                          src={(h.imgUrl ?? "").trim()}
+                          fill
+                          className="h-full w-full object-contain p-0.5"
+                          sizes="40px"
+                          alt=""
+                          fallbackLabel="M"
+                          fallbackClassName="global-search-thumb-fallback"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="global-search-hit-title">{h.title}</span>
+                        <span className="global-search-hit-sub">{h.subtitle}</span>
+                      </div>
                     </Link>
                   </li>
                 ))}
@@ -219,6 +201,27 @@ export function GlobalSearch() {
                         </span>
                         <span className="global-search-hit-sub">{h.subtitle}</span>
                       </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {data.parts.length > 0 ? (
+            <section className="global-search-group">
+              <h3 className="global-search-group-title">零件</h3>
+              <ul className="global-search-list">
+                {data.parts.map((h) => (
+                  <li key={h.href}>
+                    <Link
+                      href={h.href}
+                      className="global-search-hit"
+                      onClick={() => setOpen(false)}
+                    >
+                      <span className="global-search-hit-title font-mono">
+                        {h.title}
+                      </span>
+                      <span className="global-search-hit-sub">{h.subtitle}</span>
                     </Link>
                   </li>
                 ))}
@@ -270,6 +273,16 @@ export function GlobalSearch() {
                 ))}
               </ul>
             </section>
+          ) : null}
+          {!loading && q.trim() ? (
+            <div className="global-search-footer">
+              <Link
+                href={`/search?q=${encodeURIComponent(q.trim())}`}
+                onClick={() => setOpen(false)}
+              >
+                查看全部搜索结果
+              </Link>
+            </div>
           ) : null}
         </div>
       ) : null}
