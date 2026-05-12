@@ -230,6 +230,8 @@ export const buildOwnedSubjects = sqliteTable(
     subjectKind: text("subject_kind").notNull(),
     subjectId: text("subject_id").notNull(),
     markedAt: text("marked_at").notNull(),
+    /** 散装零件数量；套装 / MOC 行固定为 1，不参与合计逻辑 */
+    quantity: integer("quantity").notNull().default(1),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),

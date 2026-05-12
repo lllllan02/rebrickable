@@ -18,10 +18,12 @@ function MocPartDetailBody({
   item,
   titleId,
   onClose,
+  parentSubjectOwned,
 }: {
   item: ShortageResolveItem;
   titleId: string;
   onClose: () => void;
+  parentSubjectOwned: boolean;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -104,6 +106,14 @@ function MocPartDetailBody({
               <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">{item.rest}</dd>
             </div>
           ) : null}
+          {parentSubjectOwned ? (
+            <div>
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
+              <dd className="mt-0.5 text-[var(--text)]">
+                本 MOC / 套装已在「我的拥有」中标记，此零件视为<strong className="font-semibold">有用</strong>。
+              </dd>
+            </div>
+          ) : null}
         </dl>
 
         {item.partFound ? (
@@ -172,6 +182,8 @@ type Props = {
   totalPartQty?: number;
   /** 缺件表：允许删除行、换色并持久化 */
   shortageEditable?: { onPersist: ShortagePersistFn } | null;
+  /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行显示「有用」 */
+  parentSubjectOwned?: boolean;
 };
 
 export function MocPartsList({
@@ -181,6 +193,7 @@ export function MocPartsList({
   sourceMetaLine = null,
   totalPartQty: totalPartQtyProp,
   shortageEditable = null,
+  parentSubjectOwned = false,
 }: Props) {
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
@@ -464,6 +477,11 @@ export function MocPartsList({
                     未收录
                   </span>
                 ) : null}
+                {parentSubjectOwned ? (
+                  <span className="pointer-events-none absolute right-1 top-1 z-[1] rounded border border-emerald-400/40 bg-emerald-500/15 px-1 py-px text-[9px] font-semibold leading-none text-emerald-100/95">
+                    有用
+                  </span>
+                ) : null}
                 {shortageEditable ? (
                   <div
                     className="absolute bottom-0.5 left-0.5 right-0.5 z-[2] flex justify-center gap-0.5"
@@ -663,7 +681,12 @@ export function MocPartsList({
         {detailItem ? (
           <div className="flex h-dvh w-screen flex-col sm:flex-row">
             <div className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)] sm:order-2 sm:h-full sm:max-w-[min(22rem,100vw)] sm:flex-none sm:rounded-l-[var(--radius-md)] sm:border-l">
-              <MocPartDetailBody item={detailItem} titleId={detailTitleId} onClose={closeDetail} />
+              <MocPartDetailBody
+                item={detailItem}
+                titleId={detailTitleId}
+                onClose={closeDetail}
+                parentSubjectOwned={parentSubjectOwned}
+              />
             </div>
             <button
               type="button"

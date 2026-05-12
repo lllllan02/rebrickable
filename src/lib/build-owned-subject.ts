@@ -1,5 +1,5 @@
 import { isBuildSubjectKind, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
-import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
+import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-constants";
 
 /** 可标记「拥有」的主体：套装 / MOC / 零件（零件无 build 上传目录，仅存 SQLite 标记） */
 export const OWNED_SUBJECT_PART = "part" as const;

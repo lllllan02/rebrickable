@@ -123,6 +123,7 @@ export default async function MocDetailPage({ params }: Props) {
         initialFull={initialFull}
         initialShortage={initialShortage}
         initialMocLoadError={initialMocLoadError}
+        parentSubjectOwned={initialOwned}
       />
     </div>
   );

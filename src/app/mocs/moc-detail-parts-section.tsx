@@ -28,6 +28,8 @@ type Props = {
     inventoryId: number;
     version: number;
   } | null;
+  /** 当前 MOC/套装主体已在「我的拥有」中标记 */
+  parentSubjectOwned?: boolean;
 };
 
 export function MocDetailPartsSection({
@@ -37,6 +39,7 @@ export function MocDetailPartsSection({
   initialShortage,
   initialMocLoadError,
   officialInventory = null,
+  parentSubjectOwned = false,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const listHref = buildSubjectListPath(subjectKind);
@@ -256,6 +259,7 @@ export function MocDetailPartsSection({
                 skippedHeader={initialFull.skippedHeader}
                 savedAt={initialFull.savedAt}
                 totalPartQty={undefined}
+                parentSubjectOwned={parentSubjectOwned}
               />
             ) : null}
             {listTab === "shortage" && initialShortage ? (
@@ -265,6 +269,7 @@ export function MocDetailPartsSection({
                 savedAt={initialShortage.savedAt}
                 totalPartQty={undefined}
                 shortageEditable={{ onPersist: persistShortage }}
+                parentSubjectOwned={parentSubjectOwned}
               />
             ) : null}
             {listTab === "official" && officialInventory ? (
@@ -275,6 +280,7 @@ export function MocDetailPartsSection({
                   savedAt="2000-01-01T00:00:00.000Z"
                   sourceMetaLine={officialMetaLine}
                   totalPartQty={undefined}
+                  parentSubjectOwned={parentSubjectOwned}
                 />
               ) : (
                 <p className="text-sm text-[var(--muted)]">本地库存中暂无该套装的零件行。</p>

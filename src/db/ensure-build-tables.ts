@@ -9,6 +9,11 @@ function tableExists(sqlite: Database.Database, name: string): boolean {
   return Boolean(row);
 }
 
+function tableColumnNames(sqlite: Database.Database, table: string): Set<string> {
+  const rows = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return new Set(rows.map((r) => r.name));
+}
+
 /** 将 `data/moc-uploads/<id>/` 迁到 `data/build-uploads/moc/<id>/`（仅当目标尚不存在） */
 function migrateLegacyMocUploadDirs(cwd: string) {
   const legacyRoot = path.join(cwd, "data", "moc-uploads");
@@ -87,10 +92,20 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       subject_kind TEXT NOT NULL,
       subject_id TEXT NOT NULL,
       marked_at TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (subject_kind, subject_id)
     );
     CREATE INDEX IF NOT EXISTS build_owned_kind_idx ON build_owned_subjects(subject_kind);
   `);
+
+  if (tableExists(sqlite, "build_owned_subjects")) {
+    const cols = tableColumnNames(sqlite, "build_owned_subjects");
+    if (!cols.has("quantity")) {
+      sqlite.exec(
+        `ALTER TABLE build_owned_subjects ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1`
+      );
+    }
+  }
 
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS themes (

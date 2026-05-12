@@ -5,7 +5,7 @@ import path from "path";
 import type { BuildSubjectKind } from "@/lib/build-subject";
 import { isSafeBuildSubjectId } from "@/lib/build-subject";
 
-export const BUILD_UPLOAD_MAX_ID_LEN = 128;
+export { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-constants";
 
 export const BUILD_IMAGE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 

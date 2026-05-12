@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
-import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
+import { PartOwnedStockControl } from "@/app/parts/part-owned-stock-control";
 import { CopyableId } from "@/components/copyable-id";
 import { getDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
@@ -118,7 +118,12 @@ export default async function PartDetailPage({ params }: Props) {
       db.select().from(buildOwnedSubjects).where(partOwnedKey).limit(1),
     ]);
 
-  const initialOwned = Boolean(ownedRow[0]);
+  const owned = ownedRow[0];
+  const initialOwned = Boolean(owned);
+  const initialOwnedQty =
+    owned && typeof owned.quantity === "number" && Number.isFinite(owned.quantity)
+      ? Math.max(1, Math.floor(owned.quantity))
+      : 1;
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
   const thumbByColor = new Map<number, string>();
@@ -181,10 +186,10 @@ export default async function PartDetailPage({ params }: Props) {
             </dl>
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--border-soft)] pt-4">
               <span className="text-sm text-[var(--text)]">拥有此零件</span>
-              <BuildOwnedToggle
-                subjectKind={OWNED_SUBJECT_PART}
-                subjectId={partNum}
+              <PartOwnedStockControl
+                partNum={partNum}
                 initialOwned={initialOwned}
+                initialQuantity={initialOwnedQty}
               />
             </div>
           </div>
