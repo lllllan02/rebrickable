@@ -80,25 +80,14 @@ export async function BuildSubjectListPage({
         <h1 className="page-title">
           {ui.noun} {ui.listTitleSuffix}
         </h1>
-        <p className="page-description">
-          {officialCatalogSection != null ? (
-            <>
-              与 MOC 页相同：先使用下方上传入口导入缺货表 CSV，在预览页保存到本地 SQLite。上传区下方为已导入的 Rebrickable
-              官方套装（卡片列表，可搜索分页）；最下方为已存至本地的「已存零件表」。已存套装的列表封面与详情轮播首张一致：有官方盒图或人仔封面（<code className="code-pill">minifigs</code> /{" "}
-              <code className="code-pill">inventory_minifigs</code>）时取
-              <strong className="font-medium text-[var(--text)]">官方图</strong>
-              ，否则取<strong className="font-medium text-[var(--text)]">最早上传</strong>
-              的参考图。可在详情页改显示名称与标签。
-            </>
-          ) : (
-            <>
-              在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
-              <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
-            </>
-          )}
-        </p>
+        {officialCatalogSection == null ? (
+          <p className="page-description">
+            在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
+            <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
+          </p>
+        ) : null}
       </section>
-      <BuildPartsSheetUpload kind={kind} />
+      {officialCatalogSection == null ? <BuildPartsSheetUpload kind={kind} /> : null}
       {officialCatalogSection ?? null}
       <div className="table-shell">
         {officialCatalogSection != null ? (

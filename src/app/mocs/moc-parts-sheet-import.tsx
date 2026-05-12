@@ -9,7 +9,7 @@ import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
 import { type InitialMocSheetFromServer, saveBuildPartsSheetToDb } from "./moc-parts-sheet-actions";
-import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
@@ -105,6 +105,7 @@ export function PartsSheetImport({
   mocDetailEmbed = false,
 }: PartsSheetImportProps) {
   const sheetUi = useMemo(() => buildSubjectUi(buildSubjectKind), [buildSubjectKind]);
+  const noFullSheetForSet = buildSubjectKind === BUILD_SUBJECT_SET;
   const router = useRouter();
   const clearedByEditRef = useRef(false);
   const [items, setItems] = useState<ShortageRow[] | null>(null);
@@ -232,6 +233,12 @@ export function PartsSheetImport({
     ): Promise<boolean> => {
       const trimmed = id.trim();
       if (!trimmed || rows.length === 0) return false;
+      if (buildSubjectKind === BUILD_SUBJECT_SET && kind === "full") {
+        setError("套装不支持上传完整零件表，清单以本地官方库存为准。");
+        setLineNumber(null);
+        scrollMocFeedbackIntoView();
+        return false;
+      }
       setMocLocalMessage(null);
       setMocActionBusy(true);
       try {
@@ -293,6 +300,12 @@ export function PartsSheetImport({
       clearedByEditRef.current = false;
       if (!file) return;
 
+      if (noFullSheetForSet && sheetKind === "full") {
+        setError("套装不支持上传完整零件表，清单以本地官方库存为准。");
+        setLineNumber(null);
+        return;
+      }
+
       setLoading(true);
       const kind = mocDetailEmbed ? (sheetKind ?? "full") : "full";
       if (mocDetailEmbed) {
@@ -331,7 +344,7 @@ export function PartsSheetImport({
         setLoading(false);
       }
     },
-    [mocDetailEmbed, requestedLoadMocId, saveSheetToMocDbCore]
+    [mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, saveSheetToMocDbCore]
   );
 
   const applyColorChange = useCallback(async () => {
@@ -403,7 +416,7 @@ export function PartsSheetImport({
     if (mocDetailEmbed) {
       clearedByEditRef.current = false;
       setError(null);
-      if (initialFullSheet && initialFullSheet.subjectId === qid) {
+      if (!noFullSheetForSet && initialFullSheet && initialFullSheet.subjectId === qid) {
         setFullSkippedHeader(initialFullSheet.skippedHeader);
         setFullItems(withRowIds(initialFullSheet.items));
         setFullFileName(`${sheetUi.exportFilenameStem(qid, "full").replace(/-edited$/, "")}.csv`);
@@ -437,6 +450,7 @@ export function PartsSheetImport({
     initialShortageSheet,
     initialMocLoadError,
     mocDetailEmbed,
+    noFullSheetForSet,
     scrollMocFeedbackIntoView,
     sheetUi,
   ]);
@@ -711,21 +725,29 @@ export function PartsSheetImport({
       >
         {mocDetailEmbed ? (
           <>
-            <label className="button-primary cursor-pointer text-sm">
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="sr-only"
-                disabled={loading || mocActionBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  void onFile(f, "full");
-                  e.target.value = "";
-                }}
-              />
-              {loading ? "解析中…" : "上传完整零件表 CSV"}
-            </label>
-            <label className="cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]">
+            {!noFullSheetForSet ? (
+              <label className="button-primary cursor-pointer text-sm">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  disabled={loading || mocActionBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    void onFile(f, "full");
+                    e.target.value = "";
+                  }}
+                />
+                {loading ? "解析中…" : "上传完整零件表 CSV"}
+              </label>
+            ) : null}
+            <label
+              className={
+                noFullSheetForSet
+                  ? "button-primary cursor-pointer text-sm"
+                  : "cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+              }
+            >
               <input
                 type="file"
                 accept=".csv,text/csv"
@@ -778,9 +800,13 @@ export function PartsSheetImport({
         ) : null}
         {mocDetailEmbed ? (
           <span className="max-w-full text-xs leading-relaxed text-[var(--muted)]">
-            完整表 {fullItems ? `${fullItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
-            {fullFileName ? `（${fullFileName}）` : ""}
-            {" · "}
+            {!noFullSheetForSet ? (
+              <>
+                完整表 {fullItems ? `${fullItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
+                {fullFileName ? `（${fullFileName}）` : ""}
+                {" · "}
+              </>
+            ) : null}
             缺件表 {shortageItems ? `${shortageItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
             {shortageFileName ? `（${shortageFileName}）` : ""}
             。导出请使用下方列表旁的按钮。

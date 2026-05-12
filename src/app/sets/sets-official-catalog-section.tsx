@@ -195,24 +195,9 @@ export async function SetsOfficialCatalogSection({
 
   return (
     <section className="space-y-4" aria-labelledby="sets-official-catalog-heading">
-      <div>
-        <p className="page-kicker">Rebrickable 官方</p>
-        <h2 id="sets-official-catalog-heading" className="page-title text-xl sm:text-2xl">
-          套装目录
-        </h2>
-        <p className="page-description mt-2 text-sm">
-          共 {total.toLocaleString("zh-CN")}{" "}
-          套（按 <code className="code-pill">set_num</code> 去重）；每条为库存表中该套装最高{" "}
-          <code className="code-pill">version</code> 的清单。盒图优先来自{" "}
-          <code className="code-pill">sets.csv</code>
-          ，否则若 <code className="code-pill">set_num</code> 与人仔编号一致则用{" "}
-          <code className="code-pill">minifigs</code> 人仔图；否则用该清单{" "}
-          <code className="code-pill">inventory_minifigs</code> 中的人仔图（不使用零件图；需{" "}
-          <code className="code-pill">minifigs.csv.gz</code> 与{" "}
-          <code className="code-pill">inventory_minifigs.csv.gz</code>）；卡片左下角为主题（需{" "}
-          <code className="code-pill">themes.csv.gz</code>）。关键词可匹配编号或套装名称。
-        </p>
-      </div>
+      <h2 id="sets-official-catalog-heading" className="page-title text-xl sm:text-2xl">
+        套装目录
+      </h2>
       <form method="get" action={actionBase} className="filter-bar">
         <input
           name="q"

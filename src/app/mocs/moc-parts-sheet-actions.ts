@@ -212,6 +212,10 @@ export async function saveBuildPartsSheetToDb(input: {
     return { ok: false, error: "kind 须为 full 或 shortage。" };
   }
 
+  if (input.subjectKind === BUILD_SUBJECT_SET && input.kind === "full") {
+    return { ok: false, error: "套装不支持上传完整零件表，请以本地官方库存为准。" };
+  }
+
   if (typeof input.skippedHeader !== "boolean") {
     return { ok: false, error: "skippedHeader 须为布尔值。" };
   }

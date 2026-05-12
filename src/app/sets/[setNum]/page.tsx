@@ -162,9 +162,7 @@ export default async function SetDetailPage({ params }: Props) {
   }));
 
   const invTotalQty = lines.reduce((a, l) => a + l.quantity, 0);
-  const sheetTotalQty = sheet.ok
-    ? sheet.full?.totalPartQty ?? sheet.shortage?.totalPartQty ?? null
-    : null;
+  const sheetTotalQty = sheet.ok ? sheet.shortage?.totalPartQty ?? null : null;
   const partTotalQty = sheetTotalQty ?? (lines.length > 0 ? invTotalQty : null);
 
   const officialInventoryItems = officialInventoryRowsToShortageResolveItems(
@@ -180,18 +178,9 @@ export default async function SetDetailPage({ params }: Props) {
     }))
   );
 
-  let initialFull: InitialMocSheetFromServer | null = null;
   let initialShortage: InitialMocSheetFromServer | null = null;
   let initialSheetLoadError: string | null = null;
   if (sheet.ok) {
-    if (sheet.full) {
-      initialFull = {
-        subjectId: sheet.subjectId,
-        skippedHeader: sheet.full.skippedHeader,
-        items: sheet.full.items,
-        savedAt: sheet.full.savedAt,
-      };
-    }
     if (sheet.shortage) {
       initialShortage = {
         subjectId: sheet.subjectId,
@@ -243,18 +232,14 @@ export default async function SetDetailPage({ params }: Props) {
       <MocDetailPartsSection
         subjectKind={BUILD_SUBJECT_SET}
         subjectId={setNum}
-        initialFull={initialFull}
+        initialFull={null}
         initialShortage={initialShortage}
         initialMocLoadError={initialSheetLoadError}
-        officialInventory={
-          officialInventoryItems.length > 0
-            ? {
-                items: officialInventoryItems,
-                inventoryId: inv.id,
-                version: inv.version,
-              }
-            : null
-        }
+        officialInventory={{
+          items: officialInventoryItems,
+          inventoryId: inv.id,
+          version: inv.version,
+        }}
       />
     </div>
   );
