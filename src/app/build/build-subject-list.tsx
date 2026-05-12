@@ -12,19 +12,32 @@ import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/l
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { buildSubjectUi } from "@/lib/build-ui";
-import { parseTagsJson } from "@/lib/moc-profile-parse";
+import { MOC_PROFILE_MAX_TAG_LEN, parseTagsJson } from "@/lib/moc-profile-parse";
 import { likeFragment } from "@/lib/search";
+
+function mocListHref(params: { q?: string; tag?: string }): string {
+  const sp = new URLSearchParams();
+  const q = likeFragment(params.q ?? "");
+  if (q.length > 0) sp.set("q", q);
+  const tag = (params.tag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN);
+  if (tag.length > 0) sp.set("tag", tag);
+  const qs = sp.toString();
+  return qs ? `/mocs?${qs}` : "/mocs";
+}
 
 export async function BuildSubjectListPage({
   kind,
   officialCatalogSection,
   listFilterQ,
+  listFilterTag,
 }: {
   kind: BuildSubjectKind;
   /** 插入在上传区之后（例如套装页的官方清单，布局与 MOC 列表卡片一致） */
   officialCatalogSection?: ReactNode;
   /** 与全站搜索一致：匹配 subject_id、显示名、标签（仅过滤「已存零件表」卡片） */
   listFilterQ?: string;
+  /** 仅 MOC 列表：按单个标签精确匹配（忽略大小写） */
+  listFilterTag?: string;
 }) {
   const ui = buildSubjectUi(kind);
   const db = getDb();
@@ -98,22 +111,61 @@ export async function BuildSubjectListPage({
   }
 
   const needle = likeFragment(listFilterQ ?? "").toLowerCase();
-  const filteredRows =
-    needle.length === 0
-      ? rows
-      : rows.filter((r) => {
-          const prof = profileBySubject.get(r.subjectId);
-          const dn = (prof?.displayName ?? "").toLowerCase();
-          const tags = prof?.tags ?? [];
-          const tagStr = tags.join(" ").toLowerCase();
-          const sid = r.subjectId.toLowerCase();
-          return (
-            sid.includes(needle) || dn.includes(needle) || tagStr.includes(needle)
-          );
-        });
+  const tagNeedle =
+    kind === BUILD_SUBJECT_MOC
+      ? (listFilterTag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN).toLowerCase()
+      : "";
+
+  const tagFacetList: { key: string; display: string; count: number }[] = [];
+  if (kind === BUILD_SUBJECT_MOC && rows.length > 0) {
+    const facetMap = new Map<string, { display: string; count: number }>();
+    for (const r of rows) {
+      const tags = profileBySubject.get(r.subjectId)?.tags ?? [];
+      for (const t of tags) {
+        const k = t.toLowerCase();
+        const prev = facetMap.get(k);
+        if (prev) prev.count += 1;
+        else facetMap.set(k, { display: t, count: 1 });
+      }
+    }
+    for (const [key, v] of facetMap) {
+      tagFacetList.push({ key, display: v.display, count: v.count });
+    }
+    tagFacetList.sort((a, b) => a.key.localeCompare(b.key, "zh-CN"));
+  }
+
+  const safeQForHref = likeFragment(listFilterQ ?? "");
+  const activeTagDisplay =
+    tagNeedle.length > 0
+      ? tagFacetList.find((x) => x.key === tagNeedle)?.display ??
+        (listFilterTag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN)
+      : "";
+  const hiddenTagValue =
+    tagNeedle.length > 0
+      ? activeTagDisplay || (listFilterTag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN)
+      : "";
+
+  const filteredRows = rows.filter((r) => {
+    if (needle.length > 0) {
+      const prof = profileBySubject.get(r.subjectId);
+      const dn = (prof?.displayName ?? "").toLowerCase();
+      const tags = prof?.tags ?? [];
+      const tagStr = tags.join(" ").toLowerCase();
+      const sid = r.subjectId.toLowerCase();
+      if (!(sid.includes(needle) || dn.includes(needle) || tagStr.includes(needle))) return false;
+    }
+    if (tagNeedle.length > 0) {
+      const tags = profileBySubject.get(r.subjectId)?.tags ?? [];
+      if (!tags.some((t) => t.toLowerCase() === tagNeedle)) return false;
+    }
+    return true;
+  });
 
   const listPath = buildSubjectListPath(kind);
-  const clearListHref = listPath;
+  const hasQFilter = needle.length > 0;
+  const hasTagFilter = kind === BUILD_SUBJECT_MOC && tagNeedle.length > 0;
+  const hasListFilters = hasQFilter || hasTagFilter;
+  const clearListHref = hasListFilters ? (kind === BUILD_SUBJECT_MOC ? mocListHref({}) : listPath) : listPath;
 
   return (
     <div className="page-stack">
@@ -131,14 +183,100 @@ export async function BuildSubjectListPage({
       ) : null}
       {officialCatalogSection == null ? <BuildPartsSheetUpload kind={kind} /> : null}
       {officialCatalogSection ?? null}
+      {kind === BUILD_SUBJECT_MOC && officialCatalogSection == null ? (
+        <section className="section-panel">
+          <form
+            action="/mocs"
+            method="get"
+            className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
+            role="search"
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <label htmlFor="moc-list-q" className="text-xs font-medium text-[var(--muted)]">
+                搜索
+              </label>
+              <input
+                id="moc-list-q"
+                name="q"
+                type="search"
+                enterKeyHint="search"
+                placeholder="MOC ID、显示名称或标签…"
+                defaultValue={safeQForHref}
+                maxLength={80}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)]/25 placeholder:text-[var(--muted-2)] focus:border-[var(--accent)]/50 focus:ring-2"
+              />
+            </div>
+            {hiddenTagValue ? <input type="hidden" name="tag" value={hiddenTagValue} /> : null}
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="submit"
+                className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-4 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--accent)]/15"
+              >
+                搜索
+              </button>
+              {hasListFilters ? (
+                <Link
+                  href="/mocs"
+                  className="inline-flex items-center justify-center rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+                >
+                  重置
+                </Link>
+              ) : null}
+            </div>
+          </form>
+          {tagFacetList.length > 0 ? (
+            <div className="mt-5 border-t border-[var(--border-soft)] pt-4">
+              <p className="mb-2 text-xs font-medium text-[var(--muted)]">按标签筛选</p>
+              <div className="flex flex-wrap gap-2">
+                {tagFacetList.map((x) => {
+                  const active = x.key === tagNeedle;
+                  return (
+                    <Link
+                      key={x.key}
+                      href={mocListHref({ q: safeQForHref, tag: x.display })}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        active
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
+                      }`}
+                    >
+                      <span>{x.display}</span>
+                      <span className="tabular-nums text-[var(--muted)]">({x.count})</span>
+                    </Link>
+                  );
+                })}
+              </div>
+              {hasTagFilter ? (
+                <p className="mt-3 text-xs text-[var(--muted)]">
+                  已选标签「<span className="font-medium text-[var(--text)]">{activeTagDisplay}</span>」·{" "}
+                  <Link href={mocListHref({ q: safeQForHref })} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                    仅清除标签
+                  </Link>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <div className="table-shell">
         {officialCatalogSection != null ? (
           <h2 className="section-title mb-4 mt-10 text-[var(--text)]">已存零件表</h2>
         ) : null}
-        {needle ? (
+        {hasListFilters ? (
           <p className="mb-4 px-2 text-sm text-[var(--muted)]">
-            已存列表按关键词「<span className="font-mono text-[var(--text)]">{needle}</span>」筛选，
-            共 {filteredRows.length.toLocaleString("zh-CN")} 条
+            已存列表
+            {hasQFilter ? (
+              <>
+                按关键词「<span className="font-mono text-[var(--text)]">{safeQForHref || needle}</span>」
+              </>
+            ) : null}
+            {hasQFilter && hasTagFilter ? "且 " : null}
+            {hasTagFilter ? (
+              <>
+                按标签「<span className="text-[var(--text)]">{activeTagDisplay}</span>」
+              </>
+            ) : null}
+            筛选，共 {filteredRows.length.toLocaleString("zh-CN")} 条
             {filteredRows.length < rows.length
               ? `（未筛选共 ${rows.length.toLocaleString("zh-CN")} 条）`
               : ""}
@@ -251,14 +389,24 @@ export async function BuildSubjectListPage({
                     </div>
                     {tags.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
-                        {tags.map((t, i) => (
-                          <span
-                            key={`${r.subjectId}-${t}-${i}`}
-                            className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
-                          >
-                            {t}
-                          </span>
-                        ))}
+                        {tags.map((t, i) =>
+                          kind === BUILD_SUBJECT_MOC ? (
+                            <Link
+                              key={`${r.subjectId}-${t}-${i}`}
+                              href={mocListHref({ q: safeQForHref, tag: t })}
+                              className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)] underline-offset-2 hover:border-[var(--accent)]/40 hover:underline"
+                            >
+                              {t}
+                            </Link>
+                          ) : (
+                            <span
+                              key={`${r.subjectId}-${t}-${i}`}
+                              className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
+                            >
+                              {t}
+                            </span>
+                          ),
+                        )}
                       </div>
                     ) : null}
                     <div className="mt-auto flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">

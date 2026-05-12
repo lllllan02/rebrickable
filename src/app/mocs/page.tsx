@@ -3,9 +3,11 @@ import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ q?: string }> };
+type Props = { searchParams: Promise<{ q?: string; tag?: string }> };
 
 export default async function MocsPage({ searchParams }: Props) {
   const sp = await searchParams;
-  return <BuildSubjectListPage kind={BUILD_SUBJECT_MOC} listFilterQ={sp.q} />;
+  return (
+    <BuildSubjectListPage kind={BUILD_SUBJECT_MOC} listFilterQ={sp.q} listFilterTag={sp.tag} />
+  );
 }
