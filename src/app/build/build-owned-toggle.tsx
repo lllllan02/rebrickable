@@ -4,10 +4,10 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { setBuildOwnedAction } from "@/app/build/build-owned-actions";
-import type { BuildSubjectKind } from "@/lib/build-subject";
+import type { OwnedSubjectKind } from "@/lib/build-owned-subject";
 
 type Props = {
-  subjectKind: BuildSubjectKind;
+  subjectKind: OwnedSubjectKind;
   subjectId: string;
   initialOwned: boolean;
   className?: string;

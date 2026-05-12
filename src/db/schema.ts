@@ -223,7 +223,7 @@ export const buildAttachments = sqliteTable(
   (t) => [index("build_attachments_subject_idx").on(t.subjectKind, t.subjectId)]
 );
 
-/** 用户标记「拥有」的套装 / MOC（与是否已存零件表无关） */
+/** 用户标记「拥有」的套装 / MOC / 零件（与是否已存零件表无关） */
 export const buildOwnedSubjects = sqliteTable(
   "build_owned_subjects",
   {

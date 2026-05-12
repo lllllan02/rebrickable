@@ -748,6 +748,17 @@ select {
   transform: translateY(-1px);
 }
 
+/* 「我的拥有」：分类标题与卡片同处一块面板内；卡片 hover 保持中性描边（避免与未悬停卡片黄/灰不一致） */
+.owned-grid .result-card {
+  border: 1px solid var(--border);
+}
+
+.owned-grid .result-card:hover {
+  border-color: var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  transform: translateY(-1px);
+}
+
 .media-box {
   position: relative;
   flex-shrink: 0;

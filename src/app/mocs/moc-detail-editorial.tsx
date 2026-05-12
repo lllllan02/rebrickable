@@ -35,7 +35,7 @@ type Props = {
   partTotalQty: number | null;
   /** 仅套装：官方盒图 / 占位与目录元数据，与 MOC 主面板同栅格展示 */
   setOfficial?: SetDetailOfficialMeta | null;
-  /** 是否在「我的收藏」中标记为拥有（本地 SQLite） */
+  /** 是否在「我的拥有」中标记（本地 SQLite） */
   initialOwned: boolean;
 };
 
