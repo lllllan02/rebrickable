@@ -1,8 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+
+import { RemoteCoverImage } from "@/components/remote-cover-image";
 
 type PartHit = {
   type: "part";
@@ -47,10 +48,6 @@ const emptyPayload: SearchPayload = {
   colors: [],
   elements: [],
 };
-
-function usableImg(u: string | null | undefined): u is string {
-  return typeof u === "string" && u.trim().length > 0;
-}
 
 export function GlobalSearch() {
   const listId = useId();
@@ -205,19 +202,16 @@ export function GlobalSearch() {
                       className="global-search-hit global-search-hit-row"
                       onClick={() => setOpen(false)}
                     >
-                      <div className="global-search-thumb">
-                        {usableImg(h.imgUrl) ? (
-                          <Image
-                            src={h.imgUrl.trim()}
-                            alt=""
-                            width={40}
-                            height={40}
-                            className="h-full w-full object-contain p-0.5"
-                            sizes="40px"
-                          />
-                        ) : (
-                          <span className="global-search-thumb-fallback">套</span>
-                        )}
+                      <div className="global-search-thumb relative">
+                        <RemoteCoverImage
+                          src={(h.imgUrl ?? "").trim()}
+                          fill
+                          className="h-full w-full object-contain p-0.5"
+                          sizes="40px"
+                          alt=""
+                          fallbackLabel="套"
+                          fallbackClassName="global-search-thumb-fallback"
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <span className="global-search-hit-title font-mono">

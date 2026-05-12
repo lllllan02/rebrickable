@@ -91,6 +91,23 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       parent_id INTEGER
     );
     CREATE INDEX IF NOT EXISTS themes_parent_idx ON themes(parent_id);
+
+    CREATE TABLE IF NOT EXISTS minifigs (
+      fig_num TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      num_parts INTEGER,
+      img_url TEXT
+    );
+    CREATE INDEX IF NOT EXISTS minifigs_name_idx ON minifigs(name);
+
+    CREATE TABLE IF NOT EXISTS inventory_minifigs (
+      inventory_id INTEGER NOT NULL,
+      fig_num TEXT NOT NULL REFERENCES minifigs(fig_num),
+      quantity INTEGER NOT NULL,
+      PRIMARY KEY (inventory_id, fig_num)
+    );
+    CREATE INDEX IF NOT EXISTS im_inv_idx ON inventory_minifigs(inventory_id);
+    CREATE INDEX IF NOT EXISTS im_fig_idx ON inventory_minifigs(fig_num);
   `);
 
   if (tableExists(sqlite, "moc_saved_parts_sheets")) {

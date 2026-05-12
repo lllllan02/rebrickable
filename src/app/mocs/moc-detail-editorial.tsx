@@ -64,7 +64,7 @@ export function MocDetailEditorial({
               o && o.heroThumb
                 ? {
                     url: o.heroThumb,
-                    alt: o.heroIsSetBox ? `${o.setNum} 套装盒照` : `${o.setNum} 清单中的零件示意图`,
+                    alt: o.heroIsSetBox ? `${o.setNum} 套装盒照` : `${o.setNum} 官方人仔或目录配图`,
                     heroIsSetBox: o.heroIsSetBox,
                   }
                 : null
@@ -73,8 +73,9 @@ export function MocDetailEditorial({
           />
           {o && !o.heroIsSetBox && o.heroThumb ? (
             <p className="text-xs text-[var(--muted)]">
-              轮播首张为清单中的零件示意图；导入 <code className="code-pill">sets.csv.gz</code> 并重新执行{" "}
-              <code className="code-pill">pnpm db:import</code> 后可显示官方套装盒图。
+              轮播首张为官方人仔/目录图；若 rb 暂无该图导致链接失效，页面会显示「暂无官方图」而非裂图。补充盒图可导入{" "}
+              <code className="code-pill">sets.csv.gz</code> 并重新执行{" "}
+              <code className="code-pill">pnpm db:import</code>。
             </p>
           ) : null}
         </div>

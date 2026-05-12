@@ -5,6 +5,7 @@ import { getDb } from "@/db/client";
 import { colors, elements, inventories, legoSets, parts } from "@/db/schema";
 import { colorDomId, elementDomId } from "@/lib/dom-anchors";
 import { likeFragment } from "@/lib/search";
+import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 
 export const dynamic = "force-dynamic";
 
@@ -60,12 +61,15 @@ export async function GET(req: Request) {
         .groupBy(inventories.setNum)
         .orderBy(asc(inventories.setNum))
         .limit(need);
+      const invSetNums = invOnly.map((r) => r.setNum);
+      const heroBySet =
+        invSetNums.length > 0 ? await batchSetCatalogHeroUrls(invSetNums) : new Map<string, string | null>();
       return [
         ...fromLego,
         ...invOnly.map((r) => ({
           setNum: r.setNum,
           name: "仅有官方清单（未在 sets.csv）",
-          imgUrl: null as string | null,
+          imgUrl: heroBySet.get(r.setNum) ?? null,
         })),
       ];
     })(),

@@ -106,6 +106,37 @@ export const inventoryParts = sqliteTable(
   ]
 );
 
+/** Rebrickable minifigs.csv：小人图档 URL，用于纯小人套装封面回退 */
+export const minifigs = sqliteTable(
+  "minifigs",
+  {
+    figNum: text("fig_num").primaryKey(),
+    name: text("name").notNull(),
+    numParts: integer("num_parts"),
+    imgUrl: text("img_url"),
+  },
+  (t) => [index("minifigs_name_idx").on(t.name)]
+);
+
+/** Rebrickable inventory_minifigs.csv */
+export const inventoryMinifigs = sqliteTable(
+  "inventory_minifigs",
+  {
+    inventoryId: integer("inventory_id")
+      .notNull()
+      .references(() => inventories.id),
+    figNum: text("fig_num")
+      .notNull()
+      .references(() => minifigs.figNum),
+    quantity: integer("quantity").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.inventoryId, t.figNum] }),
+    index("im_inv_idx").on(t.inventoryId),
+    index("im_fig_idx").on(t.figNum),
+  ]
+);
+
 export const partRelationships = sqliteTable(
   "part_relationships",
   {

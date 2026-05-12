@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import {
   and,
@@ -17,7 +16,15 @@ import {
 } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { inventories, inventoryParts, legoSets, legoThemes } from "@/db/schema";
+import {
+  inventories,
+  inventoryMinifigs,
+  inventoryParts,
+  legoSets,
+  legoThemes,
+  minifigs,
+} from "@/db/schema";
+import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { likeFragment } from "@/lib/search";
 
 /** 与 MOC 列表相同栅格，略减小每页条数以控制首屏高度 */
@@ -112,42 +119,63 @@ export async function SetsOfficialCatalogSection({
     .offset(offset);
 
   const invIds = rows.map((r) => r.inventoryId);
-  const invIdsNeedPartThumb = rows.filter((r) => !usableImgUrl(r.setBoxImg)).map((r) => r.inventoryId);
+  const pageSetNums = [...new Set(rows.map((r) => r.setNum))];
+  const minifigThumbBySetNum = new Map<string, string>();
+  if (pageSetNums.length > 0) {
+    const figRows = await db
+      .select({ figNum: minifigs.figNum, imgUrl: minifigs.imgUrl })
+      .from(minifigs)
+      .where(
+        and(
+          inArray(minifigs.figNum, pageSetNums),
+          isNotNull(minifigs.imgUrl),
+          ne(minifigs.imgUrl, "")
+        )
+      );
+    for (const fr of figRows) {
+      if (fr.imgUrl && fr.figNum) minifigThumbBySetNum.set(fr.figNum, fr.imgUrl.trim());
+    }
+  }
+
+  const invIdsNeedInvMinifigThumb = rows
+    .filter(
+      (r) => !usableImgUrl(r.setBoxImg) && !usableImgUrl(minifigThumbBySetNum.get(r.setNum))
+    )
+    .map((r) => r.inventoryId);
   const thumbByInv = new Map<number, string>();
   const mainQtyByInv = new Map<number, number>();
   const spareQtyByInv = new Map<number, number>();
 
   if (invIds.length > 0) {
-    const [thumbRows, statRows] = await Promise.all([
-      invIdsNeedPartThumb.length > 0
-        ? db
-            .select({
-              inventoryId: inventoryParts.inventoryId,
-              thumb: min(inventoryParts.imgUrl),
-            })
-            .from(inventoryParts)
-            .where(
-              and(
-                inArray(inventoryParts.inventoryId, invIdsNeedPartThumb),
-                isNotNull(inventoryParts.imgUrl),
-                ne(inventoryParts.imgUrl, "")
-              )
-            )
-            .groupBy(inventoryParts.inventoryId)
-        : Promise.resolve([] as { inventoryId: number; thumb: string | null }[]),
-      db
-        .select({
-          inventoryId: inventoryParts.inventoryId,
-          mainQty: sql<number>`coalesce(sum(case when ${inventoryParts.isSpare} = 0 then ${inventoryParts.quantity} else 0 end), 0)`,
-          spareQty: sql<number>`coalesce(sum(case when ${inventoryParts.isSpare} = 1 then ${inventoryParts.quantity} else 0 end), 0)`,
-        })
-        .from(inventoryParts)
-        .where(inArray(inventoryParts.inventoryId, invIds))
-        .groupBy(inventoryParts.inventoryId),
-    ]);
+    const statRows = await db
+      .select({
+        inventoryId: inventoryParts.inventoryId,
+        mainQty: sql<number>`coalesce(sum(case when ${inventoryParts.isSpare} = 0 then ${inventoryParts.quantity} else 0 end), 0)`,
+        spareQty: sql<number>`coalesce(sum(case when ${inventoryParts.isSpare} = 1 then ${inventoryParts.quantity} else 0 end), 0)`,
+      })
+      .from(inventoryParts)
+      .where(inArray(inventoryParts.inventoryId, invIds))
+      .groupBy(inventoryParts.inventoryId);
 
-    for (const t of thumbRows) {
-      if (t.thumb) thumbByInv.set(t.inventoryId, t.thumb);
+    if (invIdsNeedInvMinifigThumb.length > 0) {
+      const miniRows = await db
+        .select({
+          inventoryId: inventoryMinifigs.inventoryId,
+          thumb: min(minifigs.imgUrl),
+        })
+        .from(inventoryMinifigs)
+        .innerJoin(minifigs, eq(inventoryMinifigs.figNum, minifigs.figNum))
+        .where(
+          and(
+            inArray(inventoryMinifigs.inventoryId, invIdsNeedInvMinifigThumb),
+            isNotNull(minifigs.imgUrl),
+            ne(minifigs.imgUrl, "")
+          )
+        )
+        .groupBy(inventoryMinifigs.inventoryId);
+      for (const t of miniRows) {
+        if (t.thumb) thumbByInv.set(t.inventoryId, t.thumb);
+      }
     }
     for (const s of statRows) {
       mainQtyByInv.set(s.inventoryId, Number(s.mainQty));
@@ -177,7 +205,11 @@ export async function SetsOfficialCatalogSection({
           套（按 <code className="code-pill">set_num</code> 去重）；每条为库存表中该套装最高{" "}
           <code className="code-pill">version</code> 的清单。盒图优先来自{" "}
           <code className="code-pill">sets.csv</code>
-          ，否则用清单零件图；卡片左下角为主题（需导入{" "}
+          ，否则若 <code className="code-pill">set_num</code> 与人仔编号一致则用{" "}
+          <code className="code-pill">minifigs</code> 人仔图；否则用该清单{" "}
+          <code className="code-pill">inventory_minifigs</code> 中的人仔图（不使用零件图；需{" "}
+          <code className="code-pill">minifigs.csv.gz</code> 与{" "}
+          <code className="code-pill">inventory_minifigs.csv.gz</code>）；卡片左下角为主题（需{" "}
           <code className="code-pill">themes.csv.gz</code>）。关键词可匹配编号或套装名称。
         </p>
       </div>
@@ -193,9 +225,12 @@ export async function SetsOfficialCatalogSection({
         </button>
       </form>
       <div className="table-shell">
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {rows.map((r) => {
-            const thumb = usableImgUrl(r.setBoxImg) ? r.setBoxImg.trim() : thumbByInv.get(r.inventoryId);
+            const thumb =
+              usableImgUrl(r.setBoxImg)
+                ? r.setBoxImg.trim()
+                : minifigThumbBySetNum.get(r.setNum) ?? thumbByInv.get(r.inventoryId);
             const mainQty = mainQtyByInv.get(r.inventoryId) ?? 0;
             const spareQty = spareQtyByInv.get(r.inventoryId) ?? 0;
             const themeLabel = (r.themeName ?? "").trim();
@@ -209,13 +244,13 @@ export async function SetsOfficialCatalogSection({
                   aria-label={`${title} 封面`}
                 >
                   {thumb ? (
-                    <Image
+                    <RemoteCoverImage
                       src={thumb}
-                      alt=""
                       fill
                       className="object-contain p-3"
                       sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                      unoptimized
+                      alt=""
+                      fallbackLabel="无图"
                     />
                   ) : (
                     <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">

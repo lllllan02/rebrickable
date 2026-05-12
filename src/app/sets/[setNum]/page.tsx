@@ -14,8 +14,10 @@ import {
   buildProfiles,
   colors,
   inventories,
+  inventoryMinifigs,
   inventoryParts,
   legoSets,
+  minifigs,
   partCategories,
   parts,
 } from "@/db/schema";
@@ -94,13 +96,7 @@ export default async function SetDetailPage({ params }: Props) {
   const setBoxImg =
     catalog && usableImgUrl(catalog.imgUrl) ? catalog.imgUrl.trim() : null;
 
-  const imgClause = and(
-    eq(inventoryParts.inventoryId, inv.id),
-    isNotNull(inventoryParts.imgUrl),
-    ne(inventoryParts.imgUrl, "")
-  );
-
-  const [lines, partHeroRow] = await Promise.all([
+  const [lines, minifigDirectRow, minifigHeroRow] = await Promise.all([
     db
       .select({
         partNum: inventoryParts.partNum,
@@ -121,9 +117,29 @@ export default async function SetDetailPage({ params }: Props) {
     setBoxImg
       ? Promise.resolve([{ thumb: null as string | null }])
       : db
-          .select({ thumb: min(inventoryParts.imgUrl) })
-          .from(inventoryParts)
-          .where(imgClause),
+          .select({ thumb: minifigs.imgUrl })
+          .from(minifigs)
+          .where(
+            and(
+              eq(minifigs.figNum, setNum),
+              isNotNull(minifigs.imgUrl),
+              ne(minifigs.imgUrl, "")
+            )
+          )
+          .limit(1),
+    setBoxImg
+      ? Promise.resolve([{ thumb: null as string | null }])
+      : db
+          .select({ thumb: min(minifigs.imgUrl) })
+          .from(inventoryMinifigs)
+          .innerJoin(minifigs, eq(inventoryMinifigs.figNum, minifigs.figNum))
+          .where(
+            and(
+              eq(inventoryMinifigs.inventoryId, inv.id),
+              isNotNull(minifigs.imgUrl),
+              ne(minifigs.imgUrl, "")
+            )
+          ),
   ]);
 
   const profile = profileRow[0];
@@ -188,7 +204,11 @@ export default async function SetDetailPage({ params }: Props) {
     initialSheetLoadError = sheet.error;
   }
 
-  const heroThumb = setBoxImg ?? partHeroRow[0]?.thumb ?? null;
+  const heroThumb =
+    setBoxImg ??
+    (usableImgUrl(minifigDirectRow[0]?.thumb) ? minifigDirectRow[0]!.thumb!.trim() : null) ??
+    minifigHeroRow[0]?.thumb ??
+    null;
   const heroIsSetBox = Boolean(setBoxImg);
   const sumQty = lines.reduce((a, l) => a + (l.isSpare ? 0 : l.quantity), 0);
   const spareQty = lines.reduce((a, l) => a + (l.isSpare ? l.quantity : 0), 0);

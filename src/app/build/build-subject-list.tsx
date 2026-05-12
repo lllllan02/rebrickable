@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
+import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
 import { buildImages, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
@@ -84,7 +84,8 @@ export async function BuildSubjectListPage({
           {officialCatalogSection != null ? (
             <>
               与 MOC 页相同：先使用下方上传入口导入缺货表 CSV，在预览页保存到本地 SQLite。上传区下方为已导入的 Rebrickable
-              官方套装（卡片列表，可搜索分页）；最下方为已存至本地的「已存零件表」。已存套装的列表封面与详情轮播首张一致：有官方盒图或清单零件图时取
+              官方套装（卡片列表，可搜索分页）；最下方为已存至本地的「已存零件表」。已存套装的列表封面与详情轮播首张一致：有官方盒图或人仔封面（<code className="code-pill">minifigs</code> /{" "}
+              <code className="code-pill">inventory_minifigs</code>）时取
               <strong className="font-medium text-[var(--text)]">官方图</strong>
               ，否则取<strong className="font-medium text-[var(--text)]">最早上传</strong>
               的参考图。可在详情页改显示名称与标签。
@@ -108,7 +109,7 @@ export async function BuildSubjectListPage({
             尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
           </p>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {rows.map((r) => {
               const prof = profileBySubject.get(r.subjectId);
               const displayName = prof?.displayName?.trim() ?? "";
@@ -132,13 +133,13 @@ export async function BuildSubjectListPage({
                     aria-label={`${title} 封面`}
                   >
                     {coverUrl ? (
-                      <Image
+                      <RemoteCoverImage
                         src={coverUrl}
-                        alt=""
                         fill
                         className="object-cover"
                         sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                        unoptimized
+                        alt=""
+                        fallbackLabel="无参考图"
                       />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">

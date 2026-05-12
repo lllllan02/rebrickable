@@ -65,9 +65,11 @@ function ensureSchema(db: Database.Database) {
   db.exec(`
     PRAGMA foreign_keys = OFF;
     DROP TABLE IF EXISTS inventory_parts;
+    DROP TABLE IF EXISTS inventory_minifigs;
     DROP TABLE IF EXISTS part_relationships;
     DROP TABLE IF EXISTS elements;
     DROP TABLE IF EXISTS inventories;
+    DROP TABLE IF EXISTS minifigs;
     DROP TABLE IF EXISTS sets;
     DROP TABLE IF EXISTS themes;
     DROP TABLE IF EXISTS parts;
@@ -114,6 +116,14 @@ function ensureSchema(db: Database.Database) {
     );
     CREATE INDEX themes_parent_idx ON themes(parent_id);
 
+    CREATE TABLE minifigs (
+      fig_num TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      num_parts INTEGER,
+      img_url TEXT
+    );
+    CREATE INDEX minifigs_name_idx ON minifigs(name);
+
     CREATE TABLE sets (
       set_num TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -130,6 +140,15 @@ function ensureSchema(db: Database.Database) {
       set_num TEXT NOT NULL
     );
     CREATE INDEX inventories_set_num_idx ON inventories(set_num);
+
+    CREATE TABLE inventory_minifigs (
+      inventory_id INTEGER NOT NULL REFERENCES inventories(id),
+      fig_num TEXT NOT NULL REFERENCES minifigs(fig_num),
+      quantity INTEGER NOT NULL,
+      PRIMARY KEY (inventory_id, fig_num)
+    );
+    CREATE INDEX im_inv_idx ON inventory_minifigs(inventory_id);
+    CREATE INDEX im_fig_idx ON inventory_minifigs(fig_num);
 
     CREATE TABLE inventory_parts (
       inventory_id INTEGER NOT NULL REFERENCES inventories(id),
@@ -367,6 +386,91 @@ async function loadInventories(db: Database.Database) {
   if (buf.length) tx(buf);
 }
 
+async function loadMinifigs(db: Database.Database) {
+  const full = path.join(ASSETS, "minifigs.csv.gz");
+  if (!fs.existsSync(full)) {
+    console.warn(
+      "未找到 assets/minifigs.csv.gz，已跳过；纯小人套装可能缺少官方盒图回退来源。"
+    );
+    return;
+  }
+  const ins = db.prepare(
+    `INSERT INTO minifigs (fig_num, name, num_parts, img_url) VALUES (?, ?, ?, ?)`
+  );
+  const tx = db.transaction((rows: [string, string, number | null, string | null][]) => {
+    for (const r of rows) ins.run(...r);
+  });
+  const buf: [string, string, number | null, string | null][] = [];
+  for await (const row of readGzCsv("minifigs.csv.gz")) {
+    buf.push([
+      textReq(row.fig_num),
+      textReq(row.name),
+      intOrNull(row.num_parts),
+      textOrNull(row.img_url),
+    ]);
+    if (buf.length >= BATCH) {
+      tx(buf);
+      buf.length = 0;
+    }
+  }
+  if (buf.length) tx(buf);
+}
+
+async function loadInventoryMinifigs(db: Database.Database) {
+  const full = path.join(ASSETS, "inventory_minifigs.csv.gz");
+  if (!fs.existsSync(full)) {
+    console.warn("未找到 assets/inventory_minifigs.csv.gz，已跳过。");
+    return;
+  }
+  const ins = db.prepare(
+    `INSERT INTO inventory_minifigs (inventory_id, fig_num, quantity) VALUES (?, ?, ?)`
+  );
+  const tx = db.transaction((rows: [number, string, number][]) => {
+    for (const r of rows) ins.run(...r);
+  });
+  const buf: [number, string, number][] = [];
+  for await (const row of readGzCsv("inventory_minifigs.csv.gz")) {
+    buf.push([intReq(row.inventory_id), textReq(row.fig_num), intReq(row.quantity)]);
+    if (buf.length >= BATCH) {
+      tx(buf);
+      buf.length = 0;
+    }
+  }
+  if (buf.length) tx(buf);
+}
+
+function backfillSetsCoverFromMinifigs(db: Database.Database) {
+  const info = db
+    .prepare(
+      `UPDATE sets
+       SET img_url = (
+         SELECT MIN(m.img_url)
+         FROM inventories i
+         INNER JOIN (
+           SELECT set_num, MAX(version) AS mv FROM inventories GROUP BY set_num
+         ) lv ON lv.set_num = i.set_num AND i.version = lv.mv
+         INNER JOIN inventory_minifigs im ON im.inventory_id = i.id
+         INNER JOIN minifigs m ON m.fig_num = im.fig_num
+         WHERE i.set_num = sets.set_num
+           AND m.img_url IS NOT NULL AND TRIM(m.img_url) != ''
+       )
+       WHERE (sets.img_url IS NULL OR TRIM(sets.img_url) = '')
+         AND EXISTS (
+           SELECT 1
+           FROM inventories i2
+           INNER JOIN (
+             SELECT set_num, MAX(version) AS mv FROM inventories GROUP BY set_num
+           ) lv2 ON lv2.set_num = i2.set_num AND i2.version = lv2.mv
+           INNER JOIN inventory_minifigs im2 ON im2.inventory_id = i2.id
+           INNER JOIN minifigs m2 ON m2.fig_num = im2.fig_num
+           WHERE i2.set_num = sets.set_num
+             AND m2.img_url IS NOT NULL AND TRIM(m2.img_url) != ''
+         )`
+    )
+    .run();
+  console.log(`回填套装盒图（无盒图时用人仔图）: ${info.changes} 条`);
+}
+
 async function loadInventoryParts(db: Database.Database) {
   const ins = db.prepare(
     `INSERT INTO inventory_parts (inventory_id, part_num, color_id, quantity, is_spare, img_url)
@@ -442,10 +546,16 @@ async function main() {
   await loadSets(db);
   console.log("导入 inventories…");
   await loadInventories(db);
+  console.log("导入 minifigs…");
+  await loadMinifigs(db);
+  console.log("导入 inventory_minifigs…");
+  await loadInventoryMinifigs(db);
   console.log("导入 inventory_parts（较慢）…");
   await loadInventoryParts(db);
   console.log("导入 part_relationships…");
   await loadPartRelationships(db);
+  console.log("回填无盒图套装的 img_url（人仔图）…");
+  backfillSetsCoverFromMinifigs(db);
 
   db.pragma("synchronous = NORMAL");
   db.pragma("foreign_keys = ON");

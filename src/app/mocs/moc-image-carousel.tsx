@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 
 import { deleteBuildImageAction, uploadBuildImageAction } from "@/app/mocs/moc-detail-actions";
+import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
 
@@ -238,7 +238,7 @@ export function MocImageCarousel({
                 <kbd className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-px font-mono text-[10px]">
                   Ctrl+V
                 </kbd>{" "}
-                粘贴截图。导入目录并存在官方盒图或清单零件图时，轮播首张即为封面；否则以{" "}
+                粘贴截图。导入目录并存在官方盒图或人仔封面（与套装目录相同来源）时，轮播首张即为封面；否则以{" "}
                 <strong className="font-medium text-[var(--text)]">上传时间最早</strong> 的一张参考图为首张与列表封面。
               </p>
             ) : (
@@ -259,18 +259,24 @@ export function MocImageCarousel({
           <div className="relative overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-3)]">
             <div className="relative aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem]">
               {current ? (
-                <Image
+                <RemoteCoverImage
+                  key={
+                    current.kind === "catalog"
+                      ? `cat-${current.url}`
+                      : `up-${current.id}`
+                  }
                   src={current.url}
+                  fill
+                  className="object-contain p-2"
+                  sizes="(max-width: 1024px) 100vw, 66vw"
                   alt={
                     current.kind === "catalog"
                       ? current.alt
                       : (current.originalName ?? `${ui.noun} 参考图`)
                   }
-                  fill
-                  className="object-contain p-2"
-                  sizes="(max-width: 1024px) 100vw, 66vw"
                   priority={idx === 0}
                   unoptimized={current.kind === "upload"}
+                  fallbackLabel={galleryKind === "set" ? "暂无官方图" : "无图"}
                 />
               ) : null}
             </div>
@@ -330,13 +336,16 @@ export function MocImageCarousel({
                     }`}
                     onClick={() => setIdx(i)}
                   >
-                    <Image
+                    <RemoteCoverImage
+                      key={img.kind === "catalog" ? `t-cat-${img.url}` : `t-up-${img.id}`}
                       src={img.url}
-                      alt=""
                       fill
                       className="object-cover"
                       sizes="56px"
+                      alt=""
                       unoptimized={img.kind === "upload"}
+                      fallbackLabel="·"
+                      fallbackClassName="text-[10px] text-[var(--muted-2)]"
                     />
                   </button>
                 ))}
