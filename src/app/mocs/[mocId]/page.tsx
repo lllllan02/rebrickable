@@ -4,7 +4,7 @@ import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actio
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import { getDb } from "@/db/client";
-import { buildAttachments, buildImages, buildProfiles } from "@/db/schema";
+import { buildAttachments, buildImages, buildOwnedSubjects, buildProfiles } from "@/db/schema";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
@@ -29,8 +29,9 @@ export default async function MocDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, mocId)
   );
   const mocProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
+  const mocOwnedKey = and(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_MOC), eq(buildOwnedSubjects.subjectId, mocId));
 
-  const [imgRows, attRows, sheet, profileRow] = await Promise.all([
+  const [imgRows, attRows, sheet, profileRow, ownedRow] = await Promise.all([
     db
       .select({
         id: buildImages.id,
@@ -54,9 +55,11 @@ export default async function MocDetailPage({ params }: Props) {
       .orderBy(asc(buildAttachments.createdAt), asc(buildAttachments.id)),
     loadMocPartsSheetFromDb(mocId),
     db.select().from(buildProfiles).where(mocProfKey).limit(1),
+    db.select().from(buildOwnedSubjects).where(mocOwnedKey).limit(1),
   ]);
 
   const profile = profileRow[0];
+  const initialOwned = Boolean(ownedRow[0]);
   const initialDisplayName = (profile?.displayName ?? "").trim();
   const initialTags = parseTagsJson(profile?.tagsJson);
 
@@ -112,6 +115,7 @@ export default async function MocDetailPage({ params }: Props) {
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}
+        initialOwned={initialOwned}
       />
 
       <MocDetailPartsSection

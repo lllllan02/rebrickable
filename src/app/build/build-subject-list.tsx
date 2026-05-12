@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
+import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
-import { buildImages, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
+import { buildImages, buildOwnedSubjects, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
@@ -75,6 +76,15 @@ export async function BuildSubjectListPage({
     if (kind === BUILD_SUBJECT_SET) {
       officialHeroBySet = await batchSetCatalogHeroUrls(subjectIds);
     }
+  }
+
+  const ownedSubjectIds = new Set<string>();
+  if (subjectIds.length > 0) {
+    const ownedRows = await db
+      .select({ subjectId: buildOwnedSubjects.subjectId })
+      .from(buildOwnedSubjects)
+      .where(and(eq(buildOwnedSubjects.subjectKind, kind), inArray(buildOwnedSubjects.subjectId, subjectIds)));
+    for (const r of ownedRows) ownedSubjectIds.add(r.subjectId);
   }
 
   const needle = likeFragment(listFilterQ ?? "").toLowerCase();
@@ -159,26 +169,37 @@ export async function BuildSubjectListPage({
 
               return (
                 <li key={r.subjectId} className="result-card flex flex-col gap-0 overflow-hidden p-0">
-                  <Link
-                    href={detailHref}
-                    className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]"
-                    aria-label={`${title} 封面`}
-                  >
-                    {coverUrl ? (
-                      <RemoteCoverImage
-                        src={coverUrl}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                        alt=""
-                        fallbackLabel="无参考图"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
-                        无参考图
-                      </span>
-                    )}
-                  </Link>
+                  <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
+                    <Link
+                      href={detailHref}
+                      className="absolute inset-0 z-0 block"
+                      aria-label={`${title} 封面`}
+                    >
+                      {coverUrl ? (
+                        <RemoteCoverImage
+                          src={coverUrl}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                          alt=""
+                          fallbackLabel="无参考图"
+                        />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
+                          无参考图
+                        </span>
+                      )}
+                    </Link>
+                    <div className="pointer-events-none absolute right-2 top-2 z-10">
+                      <div className="pointer-events-auto">
+                        <BuildOwnedToggle
+                          subjectKind={kind}
+                          subjectId={r.subjectId}
+                          initialOwned={ownedSubjectIds.has(r.subjectId)}
+                        />
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
                     <div className="min-w-0">
                       <Link

@@ -82,6 +82,14 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS build_attachments_subject_idx ON build_attachments(subject_kind, subject_id);
+
+    CREATE TABLE IF NOT EXISTS build_owned_subjects (
+      subject_kind TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      marked_at TEXT NOT NULL,
+      PRIMARY KEY (subject_kind, subject_id)
+    );
+    CREATE INDEX IF NOT EXISTS build_owned_kind_idx ON build_owned_subjects(subject_kind);
   `);
 
   sqlite.exec(`

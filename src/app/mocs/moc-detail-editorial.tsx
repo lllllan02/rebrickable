@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { MocAttachmentsPanel, type MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import { MocImageCarousel, type MocGalleryImage } from "@/app/mocs/moc-image-carousel";
 import { MocProfileForm } from "@/app/mocs/moc-profile-form";
@@ -34,6 +35,8 @@ type Props = {
   partTotalQty: number | null;
   /** 仅套装：官方盒图 / 占位与目录元数据，与 MOC 主面板同栅格展示 */
   setOfficial?: SetDetailOfficialMeta | null;
+  /** 是否在「我的收藏」中标记为拥有（本地 SQLite） */
+  initialOwned: boolean;
 };
 
 export function MocDetailEditorial({
@@ -45,6 +48,7 @@ export function MocDetailEditorial({
   initialTags,
   partTotalQty,
   setOfficial = null,
+  initialOwned,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const rbHref = ui.rebrickableUrl(subjectId);
@@ -90,6 +94,11 @@ export function MocDetailEditorial({
             initialTags={initialTags}
             partTotalQty={partTotalQty}
           />
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border-soft)] pt-4">
+            <span className="text-sm text-[var(--text)]">拥有此{ui.noun}</span>
+            <BuildOwnedToggle subjectKind={subjectKind} subjectId={subjectId} initialOwned={initialOwned} />
+          </div>
 
           {o ? (
             <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] pt-4">

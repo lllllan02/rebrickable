@@ -15,11 +15,13 @@ import {
   type SQL,
 } from "drizzle-orm";
 
+import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { getDb } from "@/db/client";
 import {
   inventories,
   inventoryMinifigs,
   inventoryParts,
+  buildOwnedSubjects,
   legoSets,
   legoThemes,
   minifigs,
@@ -27,6 +29,7 @@ import {
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { likeFragment } from "@/lib/search";
+import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 
 /** 与 MOC 列表相同栅格，略减小每页条数以控制首屏高度 */
 const PAGE_SIZE = 24;
@@ -482,6 +485,20 @@ export async function SetsOfficialCatalogSection({
     }
   }
 
+  const ownedPageSetNums = new Set<string>();
+  if (pageSetNums.length > 0) {
+    const ownedRows = await db
+      .select({ subjectId: buildOwnedSubjects.subjectId })
+      .from(buildOwnedSubjects)
+      .where(
+        and(
+          eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
+          inArray(buildOwnedSubjects.subjectId, pageSetNums)
+        )
+      );
+    for (const r of ownedRows) ownedPageSetNums.add(r.subjectId);
+  }
+
   const invIdsNeedInvMinifigThumb = rows
     .filter(
       (r) => !usableImgUrl(r.setBoxImg) && !usableImgUrl(minifigThumbBySetNum.get(r.setNum))
@@ -623,26 +640,37 @@ export async function SetsOfficialCatalogSection({
             const href = detailPath(r.setNum);
             return (
               <li key={r.setNum} className="result-card flex flex-col gap-0 overflow-hidden p-0">
-                <Link
-                  href={href}
-                  className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]"
-                  aria-label={`${title} 封面`}
-                >
-                  {thumb ? (
-                    <RemoteCoverImage
-                      src={thumb}
-                      fill
-                      className="object-contain p-3"
-                      sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                      alt=""
-                      fallbackLabel="无图"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
-                      无图
-                    </span>
-                  )}
-                </Link>
+                <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
+                  <Link
+                    href={href}
+                    className="absolute inset-0 z-0 block"
+                    aria-label={`${title} 封面`}
+                  >
+                    {thumb ? (
+                      <RemoteCoverImage
+                        src={thumb}
+                        fill
+                        className="object-contain p-3"
+                        sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                        alt=""
+                        fallbackLabel="无图"
+                      />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
+                        无图
+                      </span>
+                    )}
+                  </Link>
+                  <div className="pointer-events-none absolute right-2 top-2 z-10">
+                    <div className="pointer-events-auto">
+                      <BuildOwnedToggle
+                        subjectKind={BUILD_SUBJECT_SET}
+                        subjectId={r.setNum}
+                        initialOwned={ownedPageSetNums.has(r.setNum)}
+                      />
+                    </div>
+                  </div>
+                </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
                   <div className="min-w-0">
                     <Link

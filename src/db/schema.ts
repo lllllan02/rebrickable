@@ -222,3 +222,17 @@ export const buildAttachments = sqliteTable(
   },
   (t) => [index("build_attachments_subject_idx").on(t.subjectKind, t.subjectId)]
 );
+
+/** 用户标记「拥有」的套装 / MOC（与是否已存零件表无关） */
+export const buildOwnedSubjects = sqliteTable(
+  "build_owned_subjects",
+  {
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    markedAt: text("marked_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subjectKind, t.subjectId] }),
+    index("build_owned_kind_idx").on(t.subjectKind),
+  ]
+);
