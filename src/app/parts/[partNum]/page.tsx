@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
+import { CopyableId } from "@/components/copyable-id";
 import { getDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
 import {
@@ -143,8 +144,14 @@ export default async function PartDetailPage({ params }: Props) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="page-kicker">Part detail</p>
-            <h1 className="mt-1 font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]">
-              {row.partNum}
+            <h1 className="mt-1">
+              <CopyableId
+                value={row.partNum}
+                kind="零件号"
+                className="font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]"
+              >
+                {row.partNum}
+              </CopyableId>
             </h1>
             <p className="mt-1 text-lg">{row.name}</p>
             <dl className="meta-row mt-4 text-sm">
@@ -202,9 +209,18 @@ export default async function PartDetailPage({ params }: Props) {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{e.colorName}</div>
-                  <div className="font-mono text-xs text-[var(--muted)]">
-                    {e.elementId} · color {e.colorId}
-                    {e.designId ? ` · design ${e.designId}` : ""}
+                  <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1 font-mono text-xs text-[var(--muted)]">
+                    <CopyableId
+                      value={e.elementId}
+                      kind="element_id"
+                      className="shrink-0 whitespace-nowrap text-[var(--text)]"
+                    >
+                      {e.elementId}
+                    </CopyableId>
+                    <span className="min-w-0">
+                      {" · "}color {e.colorId}
+                      {e.designId ? ` · design ${e.designId}` : ""}
+                    </span>
                   </div>
                 </div>
               </li>

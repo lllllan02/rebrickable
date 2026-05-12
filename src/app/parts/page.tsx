@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import {
   and,
@@ -326,10 +325,8 @@ export default async function PartsPage({ searchParams }: Props) {
     .select({
       partNum: parts.partNum,
       name: parts.name,
-      catName: partCategories.name,
     })
     .from(parts)
-    .leftJoin(partCategories, eq(parts.partCatId, partCategories.id))
     .where(where)
     .orderBy(asc(parts.partNum))
     .limit(PAGE_SIZE)
@@ -516,86 +513,81 @@ export default async function PartsPage({ searchParams }: Props) {
           搜索
         </button>
       </form>
-      <ul className="content-grid">
+      <ul
+        className="grid list-none gap-2 p-0"
+        style={{
+          gridTemplateColumns: "repeat(auto-fill, minmax(5.75rem, 1fr))",
+        }}
+        role="list"
+      >
         {rows.map((r) => {
           const thumb = thumbByPart.get(r.partNum);
           const elemCount = elemCountByPart.get(r.partNum) ?? 0;
           const colorCount = colorCountByPart.get(r.partNum) ?? 0;
           const isPrinted = printedPartNums.has(r.partNum);
           const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
+          const tileClass =
+            "group relative flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-1 pb-1.5 text-left shadow-[var(--shadow)] transition-[border-color,transform,background-color] duration-150 hover:-translate-y-px hover:border-amber-400/45 hover:bg-[linear-gradient(180deg,rgba(247,200,75,0.08),rgba(255,255,255,0.025))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+          const title = [
+            r.partNum,
+            r.name,
+            isPrinted ? "印刷件" : "普通零件",
+            colorCount > 0 ? `${colorCount} 色` : null,
+            elemCount > 0 ? `${elemCount} 元素` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
-            <li key={r.partNum} className="result-card">
-              <div className="media-box media-box-sm">
-                {thumb ? (
-                  <Image
-                    src={thumb}
-                    alt=""
-                    width={56}
-                    height={56}
-                    className="box-border h-full w-full object-contain p-0.5"
-                    sizes="56px"
-                  />
-                ) : (
-                  <div
-                    className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]"
-                    title="库存中暂无图片"
-                  >
-                    无图
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                  <Link
-                    href={`/parts/${encodeURIComponent(r.partNum)}`}
-                    className="font-mono text-xs font-semibold text-[var(--accent)] sm:text-[13px]"
-                  >
-                    {r.partNum}
-                  </Link>
-                  <span
-                    className={
-                      isPrinted
-                        ? "badge badge-accent"
-                        : "badge"
-                    }
-                    title={
-                      isPrinted
-                        ? "在关系表中作为子件且 rel_type 为 P"
-                        : "非印刷子件关系"
-                    }
-                  >
-                    {isPrinted ? "印刷件" : "普通零件"}
+            <li key={r.partNum} className="min-w-0">
+              <Link
+                href={`/parts/${encodeURIComponent(r.partNum)}`}
+                className={`${tileClass} block text-inherit no-underline`}
+                title={title}
+              >
+                {isPrinted ? (
+                  <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-orange-300/95">
+                    印刷
                   </span>
-                </div>
-                <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text)]">
-                  {r.name}
-                </p>
-                <div className="meta-row mt-1">
-                  {colorCount > 0 ? (
-                    <span>{colorCount.toLocaleString("zh-CN")} 色</span>
-                  ) : null}
-                  {elemCount > 0 ? (
-                    <span>{elemCount.toLocaleString("zh-CN")} 元素</span>
-                  ) : null}
-                  {r.catName ? (
-                    <span className="min-w-0 truncate" title={r.catName}>
-                      {r.catName}
+                ) : null}
+                <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
+                  {usableImgUrl(thumb) ? (
+                    <RemoteCoverImage
+                      src={thumb.trim()}
+                      fill
+                      className="object-contain p-0.5"
+                      sizes="(max-width:640px)20vw,4.5rem"
+                      alt=""
+                      fallbackLabel="无图"
+                      fallbackClassName="text-[9px]"
+                    />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
+                      无图
                     </span>
-                  ) : null}
+                  )}
                 </div>
+                <p className="mt-1 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
+                  {r.partNum}
+                </p>
+                {colorCount > 0 || elemCount > 0 ? (
+                  <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">
+                    {colorCount > 0 ? `${colorCount} 色` : null}
+                    {colorCount > 0 && elemCount > 0 ? " · " : null}
+                    {elemCount > 0 ? `${elemCount} 元素` : null}
+                  </p>
+                ) : null}
                 {matchedElems.length > 0 ? (
-                  <p className="mt-0.5 font-mono text-[10px] leading-relaxed text-[var(--accent)]">
-                    匹配 element_id：
-                    {matchedElems.join(" · ")}
+                  <p className="mt-0.5 line-clamp-2 px-0.5 text-center font-mono text-[8px] leading-tight text-[var(--accent)]">
+                    {matchedElems.join(" ")}
                     {elementMatchTruncated.has(r.partNum) ? " …" : null}
                   </p>
                 ) : null}
-              </div>
+              </Link>
             </li>
           );
         })}
         {rows.length === 0 ? (
-          <li className="empty-state col-span-full text-sm">
+          <li className="empty-state col-span-full list-none text-sm">
             没有匹配的零件。
           </li>
         ) : null}
