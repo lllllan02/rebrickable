@@ -216,7 +216,7 @@ export default async function OwnedCollectionPage() {
         <h1 className="page-title">我的拥有</h1>
         <p className="page-description">
           汇总在 MOC、套装与零件详情页标记为「拥有」的项目（数据存于本地 SQLite）。散装零件可填写数量；已拥有套装与
-          MOC 会按官方库存或已存零件表计入页面底部「零件数量汇总」，并在对应详情页的零件表上标注「有用」。共{" "}
+          MOC 会按官方库存或已存零件表计入页面底部「零件数量汇总」，并在对应详情页的零件表上以拥有样式高亮显示。共{" "}
           <strong className="font-medium text-[var(--text)]">{total.toLocaleString("zh-CN")}</strong>{" "}
           条：MOC {mocRows.length.toLocaleString("zh-CN")} · 套装 {setRows.length.toLocaleString("zh-CN")} · 零件{" "}
           {partRows.length.toLocaleString("zh-CN")}。

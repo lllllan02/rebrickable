@@ -110,9 +110,7 @@ function MocPartDetailBody({
           {parentSubjectOwned ? (
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
-              <dd className="mt-0.5 text-[var(--text)]">
-                本 MOC / 套装已在「我的拥有」中标记，此零件视为<strong className="font-semibold">有用</strong>。
-              </dd>
+              <dd className="mt-0.5 text-[var(--text)]">本 MOC / 套装已在「我的拥有」中标记。</dd>
             </div>
           ) : null}
         </dl>
@@ -183,7 +181,7 @@ type Props = {
   totalPartQty?: number;
   /** 缺件表：允许删除行、换色并持久化 */
   shortageEditable?: { onPersist: ShortagePersistFn } | null;
-  /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行显示「有用」 */
+  /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行使用拥有高亮样式 */
   parentSubjectOwned?: boolean;
 };
 
@@ -477,11 +475,6 @@ export function MocPartsList({
                 {!r.partFound ? (
                   <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-amber-200/95">
                     未收录
-                  </span>
-                ) : null}
-                {parentSubjectOwned ? (
-                  <span className="pointer-events-none absolute right-1 top-1 z-[1] rounded border border-emerald-400/40 bg-emerald-500/15 px-1 py-px text-[9px] font-semibold leading-none text-emerald-100/95">
-                    有用
                   </span>
                 ) : null}
                 {shortageEditable ? (
