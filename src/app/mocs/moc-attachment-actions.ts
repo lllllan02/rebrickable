@@ -13,6 +13,7 @@ import {
   isSafeBuildSubjectId,
   type BuildSubjectKind,
 } from "@/lib/build-subject";
+import { refreshBuildProfileAttachmentFlags } from "@/lib/build-profile-attachment-flags";
 import {
   ensureBuildUploadDir,
   inferBuildAttachmentKindFromName,
@@ -93,6 +94,8 @@ export async function uploadBuildAttachmentAction(
       return { ok: false, error: "写入记录失败。" };
     }
 
+    await refreshBuildProfileAttachmentFlags(db, kindRaw, subjectId);
+
     revalidateBuildSubjectPaths(kindRaw, subjectId);
     return { ok: true };
   } catch {
@@ -143,6 +146,8 @@ export async function deleteBuildAttachmentAction(
     await db.delete(buildAttachments).where(eq(buildAttachments.id, row.id));
     const abs = path.join(buildUploadAbsoluteDir(subjectKind, subjectId), row.storedFile);
     await fs.unlink(abs).catch(() => {});
+
+    await refreshBuildProfileAttachmentFlags(db, subjectKind, subjectId);
 
     revalidateBuildSubjectPaths(subjectKind, subjectId);
     return { ok: true };

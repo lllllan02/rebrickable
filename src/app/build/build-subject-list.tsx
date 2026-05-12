@@ -8,7 +8,7 @@ import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
 import { buildImages, buildOwnedSubjects, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
-import { BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { buildSubjectUi } from "@/lib/build-ui";
@@ -41,7 +41,15 @@ export async function BuildSubjectListPage({
   const subjectIds = rows.map((r) => r.subjectId);
 
   const coverStored = new Map<string, string>();
-  const profileBySubject = new Map<string, { displayName: string; tags: string[] }>();
+  const profileBySubject = new Map<
+    string,
+    {
+      displayName: string;
+      tags: string[];
+      hasInstructionsPdf: boolean;
+      hasIoSource: boolean;
+    }
+  >();
   let officialHeroBySet = new Map<string, string | null>();
 
   if (subjectIds.length > 0) {
@@ -65,6 +73,8 @@ export async function BuildSubjectListPage({
       profileBySubject.set(p.subjectId, {
         displayName: (p.displayName ?? "").trim(),
         tags: parseTagsJson(p.tagsJson),
+        hasInstructionsPdf: Boolean(p.hasInstructionsPdf),
+        hasIoSource: Boolean(p.hasIoSource),
       });
     }
     for (const im of imgs) {
@@ -168,6 +178,9 @@ export async function BuildSubjectListPage({
               const savedAt = r.updatedAt.slice(0, 19).replace("T", " ");
 
               const owned = ownedSubjectIds.has(r.subjectId);
+              const showInstructionBadge =
+                kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasInstructionsPdf);
+              const showSourceBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasIoSource);
               return (
                 <li
                   key={r.subjectId}
@@ -194,12 +207,32 @@ export async function BuildSubjectListPage({
                         </span>
                       )}
                     </Link>
-                    <div className="pointer-events-none absolute right-2 top-2 z-10">
+                    <div className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-col items-end gap-1">
+                      {showInstructionBadge || showSourceBadge ? (
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {showInstructionBadge ? (
+                            <span
+                              className="rounded-md bg-gradient-to-br from-amber-400 to-orange-600 px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-white shadow-md ring-1 ring-white/35 sm:text-[10px]"
+                              title="含 PDF 说明书"
+                            >
+                              PDF
+                            </span>
+                          ) : null}
+                          {showSourceBadge ? (
+                            <span
+                              className="rounded-md bg-gradient-to-br from-sky-500 to-indigo-600 px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-white shadow-md ring-1 ring-white/35 sm:text-[10px]"
+                              title="含 Studio .io 源文件"
+                            >
+                              IO
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <div className="pointer-events-auto">
                         <BuildOwnedToggle
                           subjectKind={kind}
                           subjectId={r.subjectId}
-                          initialOwned={ownedSubjectIds.has(r.subjectId)}
+                          initialOwned={owned}
                         />
                       </div>
                     </div>

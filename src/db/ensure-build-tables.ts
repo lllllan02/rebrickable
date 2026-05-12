@@ -60,6 +60,8 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       display_name TEXT NOT NULL DEFAULT '',
       tags_json TEXT NOT NULL,
       profile_updated_at TEXT NOT NULL,
+      has_instructions_pdf INTEGER NOT NULL DEFAULT 0,
+      has_io_source INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (subject_kind, subject_id)
     );
     CREATE INDEX IF NOT EXISTS build_profiles_updated_idx ON build_profiles(profile_updated_at);
@@ -104,6 +106,18 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       sqlite.exec(
         `ALTER TABLE build_owned_subjects ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1`
       );
+    }
+  }
+
+  if (tableExists(sqlite, "build_profiles")) {
+    const profCols = tableColumnNames(sqlite, "build_profiles");
+    if (!profCols.has("has_instructions_pdf")) {
+      sqlite.exec(
+        `ALTER TABLE build_profiles ADD COLUMN has_instructions_pdf INTEGER NOT NULL DEFAULT 0`
+      );
+    }
+    if (!profCols.has("has_io_source")) {
+      sqlite.exec(`ALTER TABLE build_profiles ADD COLUMN has_io_source INTEGER NOT NULL DEFAULT 0`);
     }
   }
 
@@ -174,6 +188,44 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
   }
 
   migrateLegacyMocUploadDirs(cwd);
+
+  if (tableExists(sqlite, "build_profiles") && tableExists(sqlite, "build_attachments")) {
+    sqlite.exec(`
+      UPDATE build_profiles SET
+        has_instructions_pdf = (
+          SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM build_attachments ba
+            WHERE ba.subject_kind = build_profiles.subject_kind
+              AND ba.subject_id = build_profiles.subject_id
+              AND lower(ba.stored_file) GLOB '*.pdf'
+          ) THEN 1 ELSE 0 END
+        ),
+        has_io_source = (
+          SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM build_attachments ba
+            WHERE ba.subject_kind = build_profiles.subject_kind
+              AND ba.subject_id = build_profiles.subject_id
+              AND lower(ba.stored_file) GLOB '*.io'
+          ) THEN 1 ELSE 0 END
+        );
+    `);
+    sqlite.exec(`
+      INSERT OR IGNORE INTO build_profiles (
+        subject_kind, subject_id, display_name, tags_json, profile_updated_at,
+        has_instructions_pdf, has_io_source
+      )
+      SELECT
+        a.subject_kind,
+        a.subject_id,
+        '',
+        '[]',
+        datetime('now'),
+        MAX(CASE WHEN lower(a.stored_file) GLOB '*.pdf' THEN 1 ELSE 0 END),
+        MAX(CASE WHEN lower(a.stored_file) GLOB '*.io' THEN 1 ELSE 0 END)
+      FROM build_attachments a
+      GROUP BY a.subject_kind, a.subject_id;
+    `);
+  }
 
   sqlite.exec(`
     DROP TABLE IF EXISTS moc_attachments;

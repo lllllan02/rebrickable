@@ -184,6 +184,12 @@ export const buildProfiles = sqliteTable(
     displayName: text("display_name").notNull().default(""),
     tagsJson: text("tags_json").notNull(),
     profileUpdatedAt: text("profile_updated_at").notNull(),
+    /** 冗余：是否存在 PDF 说明书附件（由上传/删除附件时同步，列表不查 build_attachments） */
+    hasInstructionsPdf: integer("has_instructions_pdf", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /** 冗余：是否存在 .io 源文件附件 */
+    hasIoSource: integer("has_io_source", { mode: "boolean" }).notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),
