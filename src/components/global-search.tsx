@@ -97,6 +97,8 @@ export function GlobalSearch() {
     <div ref={wrapRef} className="global-search">
       <form
         role="search"
+        action="/search"
+        method="get"
         className="global-search-field-wrap"
         onSubmit={(e) => {
           e.preventDefault();

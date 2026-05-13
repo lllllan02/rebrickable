@@ -159,7 +159,7 @@ export default async function SearchPage({ searchParams }: Props) {
               title="套装"
               moreLink={{
                 href: `/sets?q=${encodeURIComponent(qRaw)}`,
-                label: "前往套装页继续筛选（官方目录 + 已存零件表）",
+                label: "前往套装页继续筛选（官方目录）",
               }}
             >
               <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">

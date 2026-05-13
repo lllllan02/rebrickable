@@ -22,34 +22,16 @@ import { mocListHref } from "@/lib/moc-list-href";
 import { MOC_PROFILE_MAX_TAG_LEN, parseTagsJson } from "@/lib/moc-profile-parse";
 import { likeFragment } from "@/lib/search";
 
-function setSavedListHref(params: {
-  mark: ListMarkFilter;
-  preserve?: { q?: string; page?: string; theme?: string };
-}): string {
-  const sp = new URLSearchParams();
-  const p = params.preserve ?? {};
-  const q = (p.q ?? "").trim();
-  if (q.length > 0) sp.set("q", q);
-  const theme = (p.theme ?? "").trim();
-  if (theme.length > 0) sp.set("theme", theme);
-  const pg = Math.max(1, Number.parseInt(String(p.page ?? "1"), 10) || 1);
-  if (pg > 1) sp.set("page", String(pg));
-  if (params.mark === "owned" || params.mark === "favorite") sp.set("mark", params.mark);
-  const qs = sp.toString();
-  return qs ? `/sets?${qs}` : "/sets";
-}
-
 export async function BuildSubjectListPage({
   kind,
   officialCatalogSection,
   listFilterQ,
   listFilterTag,
   listFilterMark = "all",
-  setsUrlPreserve,
   listHeroTitleOnly = false,
 }: {
   kind: BuildSubjectKind;
-  /** 插入在上传区之后（例如套装页的官方清单，布局与 MOC 列表卡片一致） */
+  /** 插入在上传区之后（例如套装页的官方目录区块） */
   officialCatalogSection?: ReactNode;
   /** 与全站搜索一致：匹配 subject_id、显示名、标签（仅过滤「已存零件表」卡片） */
   listFilterQ?: string;
@@ -57,12 +39,14 @@ export async function BuildSubjectListPage({
   listFilterTag?: string;
   /** 已存列表：按拥有 / 收藏筛选 */
   listFilterMark?: ListMarkFilter;
-  /** 套装页：生成「已存列表」筛选链接时保留官方目录的 q / theme / page */
-  setsUrlPreserve?: { q?: string; page?: string; theme?: string };
   /** 仅 MOC 列表页：顶部与套装目录页一致，仅一条 `page-title text-xl sm:text-2xl` 标题，无 hero-panel */
   listHeroTitleOnly?: boolean;
 }) {
   const ui = buildSubjectUi(kind);
+  if (kind === BUILD_SUBJECT_SET && officialCatalogSection != null) {
+    return <div className="page-stack">{officialCatalogSection}</div>;
+  }
+
   const db = getDb();
   const rows = await db
     .select({
@@ -369,152 +353,117 @@ export async function BuildSubjectListPage({
         </section>
       ) : null}
       <div className="table-shell">
-        {officialCatalogSection != null ? (
-          <h2 className="section-title mb-4 mt-10 text-[var(--text)]">已存零件表</h2>
-        ) : null}
-        {kind === BUILD_SUBJECT_SET && officialCatalogSection != null ? (
-          <div className="mb-4 flex flex-col gap-2 px-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-            <span className="text-xs font-medium text-[var(--muted)]">已存列表 · 拥有 / 收藏</span>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { key: "all" as const, label: "全部" },
-                  { key: "owned" as const, label: "已拥有" },
-                  { key: "favorite" as const, label: "已收藏" },
-                ] as const
-              ).map((opt) => {
-                const active = listFilterMark === opt.key;
+          {hasListFilters ? (
+            <p className="mb-4 px-2 text-sm text-[var(--muted)]">
+              已存列表
+              {hasQFilter ? (
+                <>
+                  按关键词「<span className="font-mono text-[var(--text)]">{safeQForHref || needle}</span>」
+                </>
+              ) : null}
+              {hasQFilter && hasTagFilter ? "且 " : null}
+              {hasTagFilter ? (
+                <>
+                  按标签「<span className="text-[var(--text)]">{activeTagDisplay}</span>」
+                </>
+              ) : null}
+              {hasMarkFilter ? (
+                <>
+                  {(hasQFilter || hasTagFilter) ? "且" : null}
+                  仅显示「
+                  <span className="text-[var(--text)]">
+                    {listFilterMark === "owned" ? "已拥有" : "已收藏"}
+                  </span>
+                  」
+                </>
+              ) : null}
+              {hasQFilter || hasTagFilter ? "筛选，" : hasMarkFilter ? "，" : null}
+              共 {markFilteredRows.length.toLocaleString("zh-CN")} 条
+              {hasMarkFilter && markFilteredRows.length < filteredRows.length
+                ? `（未加拥有/收藏筛选前 ${filteredRows.length.toLocaleString("zh-CN")} 条）`
+                : ""}
+              {!hasMarkFilter && filteredRows.length < rows.length
+                ? `（未加搜索/标签筛选前 ${rows.length.toLocaleString("zh-CN")} 条）`
+                : ""}
+              {" · "}
+              <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                清除筛选
+              </Link>
+            </p>
+          ) : null}
+          {rows.length === 0 ? (
+            <p className="px-2 py-6 text-sm text-[var(--muted)]">
+              尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
+            </p>
+          ) : filteredRows.length === 0 ? (
+            <p className="px-2 py-6 text-sm text-[var(--muted)]">
+              没有匹配的已存{ui.noun}。可调整关键词或{" "}
+              <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                清除筛选
+              </Link>
+              查看全部。
+            </p>
+          ) : markFilteredRows.length === 0 ? (
+            <p className="px-2 py-6 text-sm text-[var(--muted)]">
+              当前条件下没有
+              {listFilterMark === "owned" ? "已标记拥有" : "已加入收藏"}
+              的已存{ui.noun}。可更换筛选或{" "}
+              <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                清除筛选
+              </Link>
+              。
+            </p>
+          ) : (
+            <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {markFilteredRows.map((r) => {
+                const prof = profileBySubject.get(r.subjectId);
+                const displayName = prof?.displayName?.trim() ?? "";
+                const title = displayName || `${ui.noun} ${r.subjectId}`;
+                const tags = prof?.tags ?? [];
+                const stored = coverStored.get(r.subjectId);
+                const uploadCoverUrl = stored ? buildImagePublicPath(kind, r.subjectId, stored) : null;
+                const officialUrl = kind === BUILD_SUBJECT_SET ? officialHeroBySet.get(r.subjectId) ?? null : null;
+                const coverUrl =
+                  kind === BUILD_SUBJECT_SET
+                    ? (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl
+                    : uploadCoverUrl;
+                const detailHref = buildSubjectDetailPath(kind, r.subjectId);
+
+                const owned = ownedSubjectIds.has(r.subjectId);
+                const favorite = favoriteSubjectIds.has(r.subjectId);
+                const showInstructionBadge =
+                  kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasInstructionsPdf);
+                const showSourceBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasIoSource);
                 return (
-                  <Link
-                    key={opt.key}
-                    href={setSavedListHref({
-                      mark: opt.key,
-                      preserve: setsUrlPreserve,
-                    })}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      active
-                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                        : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
-                    }`}
-                  >
-                    {opt.label}
-                  </Link>
+                  <SavedSubjectListRow
+                    key={r.subjectId}
+                    kind={kind}
+                    subjectId={r.subjectId}
+                    detailHref={detailHref}
+                    title={title}
+                    coverUrl={coverUrl && coverUrl.length > 0 ? coverUrl : null}
+                    tags={tags}
+                    mocTagHref={
+                      kind === BUILD_SUBJECT_MOC
+                        ? (tag: string) =>
+                            mocListHref({
+                              q: safeQForHref,
+                              tag,
+                              mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                            })
+                        : undefined
+                    }
+                    totalPartQty={r.totalPartQty}
+                    updatedAtIso={r.updatedAt}
+                    owned={owned}
+                    favorite={favorite}
+                    showInstructionBadge={showInstructionBadge}
+                    showSourceBadge={showSourceBadge}
+                  />
                 );
               })}
-            </div>
-          </div>
-        ) : null}
-        {hasListFilters ? (
-          <p className="mb-4 px-2 text-sm text-[var(--muted)]">
-            已存列表
-            {hasQFilter ? (
-              <>
-                按关键词「<span className="font-mono text-[var(--text)]">{safeQForHref || needle}</span>」
-              </>
-            ) : null}
-            {hasQFilter && hasTagFilter ? "且 " : null}
-            {hasTagFilter ? (
-              <>
-                按标签「<span className="text-[var(--text)]">{activeTagDisplay}</span>」
-              </>
-            ) : null}
-            {hasMarkFilter ? (
-              <>
-                {(hasQFilter || hasTagFilter) ? "且" : null}
-                仅显示「
-                <span className="text-[var(--text)]">
-                  {listFilterMark === "owned" ? "已拥有" : "已收藏"}
-                </span>
-                」
-              </>
-            ) : null}
-            {hasQFilter || hasTagFilter ? "筛选，" : hasMarkFilter ? "，" : null}
-            共 {markFilteredRows.length.toLocaleString("zh-CN")} 条
-            {hasMarkFilter && markFilteredRows.length < filteredRows.length
-              ? `（未加拥有/收藏筛选前 ${filteredRows.length.toLocaleString("zh-CN")} 条）`
-              : ""}
-            {!hasMarkFilter && filteredRows.length < rows.length
-              ? `（未加搜索/标签筛选前 ${rows.length.toLocaleString("zh-CN")} 条）`
-              : ""}
-            {" · "}
-            <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
-              清除筛选
-            </Link>
-          </p>
-        ) : null}
-        {rows.length === 0 ? (
-          <p className="px-2 py-6 text-sm text-[var(--muted)]">
-            尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
-          </p>
-        ) : filteredRows.length === 0 ? (
-          <p className="px-2 py-6 text-sm text-[var(--muted)]">
-            没有匹配的已存{ui.noun}。可调整关键词或{" "}
-            <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
-              清除筛选
-            </Link>
-            查看全部。
-          </p>
-        ) : markFilteredRows.length === 0 ? (
-          <p className="px-2 py-6 text-sm text-[var(--muted)]">
-            当前条件下没有
-            {listFilterMark === "owned" ? "已标记拥有" : "已加入收藏"}
-            的已存{ui.noun}。可更换筛选或{" "}
-            <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
-              清除筛选
-            </Link>
-            。
-          </p>
-        ) : (
-          <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {markFilteredRows.map((r) => {
-              const prof = profileBySubject.get(r.subjectId);
-              const displayName = prof?.displayName?.trim() ?? "";
-              const title = displayName || `${ui.noun} ${r.subjectId}`;
-              const tags = prof?.tags ?? [];
-              const stored = coverStored.get(r.subjectId);
-              const uploadCoverUrl = stored ? buildImagePublicPath(kind, r.subjectId, stored) : null;
-              const officialUrl = kind === BUILD_SUBJECT_SET ? officialHeroBySet.get(r.subjectId) ?? null : null;
-              const coverUrl =
-                kind === BUILD_SUBJECT_SET
-                  ? (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl
-                  : uploadCoverUrl;
-              const detailHref = buildSubjectDetailPath(kind, r.subjectId);
-
-              const owned = ownedSubjectIds.has(r.subjectId);
-              const favorite = favoriteSubjectIds.has(r.subjectId);
-              const showInstructionBadge =
-                kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasInstructionsPdf);
-              const showSourceBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasIoSource);
-              return (
-                <SavedSubjectListRow
-                  key={r.subjectId}
-                  kind={kind}
-                  subjectId={r.subjectId}
-                  detailHref={detailHref}
-                  title={title}
-                  coverUrl={coverUrl && coverUrl.length > 0 ? coverUrl : null}
-                  tags={tags}
-                  mocTagHref={
-                    kind === BUILD_SUBJECT_MOC
-                      ? (tag: string) =>
-                          mocListHref({
-                            q: safeQForHref,
-                            tag,
-                            mark: listFilterMark !== "all" ? listFilterMark : undefined,
-                          })
-                      : undefined
-                  }
-                  totalPartQty={r.totalPartQty}
-                  updatedAtIso={r.updatedAt}
-                  owned={owned}
-                  favorite={favorite}
-                  showInstructionBadge={showInstructionBadge}
-                  showSourceBadge={showSourceBadge}
-                />
-              );
-            })}
-          </ul>
-        )}
+            </ul>
+          )}
       </div>
     </div>
   );

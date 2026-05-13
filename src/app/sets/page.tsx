@@ -1,6 +1,5 @@
 import { BuildSubjectListPage } from "@/app/build/build-subject-list";
 import { SetsOfficialCatalogSection } from "@/app/sets/sets-official-catalog-section";
-import { parseListMarkFilter } from "@/lib/build-list-mark-filter";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 
 export const dynamic = "force-dynamic";
@@ -14,12 +13,6 @@ export default async function SetsIndexPage({ searchParams }: Props) {
     actionBase: "/sets",
   });
   return (
-    <BuildSubjectListPage
-      kind={BUILD_SUBJECT_SET}
-      officialCatalogSection={official}
-      listFilterQ={sp.q}
-      listFilterMark={parseListMarkFilter(sp.mark)}
-      setsUrlPreserve={{ q: sp.q, page: sp.page, theme: sp.theme }}
-    />
+    <BuildSubjectListPage kind={BUILD_SUBJECT_SET} officialCatalogSection={official} />
   );
 }
