@@ -129,6 +129,7 @@ export default async function MocDetailPage({ params }: Props) {
         subjectId={mocId}
         initialFull={initialFull}
         initialShortage={initialShortage}
+        initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
         initialMocLoadError={initialMocLoadError}
         parentSubjectOwned={initialOwned}
       />

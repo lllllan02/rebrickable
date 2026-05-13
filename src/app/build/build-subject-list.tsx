@@ -53,6 +53,9 @@ export async function BuildSubjectListPage({
       subjectId: buildSavedPartsSheets.subjectId,
       totalPartQty: buildSavedPartsSheets.totalPartQty,
       updatedAt: buildSavedPartsSheets.updatedAt,
+      shortageLineCount: buildSavedPartsSheets.shortageLineCount,
+      shortageTotalQty: buildSavedPartsSheets.shortageTotalQty,
+      shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
     })
     .from(buildSavedPartsSheets)
     .where(eq(buildSavedPartsSheets.subjectKind, kind))
@@ -454,6 +457,9 @@ export async function BuildSubjectListPage({
                         : undefined
                     }
                     totalPartQty={r.totalPartQty}
+                    shortageLineCount={r.shortageLineCount ?? null}
+                    shortageTotalQty={r.shortageTotalQty ?? null}
+                    shortageClearedAt={r.shortageClearedAt ?? null}
                     updatedAtIso={r.updatedAt}
                     owned={owned}
                     favorite={favorite}

@@ -247,6 +247,7 @@ export default async function SetDetailPage({ params }: Props) {
         subjectId={setNum}
         initialFull={null}
         initialShortage={initialShortage}
+        initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
         initialMocLoadError={initialSheetLoadError}
         officialInventory={{
           items: officialInventoryItems,

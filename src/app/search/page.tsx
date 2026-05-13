@@ -142,6 +142,9 @@ export default async function SearchPage({ searchParams }: Props) {
                       tags={tags}
                       mocTagHref={(tag) => mocListHref({ q: qSafe, tag })}
                       totalPartQty={totalPartQty}
+                      shortageLineCount={sheet?.shortageLineCount ?? null}
+                      shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                      shortageClearedAt={sheet?.shortageClearedAt ?? null}
                       updatedAtIso={updatedAtIso}
                       owned={owned}
                       favorite={favorite}
@@ -192,6 +195,9 @@ export default async function SearchPage({ searchParams }: Props) {
                       coverUrl={coverUrl}
                       tags={tags}
                       totalPartQty={totalPartQty}
+                      shortageLineCount={sheet?.shortageLineCount ?? null}
+                      shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                      shortageClearedAt={sheet?.shortageClearedAt ?? null}
                       updatedAtIso={updatedAtIso}
                       owned={owned}
                       favorite={favorite}

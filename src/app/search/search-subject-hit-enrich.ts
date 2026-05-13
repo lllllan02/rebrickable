@@ -27,7 +27,16 @@ export function subjectIdFromListHref(href: string, segment: "mocs" | "sets"): s
 /** 为搜索结果中的 MOC/套装行补齐与 `/mocs` 列表相同的数据源（零件表、资料、封面、拥有/收藏） */
 export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[]) {
   const db = getDb();
-  const sheetByKindId = new Map<string, { totalPartQty: number; updatedAt: string }>();
+  const sheetByKindId = new Map<
+    string,
+    {
+      totalPartQty: number;
+      updatedAt: string;
+      shortageLineCount: number | null;
+      shortageTotalQty: number | null;
+      shortageClearedAt: string | null;
+    }
+  >();
   const favoriteMocIds = new Set<string>();
   const favoriteSetNums = new Set<string>();
   const ownedMocIds = new Set<string>();
@@ -142,10 +151,13 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
     officialHeroBySet = await batchSetCatalogHeroUrls(setNums);
   }
 
-  for (const row of sheetRows as { subjectKind: string; subjectId: string; totalPartQty: number; updatedAt: string }[]) {
+  for (const row of sheetRows) {
     sheetByKindId.set(`${row.subjectKind}:${row.subjectId}`, {
       totalPartQty: row.totalPartQty,
       updatedAt: row.updatedAt,
+      shortageLineCount: row.shortageLineCount ?? null,
+      shortageTotalQty: row.shortageTotalQty ?? null,
+      shortageClearedAt: row.shortageClearedAt ?? null,
     });
   }
   for (const f of favRows as { subjectKind: string; subjectId: string }[]) {

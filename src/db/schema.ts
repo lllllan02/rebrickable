@@ -168,6 +168,14 @@ export const buildSavedPartsSheets = sqliteTable(
     lineCount: integer("line_count").notNull(),
     totalPartQty: integer("total_part_qty").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** 缺件表行数；无缺件表分支时为 null */
+    shortageLineCount: integer("shortage_line_count"),
+    /** 缺件表各行列 quantity 之和；无缺件表时为 null */
+    shortageTotalQty: integer("shortage_total_qty"),
+    /** 缺件汇总是否与 payload 同步过（0 表示待迁移/回填） */
+    shortageStatsOk: integer("shortage_stats_ok", { mode: "boolean" }).notNull().default(false),
+    /** 用户通过「标记为不缺」确认无缺件表的时间（ISO）；仅此时列表显示「不缺件」 */
+    shortageClearedAt: text("shortage_cleared_at"),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),

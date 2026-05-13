@@ -22,6 +22,8 @@ type Props = {
   initialFull: InitialMocSheetFromServer | null;
   initialShortage: InitialMocSheetFromServer | null;
   initialMocLoadError: string | null;
+  /** 服务端「标记为不缺」写入的 ISO 时间；无则 null */
+  initialShortageClearedAt?: string | null;
   /** 套装：官方 `inventory_parts` 列表（已转为与缺货表相同的行结构） */
   officialInventory?: {
     items: ShortageResolveItem[];
@@ -38,6 +40,7 @@ export function MocDetailPartsSection({
   initialFull,
   initialShortage,
   initialMocLoadError,
+  initialShortageClearedAt = null,
   officialInventory = null,
   parentSubjectOwned = false,
 }: Props) {
@@ -157,6 +160,7 @@ export function MocDetailPartsSection({
           requestedLoadMocId={subjectId}
           initialFullSheet={isSetSubject ? null : initialFull}
           initialShortageSheet={initialShortage}
+          initialShortageClearedAt={initialShortageClearedAt}
           initialMocLoadError={initialMocLoadError}
           mocDetailEmbed
         />

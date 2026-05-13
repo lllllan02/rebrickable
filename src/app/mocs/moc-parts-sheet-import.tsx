@@ -8,7 +8,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
-import { type InitialMocSheetFromServer, saveBuildPartsSheetToDb } from "./moc-parts-sheet-actions";
+import {
+  type InitialMocSheetFromServer,
+  cancelBuildPartsSheetShortageMarkInDb,
+  clearBuildPartsSheetShortageInDb,
+  saveBuildPartsSheetToDb,
+} from "./moc-parts-sheet-actions";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
@@ -91,6 +96,8 @@ type PartsSheetImportProps = {
   initialFullSheet?: InitialMocSheetFromServer | null;
   /** 详情页：已存缺件表 */
   initialShortageSheet?: InitialMocSheetFromServer | null;
+  /** 详情页：服务端「标记为不缺」时间戳（ISO），无则 null */
+  initialShortageClearedAt?: string | null;
   initialMocLoadError?: string | null;
   /** 嵌在详情页：锁定主体 ID，保存后刷新本页数据 */
   mocDetailEmbed?: boolean;
@@ -101,6 +108,7 @@ export function PartsSheetImport({
   requestedLoadMocId,
   initialFullSheet,
   initialShortageSheet,
+  initialShortageClearedAt = null,
   initialMocLoadError,
   mocDetailEmbed = false,
 }: PartsSheetImportProps) {
@@ -131,6 +139,10 @@ export function PartsSheetImport({
   const [exportBusy, setExportBusy] = useState(false);
   const [mocLocalMessage, setMocLocalMessage] = useState<string | null>(null);
   const [mocActionBusy, setMocActionBusy] = useState(false);
+  const [shortageClearedAtLocal, setShortageClearedAtLocal] = useState<string | null>(() => {
+    const t = initialShortageClearedAt;
+    return typeof t === "string" && t.trim().length > 0 ? t.trim() : null;
+  });
   const mocFeedbackAnchorRef = useRef<HTMLDivElement>(null);
   const [exportProgress, setExportProgress] = useState<{
     jobId: string;
@@ -281,6 +293,97 @@ export function PartsSheetImport({
     [buildSubjectKind, router, scrollMocFeedbackIntoView]
   );
 
+  const markNoShortage = useCallback(async () => {
+    if (!mocDetailEmbed) return;
+    const mid = (requestedLoadMocId ?? "").trim();
+    if (!mid) return;
+    setMocLocalMessage(null);
+    setError(null);
+    setLineNumber(null);
+    setMocActionBusy(true);
+    try {
+      const result = await clearBuildPartsSheetShortageInDb({
+        subjectKind: buildSubjectKind,
+        subjectId: mid,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        scrollMocFeedbackIntoView();
+        return;
+      }
+      if (result.code === "cleared") {
+        setShortageItems(null);
+        setShortageFileName(null);
+        setShortageSkippedHeader(false);
+      }
+      router.refresh();
+      const clearedStamp = new Date().toISOString();
+      if (result.code === "cleared" || result.code === "noop_no_shortage") {
+        setShortageClearedAtLocal(clearedStamp);
+      }
+      setMocLocalMessage(
+        result.code === "cleared"
+          ? "已确认无缺件\n\n缺件表已从本记录移除。若之后缺件情况有变，请先使用上方的「上传缺件表 CSV」；保存成功后，「标记为不缺」会再次出现。"
+          : result.code === "noop_no_shortage"
+            ? "已记录为「当前无缺件」\n\n当前没有缺件表数据；若需记录缺件，请上传缺件表 CSV，保存后即可再次使用「标记为不缺」。"
+            : "尚未保存过零件表，无需标记。"
+      );
+      scrollMocFeedbackIntoView();
+    } catch {
+      setError("操作失败，请重试。");
+      scrollMocFeedbackIntoView();
+    } finally {
+      setMocActionBusy(false);
+    }
+  }, [
+    buildSubjectKind,
+    mocDetailEmbed,
+    requestedLoadMocId,
+    router,
+    scrollMocFeedbackIntoView,
+  ]);
+
+  const cancelShortageMark = useCallback(async () => {
+    if (!mocDetailEmbed || buildSubjectKind !== BUILD_SUBJECT_SET) return;
+    const mid = (requestedLoadMocId ?? "").trim();
+    if (!mid) return;
+    setMocLocalMessage(null);
+    setError(null);
+    setLineNumber(null);
+    setMocActionBusy(true);
+    try {
+      const result = await cancelBuildPartsSheetShortageMarkInDb({
+        subjectKind: buildSubjectKind,
+        subjectId: mid,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        scrollMocFeedbackIntoView();
+        return;
+      }
+      setShortageClearedAtLocal(null);
+      router.refresh();
+      setMocLocalMessage("已取消「不缺件」标记。");
+      scrollMocFeedbackIntoView();
+    } catch {
+      setError("操作失败，请重试。");
+      scrollMocFeedbackIntoView();
+    } finally {
+      setMocActionBusy(false);
+    }
+  }, [buildSubjectKind, mocDetailEmbed, requestedLoadMocId, router, scrollMocFeedbackIntoView]);
+
+  const showCancelSetShortageMark = useMemo(
+    () => noFullSheetForSet && Boolean(shortageClearedAtLocal?.trim()),
+    [noFullSheetForSet, shortageClearedAtLocal]
+  );
+
+  /** 仅在有缺件表行可清除时显示「标记为不缺」；标记后隐藏直至重新上传并保存缺件表 */
+  const showMarkNoShortageButton = useMemo(
+    () => (shortageItems?.length ?? 0) > 0,
+    [shortageItems]
+  );
+
   const onFile = useCallback(
     async (file: File | null, sheetKind?: "full" | "shortage") => {
       setError(null);
@@ -406,6 +509,7 @@ export function PartsSheetImport({
       if (mocDetailEmbed) {
         setFullItems(null);
         setShortageItems(null);
+        setShortageClearedAtLocal(null);
       } else {
         setItems(null);
       }
@@ -432,6 +536,11 @@ export function PartsSheetImport({
         setShortageItems(null);
         setShortageFileName(null);
       }
+      const cleared =
+        typeof initialShortageClearedAt === "string" && initialShortageClearedAt.trim().length > 0
+          ? initialShortageClearedAt.trim()
+          : null;
+      setShortageClearedAtLocal(cleared);
       return;
     }
 
@@ -448,6 +557,7 @@ export function PartsSheetImport({
     requestedLoadMocId,
     initialFullSheet,
     initialShortageSheet,
+    initialShortageClearedAt,
     initialMocLoadError,
     mocDetailEmbed,
     noFullSheetForSet,
@@ -741,26 +851,47 @@ export function PartsSheetImport({
                 {loading ? "解析中…" : "上传完整零件表 CSV"}
               </label>
             ) : null}
-            <label
-              className={
-                noFullSheetForSet
-                  ? "button-primary cursor-pointer text-sm"
-                  : "cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
-              }
-            >
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                className="sr-only"
-                disabled={loading || mocActionBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  void onFile(f, "shortage");
-                  e.target.value = "";
-                }}
-              />
-              上传缺件表 CSV
-            </label>
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <label
+                className={
+                  noFullSheetForSet
+                    ? "button-primary cursor-pointer text-sm"
+                    : "cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+                }
+              >
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  disabled={loading || mocActionBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    void onFile(f, "shortage");
+                    e.target.value = "";
+                  }}
+                />
+                上传缺件表 CSV
+              </label>
+              {showCancelSetShortageMark ? (
+                <button
+                  type="button"
+                  className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-40"
+                  disabled={loading || mocActionBusy || !(requestedLoadMocId ?? "").trim()}
+                  onClick={() => void cancelShortageMark()}
+                >
+                  取消标记
+                </button>
+              ) : showMarkNoShortageButton ? (
+                <button
+                  type="button"
+                  className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-40"
+                  disabled={loading || mocActionBusy || !(requestedLoadMocId ?? "").trim()}
+                  onClick={() => void markNoShortage()}
+                >
+                  标记为不缺
+                </button>
+              ) : null}
+            </span>
           </>
         ) : (
           <label className="button-primary cursor-pointer text-sm">
@@ -810,6 +941,9 @@ export function PartsSheetImport({
             缺件表 {shortageItems ? `${shortageItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
             {shortageFileName ? `（${shortageFileName}）` : ""}
             。导出请使用下方列表旁的按钮。
+            {shortageClearedAtLocal?.trim() && !showCancelSetShortageMark && !(shortageItems?.length) ? (
+              <> 当前为「不缺件」；若要再次记录缺件，请重新上传缺件表 CSV。</>
+            ) : null}
           </span>
         ) : fileName ? (
           <span className="text-xs text-[var(--muted)]">{fileName}</span>
@@ -822,7 +956,22 @@ export function PartsSheetImport({
             className="rounded-[var(--radius-md)] border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm text-[var(--text)]"
             role="status"
           >
-            <p className="font-medium text-emerald-100/95">{mocLocalMessage}</p>
+            {mocLocalMessage.includes("\n\n") ? (
+              mocLocalMessage.split("\n\n").map((paragraph, i) => (
+                <p
+                  key={i}
+                  className={
+                    i === 0
+                      ? "font-medium text-emerald-100/95"
+                      : "mt-2 text-[13px] leading-relaxed text-emerald-100/85"
+                  }
+                >
+                  {paragraph}
+                </p>
+              ))
+            ) : (
+              <p className="font-medium text-emerald-100/95">{mocLocalMessage}</p>
+            )}
           </div>
         ) : null}
 

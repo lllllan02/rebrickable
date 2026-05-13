@@ -185,7 +185,16 @@ export async function HomeOwnedCollection() {
 
   const { elemCountByPart, colorCountByPart, printedPartNums } = partListMeta;
 
-  const sheetByKindId = new Map<string, { totalPartQty: number; updatedAt: string }>();
+  const sheetByKindId = new Map<
+    string,
+    {
+      totalPartQty: number;
+      updatedAt: string;
+      shortageLineCount: number | null;
+      shortageTotalQty: number | null;
+      shortageClearedAt: string | null;
+    }
+  >();
   const favoriteMocIds = new Set<string>();
   const favoriteSetNums = new Set<string>();
   const setProfileByNum = new Map<string, { displayName: string; tags: string[] }>();
@@ -274,10 +283,13 @@ export async function HomeOwnedCollection() {
 
     setOfficialPartQtyByNum = officialPartQtyBySet;
 
-    for (const row of sheetRows as { subjectKind: string; subjectId: string; totalPartQty: number; updatedAt: string }[]) {
+    for (const row of sheetRows) {
       sheetByKindId.set(`${row.subjectKind}:${row.subjectId}`, {
         totalPartQty: row.totalPartQty,
         updatedAt: row.updatedAt,
+        shortageLineCount: row.shortageLineCount ?? null,
+        shortageTotalQty: row.shortageTotalQty ?? null,
+        shortageClearedAt: row.shortageClearedAt ?? null,
       });
     }
     for (const f of favRows as { subjectKind: string; subjectId: string }[]) {
@@ -353,6 +365,9 @@ export async function HomeOwnedCollection() {
                   tags={tags}
                   mocTagHref={(tag) => mocListHref({ tag })}
                   totalPartQty={totalPartQty}
+                  shortageLineCount={sheet?.shortageLineCount ?? null}
+                  shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                  shortageClearedAt={sheet?.shortageClearedAt ?? null}
                   updatedAtIso={updatedAtIso}
                   owned={true}
                   favorite={favoriteMocIds.has(r.subjectId)}
@@ -395,6 +410,9 @@ export async function HomeOwnedCollection() {
                   coverUrl={coverUrl}
                   tags={tags}
                   totalPartQty={totalPartQty}
+                  shortageLineCount={sheet?.shortageLineCount ?? null}
+                  shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                  shortageClearedAt={sheet?.shortageClearedAt ?? null}
                   updatedAtIso={updatedAtIso}
                   owned={true}
                   favorite={favoriteSetNums.has(r.subjectId)}

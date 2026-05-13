@@ -58,6 +58,8 @@ export type LoadBuildPartsSheetResult =
       subjectId: string;
       full: BuildSheetBranchLoaded | null;
       shortage: BuildSheetBranchLoaded | null;
+      /** 用户「标记为不缺」写入的 ISO 时间；无则 null */
+      shortageClearedAt: string | null;
     }
   | { ok: false; error: string };
 
@@ -65,6 +67,15 @@ export type LoadMocPartsSheetResult = LoadBuildPartsSheetResult;
 
 function branchTotals(items: ShortageResolveItem[]): number {
   return items.reduce((s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0), 0);
+}
+
+function shortageSummaryColumns(dual: StoredMocDualSheets): {
+  shortageLineCount: number | null;
+  shortageTotalQty: number | null;
+} {
+  if (!dual.shortage) return { shortageLineCount: null, shortageTotalQty: null };
+  const items = dual.shortage.items;
+  return { shortageLineCount: items.length, shortageTotalQty: branchTotals(items) };
 }
 
 function toLoadedBranch(
@@ -123,7 +134,10 @@ export async function loadBuildPartsSheetFromDb(
   try {
     const db = getDb();
     const rows = await db
-      .select({ payloadJson: buildSavedPartsSheets.payloadJson })
+      .select({
+        payloadJson: buildSavedPartsSheets.payloadJson,
+        shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
+      })
       .from(buildSavedPartsSheets)
       .where(buildSheetKey(subjectKind, subjectId))
       .limit(1);
@@ -136,8 +150,13 @@ export async function loadBuildPartsSheetFromDb(
         subjectId,
         full: null,
         shortage: null,
+        shortageClearedAt: null,
       };
     }
+
+    const clearedRaw = row.shortageClearedAt;
+    const shortageClearedAt =
+      typeof clearedRaw === "string" && clearedRaw.trim().length > 0 ? clearedRaw.trim() : null;
 
     let parsed: unknown;
     try {
@@ -161,6 +180,7 @@ export async function loadBuildPartsSheetFromDb(
       shortage: dual.shortage
         ? toLoadedBranch(dual.shortage.skippedHeader, dual.shortage.items, dual.shortage.savedAt)
         : null,
+      shortageClearedAt,
     };
   } catch {
     return { ok: false, error: "读取数据库失败。" };
@@ -248,12 +268,18 @@ export async function saveBuildPartsSheetToDb(input: {
     const db = getDb();
     db.transaction((tx) => {
       const existingRows = tx
-        .select({ payloadJson: buildSavedPartsSheets.payloadJson })
+        .select({
+          payloadJson: buildSavedPartsSheets.payloadJson,
+          shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
+        })
         .from(buildSavedPartsSheets)
         .where(buildSheetKey(input.subjectKind, subjectId))
         .limit(1)
         .all();
       const existingJson = existingRows[0]?.payloadJson;
+      const rawCleared = existingRows[0]?.shortageClearedAt;
+      const existingClearedAt =
+        typeof rawCleared === "string" && rawCleared.trim().length > 0 ? rawCleared.trim() : null;
       let dual: StoredMocDualSheets = { full: null, shortage: null };
       if (existingJson) {
         try {
@@ -277,6 +303,8 @@ export async function saveBuildPartsSheetToDb(input: {
 
       const payload = dualSheetsToPayloadV2(dual);
       const { skippedHeader, lineCount, totalPartQty } = aggregateRowFromDual(dual);
+      const shortageCols = shortageSummaryColumns(dual);
+      const nextShortageClearedAt: string | null = dual.shortage ? null : existingClearedAt;
 
       tx.insert(buildSavedPartsSheets)
         .values({
@@ -287,6 +315,10 @@ export async function saveBuildPartsSheetToDb(input: {
           lineCount,
           totalPartQty,
           updatedAt: savedAt,
+          shortageLineCount: shortageCols.shortageLineCount,
+          shortageTotalQty: shortageCols.shortageTotalQty,
+          shortageStatsOk: true,
+          shortageClearedAt: nextShortageClearedAt,
         })
         .onConflictDoUpdate({
           target: [buildSavedPartsSheets.subjectKind, buildSavedPartsSheets.subjectId],
@@ -296,6 +328,10 @@ export async function saveBuildPartsSheetToDb(input: {
             lineCount,
             totalPartQty,
             updatedAt: savedAt,
+            shortageLineCount: shortageCols.shortageLineCount,
+            shortageTotalQty: shortageCols.shortageTotalQty,
+            shortageStatsOk: true,
+            shortageClearedAt: nextShortageClearedAt,
           },
         })
         .run();
@@ -368,4 +404,154 @@ export async function saveSetPartsSheetToDb(input: {
     items: input.items,
     sourceFileName: input.sourceFileName,
   });
+}
+
+export type ClearBuildPartsSheetShortageResult =
+  | { ok: true; code: "cleared" | "noop_no_shortage" | "noop_no_row" }
+  | { ok: false; error: string };
+
+/**
+ * 清除已保存的缺件表（标记为无缺件）。
+ * 若仍存有完整零件表则只去掉 shortage 一侧；若仅有缺件表则删除整条 `build_saved_parts_sheets` 记录。
+ */
+export async function clearBuildPartsSheetShortageInDb(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+}): Promise<ClearBuildPartsSheetShortageResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
+  }
+
+  const db = getDb();
+  const existingRows = db
+    .select({ payloadJson: buildSavedPartsSheets.payloadJson })
+    .from(buildSavedPartsSheets)
+    .where(buildSheetKey(input.subjectKind, subjectId))
+    .limit(1)
+    .all();
+
+  const existingJson = existingRows[0]?.payloadJson;
+  if (!existingJson) {
+    return { ok: true, code: "noop_no_row" };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(existingJson) as unknown;
+  } catch {
+    return { ok: false, error: "数据库中已存数据损坏，无法解析。" };
+  }
+
+  const dual = parseStoredMocDualSheets(parsed);
+  if (!dual) {
+    return { ok: false, error: "已存数据无效，无法清除缺件表。" };
+  }
+  if (!dual.shortage) {
+    const stamp = new Date().toISOString();
+    try {
+      getDb()
+        .update(buildSavedPartsSheets)
+        .set({ shortageClearedAt: stamp })
+        .where(buildSheetKey(input.subjectKind, subjectId))
+        .run();
+      revalidateBuildSubjectPaths(input.subjectKind, subjectId);
+    } catch {
+      return { ok: false, error: "写入数据库失败。" };
+    }
+    return { ok: true, code: "noop_no_shortage" };
+  }
+
+  const savedAt = new Date().toISOString();
+  const nextDual: StoredMocDualSheets = { ...dual, shortage: null };
+
+  try {
+    db.transaction((tx) => {
+      if (!nextDual.full && !nextDual.shortage) {
+        tx.delete(buildSavedPartsSheets).where(buildSheetKey(input.subjectKind, subjectId)).run();
+        return;
+      }
+
+      const payload = dualSheetsToPayloadV2(nextDual);
+      const { skippedHeader, lineCount, totalPartQty } = aggregateRowFromDual(nextDual);
+      const shortageCols = shortageSummaryColumns(nextDual);
+
+      tx.insert(buildSavedPartsSheets)
+        .values({
+          subjectKind: input.subjectKind,
+          subjectId,
+          skippedHeader,
+          payloadJson: JSON.stringify(payload),
+          lineCount,
+          totalPartQty,
+          updatedAt: savedAt,
+          shortageLineCount: shortageCols.shortageLineCount,
+          shortageTotalQty: shortageCols.shortageTotalQty,
+          shortageStatsOk: true,
+          shortageClearedAt: savedAt,
+        })
+        .onConflictDoUpdate({
+          target: [buildSavedPartsSheets.subjectKind, buildSavedPartsSheets.subjectId],
+          set: {
+            skippedHeader,
+            payloadJson: JSON.stringify(payload),
+            lineCount,
+            totalPartQty,
+            updatedAt: savedAt,
+            shortageLineCount: shortageCols.shortageLineCount,
+            shortageTotalQty: shortageCols.shortageTotalQty,
+            shortageStatsOk: true,
+            shortageClearedAt: savedAt,
+          },
+        })
+        .run();
+    });
+
+    revalidateBuildSubjectPaths(input.subjectKind, subjectId);
+    return { ok: true, code: "cleared" };
+  } catch {
+    return { ok: false, error: "写入数据库失败。" };
+  }
+}
+
+export type CancelBuildPartsSheetShortageMarkResult = { ok: true } | { ok: false; error: string };
+
+/** 仅清除「标记为不缺」的时间戳，不修改 payload 中的缺件表数据 */
+export async function cancelBuildPartsSheetShortageMarkInDb(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+}): Promise<CancelBuildPartsSheetShortageMarkResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
+  }
+
+  try {
+    const db = getDb();
+    const exists = db
+      .select({ subjectId: buildSavedPartsSheets.subjectId })
+      .from(buildSavedPartsSheets)
+      .where(buildSheetKey(input.subjectKind, subjectId))
+      .limit(1)
+      .all();
+    if (!exists[0]) {
+      return { ok: false, error: "尚无已保存的零件表记录。" };
+    }
+
+    db.update(buildSavedPartsSheets)
+      .set({ shortageClearedAt: null })
+      .where(buildSheetKey(input.subjectKind, subjectId))
+      .run();
+
+    revalidateBuildSubjectPaths(input.subjectKind, subjectId);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "写入数据库失败。" };
+  }
 }

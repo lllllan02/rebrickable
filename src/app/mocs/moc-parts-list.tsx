@@ -166,6 +166,17 @@ function rowSame(a: ShortageResolveItem, b: ShortageResolveItem): boolean {
   );
 }
 
+/** 方格列表中展示的「缺件/备注原因」：优先 CSV 尾部列，缺件表可编辑时再补系统说明 */
+function partsSheetGridReasonLine(r: ShortageResolveItem, shortageEditable: boolean): string | null {
+  const fromCsv = r.rest.trim();
+  if (fromCsv) return fromCsv;
+  if (!shortageEditable) return null;
+  if (!r.partFound) return "本地库未收录该零件号";
+  if (!r.elementKnown) return "该零件颜色无官方元素记录";
+  if (r.imgSource === "part") return "无该色零件图（已用异色图）";
+  return null;
+}
+
 type ShortagePersistFn = (
   items: ShortageResolveItem[],
   nextSkippedHeader: boolean
@@ -458,10 +469,10 @@ export function MocPartsList({
       ) : (
         <div className="tiles-grid">
           {listFiltered.map((r, idx) => {
+            const reasonLine = partsSheetGridReasonLine(r, Boolean(shortageEditable));
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
               parentSubjectOwned ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
-              shortageEditable ? "pb-6" : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -477,9 +488,36 @@ export function MocPartsList({
                     未收录
                   </span>
                 ) : null}
+                <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
+                  {r.imgUrl ? (
+                    <RemoteCoverImage
+                      src={r.imgUrl}
+                      fill
+                      className="object-contain p-0.5"
+                      sizes="(max-width:640px)20vw,4.5rem"
+                      fallbackLabel={r.partFound ? "无图" : "?"}
+                      fallbackClassName="!text-[9px]"
+                    />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
+                      {r.partFound ? "无图" : "?"}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 min-h-0 w-full shrink-0 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
+                  {r.quantity} × {r.partNum}
+                </p>
+                {reasonLine ? (
+                  <p
+                    className="mt-0.5 line-clamp-2 w-full shrink-0 break-words px-0.5 text-center text-[9px] leading-snug text-[var(--muted)] sm:text-[10px]"
+                    title={reasonLine}
+                  >
+                    {reasonLine}
+                  </p>
+                ) : null}
                 {shortageEditable ? (
                   <div
-                    className="absolute bottom-0.5 left-0.5 right-0.5 z-[2] flex justify-center gap-0.5"
+                    className="mt-0.5 flex shrink-0 justify-center gap-0.5"
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
                   >
@@ -501,29 +539,12 @@ export function MocPartsList({
                     </button>
                   </div>
                 ) : null}
-                <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-                  {r.imgUrl ? (
-                    <RemoteCoverImage
-                      src={r.imgUrl}
-                      fill
-                      className="object-contain p-0.5"
-                      sizes="(max-width:640px)20vw,4.5rem"
-                      fallbackLabel={r.partFound ? "无图" : "?"}
-                      fallbackClassName="!text-[9px]"
-                    />
-                  ) : (
-                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
-                      {r.partFound ? "无图" : "?"}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-                  {r.quantity} × {r.partNum}
-                </p>
               </>
             );
             const key = `${r.lineNumber}-${r.partNum}-${r.colorId}-${idx}`;
-            const title = `${r.quantity} × ${r.partNum}${r.colorName ? ` · ${r.colorName}` : ""}`;
+            const title = `${r.quantity} × ${r.partNum}${r.colorName ? ` · ${r.colorName}` : ""}${
+              reasonLine ? ` · ${reasonLine}` : ""
+            }`;
             if (shortageEditable) {
               return (
                 <div

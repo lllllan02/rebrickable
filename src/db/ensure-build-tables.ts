@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import type Database from "better-sqlite3";
 
+import { parseStoredMocDualSheets } from "@/lib/parts-sheet-moc-id";
+
 function tableExists(sqlite: Database.Database, name: string): boolean {
   const row = sqlite
     .prepare(`SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = ?`)
@@ -50,6 +52,10 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       line_count INTEGER NOT NULL,
       total_part_qty INTEGER NOT NULL,
       updated_at TEXT NOT NULL,
+      shortage_line_count INTEGER,
+      shortage_total_qty INTEGER,
+      shortage_stats_ok INTEGER NOT NULL DEFAULT 0,
+      shortage_cleared_at TEXT,
       PRIMARY KEY (subject_kind, subject_id)
     );
     CREATE INDEX IF NOT EXISTS build_saved_parts_updated_idx ON build_saved_parts_sheets(updated_at);
@@ -163,6 +169,64 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       SELECT 'moc', moc_id, skipped_header, payload_json, line_count, total_part_qty, updated_at
       FROM moc_saved_parts_sheets;
     `);
+  }
+
+  if (tableExists(sqlite, "build_saved_parts_sheets")) {
+    const sheetCols = tableColumnNames(sqlite, "build_saved_parts_sheets");
+    if (!sheetCols.has("shortage_line_count")) {
+      sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN shortage_line_count INTEGER`);
+    }
+    if (!sheetCols.has("shortage_total_qty")) {
+      sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN shortage_total_qty INTEGER`);
+    }
+    if (!sheetCols.has("shortage_stats_ok")) {
+      sqlite.exec(
+        `ALTER TABLE build_saved_parts_sheets ADD COLUMN shortage_stats_ok INTEGER NOT NULL DEFAULT 0`
+      );
+    }
+    if (!sheetCols.has("shortage_cleared_at")) {
+      sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN shortage_cleared_at TEXT`);
+    }
+
+    const pending = sqlite
+      .prepare(
+        `SELECT subject_kind AS subjectKind, subject_id AS subjectId, payload_json AS payloadJson
+         FROM build_saved_parts_sheets WHERE shortage_stats_ok = 0`
+      )
+      .all() as { subjectKind: string; subjectId: string; payloadJson: string }[];
+
+    if (pending.length > 0) {
+      const upd = sqlite.prepare(
+        `UPDATE build_saved_parts_sheets
+         SET shortage_line_count = @shortageLineCount,
+             shortage_total_qty = @shortageTotalQty,
+             shortage_stats_ok = 1
+         WHERE subject_kind = @subjectKind AND subject_id = @subjectId`
+      );
+      for (const row of pending) {
+        let shortageLineCount: number | null = null;
+        let shortageTotalQty: number | null = null;
+        try {
+          const dual = parseStoredMocDualSheets(JSON.parse(row.payloadJson) as unknown);
+          if (dual?.shortage?.items?.length) {
+            shortageLineCount = dual.shortage.items.length;
+            let sum = 0;
+            for (const it of dual.shortage.items) {
+              if (Number.isFinite(it.quantity)) sum += it.quantity;
+            }
+            shortageTotalQty = sum;
+          }
+        } catch {
+          /* 保持 null，仍标记已处理以免反复失败 */
+        }
+        upd.run({
+          shortageLineCount,
+          shortageTotalQty,
+          subjectKind: row.subjectKind,
+          subjectId: row.subjectId,
+        });
+      }
+    }
   }
 
   if (tableExists(sqlite, "moc_profiles")) {

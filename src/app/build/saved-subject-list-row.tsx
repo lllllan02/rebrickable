@@ -26,6 +26,9 @@ export function SavedSubjectListRow({
   favorite,
   showInstructionBadge,
   showSourceBadge,
+  shortageLineCount,
+  shortageTotalQty,
+  shortageClearedAt,
 }: {
   kind: BuildSubjectKind;
   subjectId: string;
@@ -41,9 +44,18 @@ export function SavedSubjectListRow({
   favorite: boolean;
   showInstructionBadge: boolean;
   showSourceBadge: boolean;
+  /** 缺件表行数；null 表示无缺件表或未写入汇总 */
+  shortageLineCount: number | null;
+  /** 缺件表各行列 quantity 之和 */
+  shortageTotalQty: number | null;
+  /** 用户「标记为不缺」写入的时间（ISO）；仅非空时表示已确认无缺件表 */
+  shortageClearedAt: string | null;
 }) {
   const coverImageClassName = kind === BUILD_SUBJECT_SET ? "object-contain p-3" : "object-cover";
   const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
+  const hasShortage = shortageLineCount != null && shortageLineCount > 0;
+  const markedNoShortage =
+    typeof shortageClearedAt === "string" && shortageClearedAt.trim().length > 0;
 
   return (
     <li
@@ -127,15 +139,33 @@ export function SavedSubjectListRow({
             )}
           </div>
         ) : null}
-        <div className="mt-auto flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
-          <span className="tabular-nums text-[var(--text)]">
-            <span className="text-[var(--muted-2)]">零件总数 </span>
-            {totalPartQty.toLocaleString("zh-CN")}
-          </span>
-          <span className="shrink-0 text-right tabular-nums">
-            <span className="text-[var(--muted-2)]">保存时间 </span>
-            <time dateTime={updatedAtIso}>{savedAt}</time>
-          </span>
+        <div className="mt-auto border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="min-w-0 tabular-nums text-[var(--text)]">
+              <span className="text-[var(--muted-2)]">零件总数 </span>
+              {totalPartQty.toLocaleString("zh-CN")}
+              {hasShortage ? (
+                <span
+                  className="font-medium text-amber-200/95"
+                  title={`缺件表 ${shortageLineCount.toLocaleString("zh-CN")} 行`}
+                >
+                  （缺件 {(shortageTotalQty ?? 0).toLocaleString("zh-CN")} 件）
+                </span>
+              ) : markedNoShortage ? (
+                <span className="font-semibold text-emerald-200/95" title="已通过「标记为不缺」确认">
+                  （不缺件）
+                </span>
+              ) : (
+                <span className="text-[var(--muted-2)]" title="尚未上传缺件表，或未确认缺件情况">
+                  （未检查）
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 text-right tabular-nums">
+              <span className="text-[var(--muted-2)]">保存时间 </span>
+              <time dateTime={updatedAtIso}>{savedAt}</time>
+            </span>
+          </div>
         </div>
       </div>
     </li>
