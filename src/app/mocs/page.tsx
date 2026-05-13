@@ -14,6 +14,7 @@ export default async function MocsPage({ searchParams }: Props) {
       listFilterQ={sp.q}
       listFilterTag={sp.tag}
       listFilterMark={parseListMarkFilter(sp.mark)}
+      listHeroTitleOnly
     />
   );
 }

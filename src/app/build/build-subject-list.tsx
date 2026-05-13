@@ -46,6 +46,7 @@ export async function BuildSubjectListPage({
   listFilterTag,
   listFilterMark = "all",
   setsUrlPreserve,
+  listHeroTitleOnly = false,
 }: {
   kind: BuildSubjectKind;
   /** 插入在上传区之后（例如套装页的官方清单，布局与 MOC 列表卡片一致） */
@@ -58,6 +59,8 @@ export async function BuildSubjectListPage({
   listFilterMark?: ListMarkFilter;
   /** 套装页：生成「已存列表」筛选链接时保留官方目录的 q / theme / page */
   setsUrlPreserve?: { q?: string; page?: string; theme?: string };
+  /** 仅 MOC 列表页：顶部与套装目录页一致，仅一条 `page-title text-xl sm:text-2xl` 标题，无 hero-panel */
+  listHeroTitleOnly?: boolean;
 }) {
   const ui = buildSubjectUi(kind);
   const db = getDb();
@@ -210,18 +213,29 @@ export async function BuildSubjectListPage({
   return (
     <div className="page-stack">
       {officialCatalogSection == null ? (
-        <section className="hero-panel">
-          <p className="page-kicker">{ui.listKicker}</p>
-          <h1 className="page-title">
-            {ui.noun} {ui.listTitleSuffix}
-          </h1>
-          <p className="page-description">
-            在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
-            <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
-          </p>
-        </section>
+        listHeroTitleOnly ? (
+          <section className="space-y-4" aria-labelledby="mocs-saved-list-heading">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 id="mocs-saved-list-heading" className="page-title text-xl sm:text-2xl">
+                MOC 目录
+              </h2>
+              <BuildPartsSheetUpload kind={kind} variant="minimal" />
+            </div>
+          </section>
+        ) : (
+          <section className="hero-panel">
+            <p className="page-kicker">{ui.listKicker}</p>
+            <h1 className="page-title">
+              {ui.noun} {ui.listTitleSuffix}
+            </h1>
+            <p className="page-description">
+              在下方上传缺货表 CSV 后，将在临时预览页核对并保存到本地 SQLite；此处列出全部已存{ui.noun}。封面取该{ui.noun}{" "}
+              <strong className="font-medium text-[var(--text)]">最早上传</strong> 的一张参考图；可在详情页修改显示名称与标签。
+            </p>
+          </section>
+        )
       ) : null}
-      {officialCatalogSection == null ? <BuildPartsSheetUpload kind={kind} /> : null}
+      {officialCatalogSection == null && !listHeroTitleOnly ? <BuildPartsSheetUpload kind={kind} /> : null}
       {officialCatalogSection ?? null}
       {kind === BUILD_SUBJECT_MOC && officialCatalogSection == null ? (
         <section className="section-panel">
@@ -231,7 +245,36 @@ export async function BuildSubjectListPage({
             className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
             role="search"
           >
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {(
+                [
+                  { key: "all" as const, label: "全部" },
+                  { key: "owned" as const, label: "已拥有" },
+                  { key: "favorite" as const, label: "已收藏" },
+                ] as const
+              ).map((opt) => {
+                const active = listFilterMark === opt.key;
+                const tagArg = hiddenTagValue || undefined;
+                return (
+                  <Link
+                    key={opt.key}
+                    href={mocListHref({
+                      q: safeQForHref,
+                      tag: tagArg,
+                      mark: opt.key === "all" ? undefined : opt.key,
+                    })}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      active
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                        : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[12rem]">
               <label htmlFor="moc-list-q" className="text-xs font-medium text-[var(--muted)]">
                 搜索
               </label>
@@ -267,79 +310,61 @@ export async function BuildSubjectListPage({
               ) : null}
             </div>
           </form>
-          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--border-soft)] pt-4">
-            <p className="text-xs font-medium text-[var(--muted)]">拥有 / 收藏</p>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { key: "all" as const, label: "全部" },
-                  { key: "owned" as const, label: "已拥有" },
-                  { key: "favorite" as const, label: "已收藏" },
-                ] as const
-              ).map((opt) => {
-                const active = listFilterMark === opt.key;
-                const tagArg = hiddenTagValue || undefined;
-                return (
-                  <Link
-                    key={opt.key}
-                    href={mocListHref({
-                      q: safeQForHref,
-                      tag: tagArg,
-                      mark: opt.key === "all" ? undefined : opt.key,
-                    })}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      active
-                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                        : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
-                    }`}
-                  >
-                    {opt.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
           {tagFacetList.length > 0 ? (
-            <div className="mt-5 border-t border-[var(--border-soft)] pt-4">
-              <p className="mb-2 text-xs font-medium text-[var(--muted)]">按标签筛选</p>
-              <div className="flex flex-wrap gap-2">
-                {tagFacetList.map((x) => {
-                  const active = x.key === tagNeedle;
-                  return (
+            <details className="group mt-4 border-t border-[var(--border-soft)] pt-4">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-[var(--muted)] select-none [&::-webkit-details-marker]:hidden">
+                <span
+                  className="inline-block text-[10px] leading-none text-[var(--muted-2)] transition-transform duration-200 group-open:rotate-90"
+                  aria-hidden
+                >
+                  ▶
+                </span>
+                按标签筛选
+                {hasTagFilter ? (
+                  <span className="font-normal text-[var(--text)]">
+                    （已选「<span className="font-medium">{activeTagDisplay}</span>」）
+                  </span>
+                ) : null}
+              </summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {tagFacetList.map((x) => {
+                    const active = x.key === tagNeedle;
+                    return (
+                      <Link
+                        key={x.key}
+                        href={mocListHref({
+                          q: safeQForHref,
+                          tag: x.display,
+                          mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                        })}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                          active
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                            : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
+                        }`}
+                      >
+                        <span>{x.display}</span>
+                        <span className="tabular-nums text-[var(--muted)]">({x.count})</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+                {hasTagFilter ? (
+                  <p className="text-xs text-[var(--muted)]">
                     <Link
-                      key={x.key}
                       href={mocListHref({
                         q: safeQForHref,
-                        tag: x.display,
                         mark: listFilterMark !== "all" ? listFilterMark : undefined,
                       })}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                        active
-                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                          : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
-                      }`}
+                      className="text-[var(--accent)] underline-offset-2 hover:underline"
                     >
-                      <span>{x.display}</span>
-                      <span className="tabular-nums text-[var(--muted)]">({x.count})</span>
+                      仅清除标签
                     </Link>
-                  );
-                })}
+                  </p>
+                ) : null}
               </div>
-              {hasTagFilter ? (
-                <p className="mt-3 text-xs text-[var(--muted)]">
-                  已选标签「<span className="font-medium text-[var(--text)]">{activeTagDisplay}</span>」·{" "}
-                  <Link
-                    href={mocListHref({
-                      q: safeQForHref,
-                      mark: listFilterMark !== "all" ? listFilterMark : undefined,
-                    })}
-                    className="text-[var(--accent)] underline-offset-2 hover:underline"
-                  >
-                    仅清除标签
-                  </Link>
-                </p>
-              ) : null}
-            </div>
+            </details>
           ) : null}
         </section>
       ) : null}

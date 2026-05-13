@@ -20,9 +20,13 @@ type PendingPayload = {
   fileName: string;
 };
 
-type Props = { kind: BuildSubjectKind };
+type Props = {
+  kind: BuildSubjectKind;
+  /** `minimal`：仅上传按钮（及解析错误提示），无外围卡片与说明文案，用于与列表标题同一行 */
+  variant?: "panel" | "minimal";
+};
 
-export function BuildPartsSheetUpload({ kind }: Props) {
+export function BuildPartsSheetUpload({ kind, variant = "panel" }: Props) {
   const ui = buildSubjectUi(kind);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,31 +149,31 @@ export function BuildPartsSheetUpload({ kind }: Props) {
     [kind]
   );
 
-  return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="button-primary cursor-pointer text-sm">
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            disabled={parseBusy}
-            onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
-          />
-          {parseBusy ? "解析中…" : "上传零件表 CSV"}
-        </label>
-        <p className="max-w-xl text-xs leading-relaxed text-[var(--muted)]">
-          与{" "}
-          <code className="rounded bg-[var(--surface-3)] px-1 py-px font-mono text-[11px]">
-            rebrickable_parts_*_缺货表.csv
-          </code>{" "}
-          结构一致；解析成功后在本页确认 {ui.subjectIdLabel} 并写入数据库。若该 ID 已有零件表，将询问是否覆盖。
-        </p>
-      </div>
-      {parseError ? <p className="mt-2 text-xs text-red-200/90">{parseError}</p> : null}
+  const fileInput = (
+    <label className="button-primary shrink-0 cursor-pointer text-sm">
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="sr-only"
+        disabled={parseBusy}
+        onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
+      />
+      {parseBusy ? "解析中…" : "上传零件表 CSV"}
+    </label>
+  );
 
-      <dialog
+  const parseErrorBlock =
+    parseError != null ? (
+      <p
+        className={`text-xs text-red-200/90 ${variant === "minimal" ? "max-w-xs text-right" : "mt-2"}`}
+      >
+        {parseError}
+      </p>
+    ) : null;
+
+  const dialogEl = (
+    <dialog
         ref={dialogRef}
         className="fixed left-1/2 top-1/2 z-[200] m-0 w-[min(100vw-1.5rem,22rem)] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/55"
         aria-labelledby={titleId}
@@ -258,7 +262,33 @@ export function BuildPartsSheetUpload({ kind }: Props) {
             </div>
           </div>
         ) : null}
-      </dialog>
+    </dialog>
+  );
+
+  if (variant === "minimal") {
+    return (
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {fileInput}
+        {parseErrorBlock}
+        {dialogEl}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {fileInput}
+        <p className="max-w-xl text-xs leading-relaxed text-[var(--muted)]">
+          与{" "}
+          <code className="rounded bg-[var(--surface-3)] px-1 py-px font-mono text-[11px]">
+            rebrickable_parts_*_缺货表.csv
+          </code>{" "}
+          结构一致；解析成功后在本页确认 {ui.subjectIdLabel} 并写入数据库。若该 ID 已有零件表，将询问是否覆盖。
+        </p>
+      </div>
+      {parseErrorBlock}
+      {dialogEl}
     </div>
   );
 }
