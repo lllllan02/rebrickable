@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { MocAttachmentsPanel, type MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import { MocImageCarousel, type MocGalleryImage } from "@/app/mocs/moc-image-carousel";
@@ -37,6 +38,8 @@ type Props = {
   setOfficial?: SetDetailOfficialMeta | null;
   /** 是否在「我的拥有」中标记（本地 SQLite） */
   initialOwned: boolean;
+  /** 是否加入「收藏」（本地 SQLite） */
+  initialFavorite: boolean;
 };
 
 export function MocDetailEditorial({
@@ -49,6 +52,7 @@ export function MocDetailEditorial({
   partTotalQty,
   setOfficial = null,
   initialOwned,
+  initialFavorite,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const rbHref = ui.rebrickableUrl(subjectId);
@@ -95,9 +99,15 @@ export function MocDetailEditorial({
             partTotalQty={partTotalQty}
           />
 
-          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border-soft)] pt-4">
-            <span className="text-sm text-[var(--text)]">拥有此{ui.noun}</span>
-            <BuildOwnedToggle subjectKind={subjectKind} subjectId={subjectId} initialOwned={initialOwned} />
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-[var(--border-soft)] pt-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <span className="text-sm text-[var(--text)]">拥有此{ui.noun}</span>
+              <BuildOwnedToggle subjectKind={subjectKind} subjectId={subjectId} initialOwned={initialOwned} />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-sm text-[var(--muted)]">收藏</span>
+              <BuildFavoriteToggle subjectKind={subjectKind} subjectId={subjectId} initialFavorite={initialFavorite} />
+            </div>
           </div>
 
           {o ? (

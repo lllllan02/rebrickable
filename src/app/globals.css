@@ -748,7 +748,7 @@ select {
   transform: translateY(-1px);
 }
 
-/* 已标记「拥有」：与 --accent 同系的金色描边（避免偏红的「警示橙」） */
+/* 列表卡片：拥有 = 实线强调；收藏 = 同色系虚线（与按钮「实心 / 浅底描边」对应） */
 .result-card--owned,
 .owned-grid .result-card {
   border: 2px solid rgba(247, 200, 75, 0.5);
@@ -762,6 +762,22 @@ select {
 .owned-grid .result-card:hover {
   border-color: rgba(255, 220, 130, 0.72);
   background: linear-gradient(180deg, rgba(247, 200, 75, 0.14), rgba(255, 255, 255, 0.028));
+  transform: translateY(-1px);
+}
+
+.result-card--favorite,
+.favorite-grid .result-card {
+  border: 2px dashed rgba(247, 200, 75, 0.42);
+  background: linear-gradient(180deg, rgba(247, 200, 75, 0.055), rgba(255, 255, 255, 0.012));
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px rgba(247, 200, 75, 0.06);
+}
+
+.result-card--favorite:hover,
+.favorite-grid .result-card:hover {
+  border-color: rgba(255, 220, 130, 0.5);
+  background: linear-gradient(180deg, rgba(247, 200, 75, 0.09), rgba(255, 255, 255, 0.02));
   transform: translateY(-1px);
 }
 

@@ -244,3 +244,17 @@ export const buildOwnedSubjects = sqliteTable(
     index("build_owned_kind_idx").on(t.subjectKind),
   ]
 );
+
+/** 用户「收藏」的套装 / MOC（与拥有、是否已存零件表无关） */
+export const buildFavoriteSubjects = sqliteTable(
+  "build_favorite_subjects",
+  {
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    markedAt: text("marked_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.subjectKind, t.subjectId] }),
+    index("build_favorite_kind_idx").on(t.subjectKind),
+  ]
+);

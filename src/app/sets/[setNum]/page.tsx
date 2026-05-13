@@ -10,6 +10,7 @@ import type { MocGalleryImage } from "@/app/mocs/moc-image-carousel";
 import { getDb } from "@/db/client";
 import {
   buildAttachments,
+  buildFavoriteSubjects,
   buildImages,
   buildOwnedSubjects,
   buildProfiles,
@@ -48,8 +49,12 @@ export default async function SetDetailPage({ params }: Props) {
   );
   const setProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_SET), eq(buildProfiles.subjectId, setNum));
   const setOwnedKey = and(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET), eq(buildOwnedSubjects.subjectId, setNum));
+  const setFavoriteKey = and(
+    eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET),
+    eq(buildFavoriteSubjects.subjectId, setNum)
+  );
 
-  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, ownedRow] = await Promise.all([
+  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, ownedRow, favoriteRow] = await Promise.all([
     db
       .select({
         id: inventories.id,
@@ -92,6 +97,7 @@ export default async function SetDetailPage({ params }: Props) {
     loadBuildPartsSheetFromDb(BUILD_SUBJECT_SET, setNum),
     db.select().from(buildProfiles).where(setProfKey).limit(1),
     db.select().from(buildOwnedSubjects).where(setOwnedKey).limit(1),
+    db.select().from(buildFavoriteSubjects).where(setFavoriteKey).limit(1),
   ]);
 
   if (!inv) notFound();
@@ -147,6 +153,7 @@ export default async function SetDetailPage({ params }: Props) {
 
   const profile = profileRow[0];
   const initialOwned = Boolean(ownedRow[0]);
+  const initialFavorite = Boolean(favoriteRow[0]);
   const initialDisplayName = (profile?.displayName ?? "").trim();
   const initialTags = parseTagsJson(profile?.tagsJson);
 
@@ -232,6 +239,7 @@ export default async function SetDetailPage({ params }: Props) {
         partTotalQty={partTotalQty}
         setOfficial={setOfficial}
         initialOwned={initialOwned}
+        initialFavorite={initialFavorite}
       />
 
       <MocDetailPartsSection

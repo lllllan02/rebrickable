@@ -2,11 +2,19 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
+import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
-import { buildImages, buildOwnedSubjects, buildProfiles, buildSavedPartsSheets } from "@/db/schema";
+import {
+  buildFavoriteSubjects,
+  buildImages,
+  buildOwnedSubjects,
+  buildProfiles,
+  buildSavedPartsSheets,
+} from "@/db/schema";
+import type { ListMarkFilter } from "@/lib/build-list-mark-filter";
 import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
@@ -15,14 +23,32 @@ import { buildSubjectUi } from "@/lib/build-ui";
 import { MOC_PROFILE_MAX_TAG_LEN, parseTagsJson } from "@/lib/moc-profile-parse";
 import { likeFragment } from "@/lib/search";
 
-function mocListHref(params: { q?: string; tag?: string }): string {
+function mocListHref(params: { q?: string; tag?: string; mark?: ListMarkFilter }): string {
   const sp = new URLSearchParams();
   const q = likeFragment(params.q ?? "");
   if (q.length > 0) sp.set("q", q);
   const tag = (params.tag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN);
   if (tag.length > 0) sp.set("tag", tag);
+  if (params.mark === "owned" || params.mark === "favorite") sp.set("mark", params.mark);
   const qs = sp.toString();
   return qs ? `/mocs?${qs}` : "/mocs";
+}
+
+function setSavedListHref(params: {
+  mark: ListMarkFilter;
+  preserve?: { q?: string; page?: string; theme?: string };
+}): string {
+  const sp = new URLSearchParams();
+  const p = params.preserve ?? {};
+  const q = (p.q ?? "").trim();
+  if (q.length > 0) sp.set("q", q);
+  const theme = (p.theme ?? "").trim();
+  if (theme.length > 0) sp.set("theme", theme);
+  const pg = Math.max(1, Number.parseInt(String(p.page ?? "1"), 10) || 1);
+  if (pg > 1) sp.set("page", String(pg));
+  if (params.mark === "owned" || params.mark === "favorite") sp.set("mark", params.mark);
+  const qs = sp.toString();
+  return qs ? `/sets?${qs}` : "/sets";
 }
 
 export async function BuildSubjectListPage({
@@ -30,6 +56,8 @@ export async function BuildSubjectListPage({
   officialCatalogSection,
   listFilterQ,
   listFilterTag,
+  listFilterMark = "all",
+  setsUrlPreserve,
 }: {
   kind: BuildSubjectKind;
   /** 插入在上传区之后（例如套装页的官方清单，布局与 MOC 列表卡片一致） */
@@ -38,6 +66,10 @@ export async function BuildSubjectListPage({
   listFilterQ?: string;
   /** 仅 MOC 列表：按单个标签精确匹配（忽略大小写） */
   listFilterTag?: string;
+  /** 已存列表：按拥有 / 收藏筛选 */
+  listFilterMark?: ListMarkFilter;
+  /** 套装页：生成「已存列表」筛选链接时保留官方目录的 q / theme / page */
+  setsUrlPreserve?: { q?: string; page?: string; theme?: string };
 }) {
   const ui = buildSubjectUi(kind);
   const db = getDb();
@@ -102,12 +134,20 @@ export async function BuildSubjectListPage({
   }
 
   const ownedSubjectIds = new Set<string>();
+  const favoriteSubjectIds = new Set<string>();
   if (subjectIds.length > 0) {
-    const ownedRows = await db
-      .select({ subjectId: buildOwnedSubjects.subjectId })
-      .from(buildOwnedSubjects)
-      .where(and(eq(buildOwnedSubjects.subjectKind, kind), inArray(buildOwnedSubjects.subjectId, subjectIds)));
+    const [ownedRows, favoriteRows] = await Promise.all([
+      db
+        .select({ subjectId: buildOwnedSubjects.subjectId })
+        .from(buildOwnedSubjects)
+        .where(and(eq(buildOwnedSubjects.subjectKind, kind), inArray(buildOwnedSubjects.subjectId, subjectIds))),
+      db
+        .select({ subjectId: buildFavoriteSubjects.subjectId })
+        .from(buildFavoriteSubjects)
+        .where(and(eq(buildFavoriteSubjects.subjectKind, kind), inArray(buildFavoriteSubjects.subjectId, subjectIds))),
+    ]);
     for (const r of ownedRows) ownedSubjectIds.add(r.subjectId);
+    for (const r of favoriteRows) favoriteSubjectIds.add(r.subjectId);
   }
 
   const needle = likeFragment(listFilterQ ?? "").toLowerCase();
@@ -161,11 +201,23 @@ export async function BuildSubjectListPage({
     return true;
   });
 
+  const markFilteredRows = filteredRows.filter((r) => {
+    if (listFilterMark === "owned") return ownedSubjectIds.has(r.subjectId);
+    if (listFilterMark === "favorite") return favoriteSubjectIds.has(r.subjectId);
+    return true;
+  });
+
   const listPath = buildSubjectListPath(kind);
   const hasQFilter = needle.length > 0;
   const hasTagFilter = kind === BUILD_SUBJECT_MOC && tagNeedle.length > 0;
-  const hasListFilters = hasQFilter || hasTagFilter;
-  const clearListHref = hasListFilters ? (kind === BUILD_SUBJECT_MOC ? mocListHref({}) : listPath) : listPath;
+  const hasMarkFilter = listFilterMark !== "all";
+  const hasListFilters = hasQFilter || hasTagFilter || hasMarkFilter;
+  const clearListHref =
+    hasListFilters && kind === BUILD_SUBJECT_MOC
+      ? mocListHref({})
+      : hasListFilters && kind === BUILD_SUBJECT_SET
+        ? "/sets"
+        : listPath;
 
   return (
     <div className="page-stack">
@@ -207,6 +259,9 @@ export async function BuildSubjectListPage({
               />
             </div>
             {hiddenTagValue ? <input type="hidden" name="tag" value={hiddenTagValue} /> : null}
+            {listFilterMark === "owned" || listFilterMark === "favorite" ? (
+              <input type="hidden" name="mark" value={listFilterMark} />
+            ) : null}
             <div className="flex shrink-0 gap-2">
               <button
                 type="submit"
@@ -224,6 +279,38 @@ export async function BuildSubjectListPage({
               ) : null}
             </div>
           </form>
+          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--border-soft)] pt-4">
+            <p className="text-xs font-medium text-[var(--muted)]">拥有 / 收藏</p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "all" as const, label: "全部" },
+                  { key: "owned" as const, label: "已拥有" },
+                  { key: "favorite" as const, label: "已收藏" },
+                ] as const
+              ).map((opt) => {
+                const active = listFilterMark === opt.key;
+                const tagArg = hiddenTagValue || undefined;
+                return (
+                  <Link
+                    key={opt.key}
+                    href={mocListHref({
+                      q: safeQForHref,
+                      tag: tagArg,
+                      mark: opt.key === "all" ? undefined : opt.key,
+                    })}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      active
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                        : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
           {tagFacetList.length > 0 ? (
             <div className="mt-5 border-t border-[var(--border-soft)] pt-4">
               <p className="mb-2 text-xs font-medium text-[var(--muted)]">按标签筛选</p>
@@ -233,7 +320,11 @@ export async function BuildSubjectListPage({
                   return (
                     <Link
                       key={x.key}
-                      href={mocListHref({ q: safeQForHref, tag: x.display })}
+                      href={mocListHref({
+                        q: safeQForHref,
+                        tag: x.display,
+                        mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                      })}
                       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                         active
                           ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
@@ -249,7 +340,13 @@ export async function BuildSubjectListPage({
               {hasTagFilter ? (
                 <p className="mt-3 text-xs text-[var(--muted)]">
                   已选标签「<span className="font-medium text-[var(--text)]">{activeTagDisplay}</span>」·{" "}
-                  <Link href={mocListHref({ q: safeQForHref })} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                  <Link
+                    href={mocListHref({
+                      q: safeQForHref,
+                      mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                    })}
+                    className="text-[var(--accent)] underline-offset-2 hover:underline"
+                  >
                     仅清除标签
                   </Link>
                 </p>
@@ -261,6 +358,38 @@ export async function BuildSubjectListPage({
       <div className="table-shell">
         {officialCatalogSection != null ? (
           <h2 className="section-title mb-4 mt-10 text-[var(--text)]">已存零件表</h2>
+        ) : null}
+        {kind === BUILD_SUBJECT_SET && officialCatalogSection != null ? (
+          <div className="mb-4 flex flex-col gap-2 px-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            <span className="text-xs font-medium text-[var(--muted)]">已存列表 · 拥有 / 收藏</span>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "all" as const, label: "全部" },
+                  { key: "owned" as const, label: "已拥有" },
+                  { key: "favorite" as const, label: "已收藏" },
+                ] as const
+              ).map((opt) => {
+                const active = listFilterMark === opt.key;
+                return (
+                  <Link
+                    key={opt.key}
+                    href={setSavedListHref({
+                      mark: opt.key,
+                      preserve: setsUrlPreserve,
+                    })}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      active
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                        : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
+                    }`}
+                  >
+                    {opt.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         ) : null}
         {hasListFilters ? (
           <p className="mb-4 px-2 text-sm text-[var(--muted)]">
@@ -276,9 +405,23 @@ export async function BuildSubjectListPage({
                 按标签「<span className="text-[var(--text)]">{activeTagDisplay}</span>」
               </>
             ) : null}
-            筛选，共 {filteredRows.length.toLocaleString("zh-CN")} 条
-            {filteredRows.length < rows.length
-              ? `（未筛选共 ${rows.length.toLocaleString("zh-CN")} 条）`
+            {hasMarkFilter ? (
+              <>
+                {(hasQFilter || hasTagFilter) ? "且" : null}
+                仅显示「
+                <span className="text-[var(--text)]">
+                  {listFilterMark === "owned" ? "已拥有" : "已收藏"}
+                </span>
+                」
+              </>
+            ) : null}
+            {hasQFilter || hasTagFilter ? "筛选，" : hasMarkFilter ? "，" : null}
+            共 {markFilteredRows.length.toLocaleString("zh-CN")} 条
+            {hasMarkFilter && markFilteredRows.length < filteredRows.length
+              ? `（未加拥有/收藏筛选前 ${filteredRows.length.toLocaleString("zh-CN")} 条）`
+              : ""}
+            {!hasMarkFilter && filteredRows.length < rows.length
+              ? `（未加搜索/标签筛选前 ${rows.length.toLocaleString("zh-CN")} 条）`
               : ""}
             {" · "}
             <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
@@ -298,9 +441,19 @@ export async function BuildSubjectListPage({
             </Link>
             查看全部。
           </p>
+        ) : markFilteredRows.length === 0 ? (
+          <p className="px-2 py-6 text-sm text-[var(--muted)]">
+            当前条件下没有
+            {listFilterMark === "owned" ? "已标记拥有" : "已加入收藏"}
+            的已存{ui.noun}。可更换筛选或{" "}
+            <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+              清除筛选
+            </Link>
+            。
+          </p>
         ) : (
           <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredRows.map((r) => {
+            {markFilteredRows.map((r) => {
               const prof = profileBySubject.get(r.subjectId);
               const displayName = prof?.displayName?.trim() ?? "";
               const title = displayName || `${ui.noun} ${r.subjectId}`;
@@ -316,13 +469,14 @@ export async function BuildSubjectListPage({
               const savedAt = r.updatedAt.slice(0, 19).replace("T", " ");
 
               const owned = ownedSubjectIds.has(r.subjectId);
+              const favorite = favoriteSubjectIds.has(r.subjectId);
               const showInstructionBadge =
                 kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasInstructionsPdf);
               const showSourceBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasIoSource);
               return (
                 <li
                   key={r.subjectId}
-                  className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : ""}`}
+                  className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`}
                 >
                   <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
                     <Link
@@ -345,8 +499,8 @@ export async function BuildSubjectListPage({
                         </span>
                       )}
                     </Link>
-                    <div className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-col items-end gap-1">
-                      {showInstructionBadge || showSourceBadge ? (
+                    {showInstructionBadge || showSourceBadge ? (
+                      <div className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-col items-end gap-1">
                         <div className="flex flex-wrap justify-end gap-1">
                           {showInstructionBadge ? (
                             <span
@@ -365,8 +519,15 @@ export async function BuildSubjectListPage({
                             </span>
                           ) : null}
                         </div>
-                      ) : null}
-                      <div className="pointer-events-auto">
+                      </div>
+                    ) : null}
+                    <div className="pointer-events-none absolute bottom-2 right-2 z-10">
+                      <div className="pointer-events-auto flex flex-row gap-1">
+                        <BuildFavoriteToggle
+                          subjectKind={kind}
+                          subjectId={r.subjectId}
+                          initialFavorite={favorite}
+                        />
                         <BuildOwnedToggle
                           subjectKind={kind}
                           subjectId={r.subjectId}
@@ -393,7 +554,11 @@ export async function BuildSubjectListPage({
                           kind === BUILD_SUBJECT_MOC ? (
                             <Link
                               key={`${r.subjectId}-${t}-${i}`}
-                              href={mocListHref({ q: safeQForHref, tag: t })}
+                              href={mocListHref({
+                                q: safeQForHref,
+                                tag: t,
+                                mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                              })}
                               className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)] underline-offset-2 hover:border-[var(--accent)]/40 hover:underline"
                             >
                               {t}

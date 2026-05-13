@@ -4,6 +4,7 @@ import {
   asc,
   countDistinct,
   eq,
+  exists,
   inArray,
   isNotNull,
   like,
@@ -15,12 +16,14 @@ import {
   type SQL,
 } from "drizzle-orm";
 
+import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { getDb } from "@/db/client";
 import {
   inventories,
   inventoryMinifigs,
   inventoryParts,
+  buildFavoriteSubjects,
   buildOwnedSubjects,
   legoSets,
   legoThemes,
@@ -28,6 +31,7 @@ import {
 } from "@/db/schema";
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { parseListMarkFilter } from "@/lib/build-list-mark-filter";
 import { likeFragment } from "@/lib/search";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 
@@ -60,7 +64,7 @@ function usableImgUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && u.trim().length > 0;
 }
 
-export type SetsCatalogSearchParams = { q?: string; page?: string; theme?: string };
+export type SetsCatalogSearchParams = { q?: string; page?: string; theme?: string; mark?: string };
 
 function invLatestSubquery(db: ReturnType<typeof getDb>) {
   return db
@@ -242,6 +246,7 @@ export async function SetsOfficialCatalogSection({
   const q = likeFragment(qRaw);
   const themeRaw = (searchParams.theme ?? "").trim();
   const requestedPage = Math.max(1, Number.parseInt(searchParams.page ?? "1", 10) || 1);
+  const markFilter = parseListMarkFilter(searchParams.mark);
 
   const db = getDb();
 
@@ -428,6 +433,33 @@ export async function SetsOfficialCatalogSection({
       ? and(searchWhere, themeWhere)
       : searchWhere ?? themeWhere;
 
+  const ownedMarkExists = exists(
+    db
+      .select({ k: buildOwnedSubjects.subjectId })
+      .from(buildOwnedSubjects)
+      .where(
+        and(
+          eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
+          eq(buildOwnedSubjects.subjectId, inventories.setNum)
+        )
+      )
+  );
+  const favoriteMarkExists = exists(
+    db
+      .select({ k: buildFavoriteSubjects.subjectId })
+      .from(buildFavoriteSubjects)
+      .where(
+        and(
+          eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET),
+          eq(buildFavoriteSubjects.subjectId, inventories.setNum)
+        )
+      )
+  );
+  const markWhere =
+    markFilter === "owned" ? ownedMarkExists : markFilter === "favorite" ? favoriteMarkExists : undefined;
+  const invWhereCombined =
+    invWhere && markWhere ? and(invWhere, markWhere) : markWhere ?? invWhere;
+
   const invLatest = invLatestSubquery(db);
 
   const totalRow = await db
@@ -438,7 +470,7 @@ export async function SetsOfficialCatalogSection({
       and(eq(inventories.setNum, invLatest.setNum), eq(inventories.version, invLatest.maxVersion))
     )
     .leftJoin(legoSets, eq(inventories.setNum, legoSets.setNum))
-    .where(invWhere);
+    .where(invWhereCombined);
 
   const total = Number(totalRow[0]?.c ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -461,7 +493,7 @@ export async function SetsOfficialCatalogSection({
     )
     .leftJoin(legoSets, eq(inventories.setNum, legoSets.setNum))
     .leftJoin(legoThemes, eq(legoSets.themeId, legoThemes.id))
-    .where(invWhere)
+    .where(invWhereCombined)
     .orderBy(asc(inventories.setNum))
     .limit(PAGE_SIZE)
     .offset(offset);
@@ -486,17 +518,30 @@ export async function SetsOfficialCatalogSection({
   }
 
   const ownedPageSetNums = new Set<string>();
+  const favoritePageSetNums = new Set<string>();
   if (pageSetNums.length > 0) {
-    const ownedRows = await db
-      .select({ subjectId: buildOwnedSubjects.subjectId })
-      .from(buildOwnedSubjects)
-      .where(
-        and(
-          eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
-          inArray(buildOwnedSubjects.subjectId, pageSetNums)
-        )
-      );
+    const [ownedRows, favoriteRows] = await Promise.all([
+      db
+        .select({ subjectId: buildOwnedSubjects.subjectId })
+        .from(buildOwnedSubjects)
+        .where(
+          and(
+            eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
+            inArray(buildOwnedSubjects.subjectId, pageSetNums)
+          )
+        ),
+      db
+        .select({ subjectId: buildFavoriteSubjects.subjectId })
+        .from(buildFavoriteSubjects)
+        .where(
+          and(
+            eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET),
+            inArray(buildFavoriteSubjects.subjectId, pageSetNums)
+          )
+        ),
+    ]);
     for (const r of ownedRows) ownedPageSetNums.add(r.subjectId);
+    for (const r of favoriteRows) favoritePageSetNums.add(r.subjectId);
   }
 
   const invIdsNeedInvMinifigThumb = rows
@@ -564,6 +609,7 @@ export async function SetsOfficialCatalogSection({
     if (themeRaw === "all") u.set("theme", "all");
     else if (themeNumericOk && themeRaw.length > 0) u.set("theme", themeRaw);
     if (p > 1) u.set("page", String(p));
+    if (markFilter === "owned" || markFilter === "favorite") u.set("mark", markFilter);
     const s = u.toString();
     return s ? `?${s}` : "";
   };
@@ -616,6 +662,19 @@ export async function SetsOfficialCatalogSection({
             </option>
           ))}
         </AutoSubmitSelect>
+        <label className="sr-only" htmlFor="sets-catalog-mark">
+          拥有或收藏
+        </label>
+        <AutoSubmitSelect
+          id="sets-catalog-mark"
+          name="mark"
+          defaultValue={markFilter === "all" ? "" : markFilter}
+          className="field max-w-full text-sm sm:max-w-[200px]"
+        >
+          <option value="">全部套装</option>
+          <option value="owned">仅已拥有</option>
+          <option value="favorite">仅已收藏</option>
+        </AutoSubmitSelect>
         <input
           name="q"
           defaultValue={qRaw}
@@ -639,10 +698,11 @@ export async function SetsOfficialCatalogSection({
             const title = (r.setName ?? "").trim() || `套装 ${r.setNum}`;
             const href = detailPath(r.setNum);
             const owned = ownedPageSetNums.has(r.setNum);
+            const favorite = favoritePageSetNums.has(r.setNum);
             return (
               <li
                 key={r.setNum}
-                className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : ""}`}
+                className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`}
               >
                 <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
                   <Link
@@ -665,12 +725,17 @@ export async function SetsOfficialCatalogSection({
                       </span>
                     )}
                   </Link>
-                  <div className="pointer-events-none absolute right-2 top-2 z-10">
-                    <div className="pointer-events-auto">
+                  <div className="pointer-events-none absolute bottom-2 right-2 z-10">
+                    <div className="pointer-events-auto flex flex-row gap-1">
+                      <BuildFavoriteToggle
+                        subjectKind={BUILD_SUBJECT_SET}
+                        subjectId={r.setNum}
+                        initialFavorite={favorite}
+                      />
                       <BuildOwnedToggle
                         subjectKind={BUILD_SUBJECT_SET}
                         subjectId={r.setNum}
-                        initialOwned={ownedPageSetNums.has(r.setNum)}
+                        initialOwned={owned}
                       />
                     </div>
                   </div>
