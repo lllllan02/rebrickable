@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
+import { PartGridTileLink } from "@/components/part-grid-tile-link";
+import { ColorSwatchResultCard } from "@/components/subject-result-card";
+import { buildImagePublicPath } from "@/lib/build-image-public-path";
+import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
+import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { runGlobalSearch } from "@/lib/global-search-server";
-import type { GlobalSearchColorHit } from "@/lib/global-search-types";
+import { mocListHref } from "@/lib/moc-list-href";
 import { likeFragment } from "@/lib/search";
+
+import { enrichSearchSubjectHits, subjectIdFromListHref } from "./search-subject-hit-enrich";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +39,7 @@ function Section({
   return (
     <section className="search-results-section">
       <h2 className="search-results-section-title">{title}</h2>
-      <div className="search-results-section-body">
-        {children}
-      </div>
+      <div className="search-results-section-body">{children}</div>
       {moreLink ? (
         <div className="search-results-section-footer">
           <Link href={moreLink.href} className="search-results-more-link">
@@ -43,148 +48,6 @@ function Section({
         </div>
       ) : null}
     </section>
-  );
-}
-
-function thumbSizes() {
-  return "(max-width: 560px) 100vw, (max-width: 1100px) 50vw, 33vw";
-}
-
-function usableImgUrl(u: string | null | undefined): u is string {
-  return typeof u === "string" && u.trim().length > 0;
-}
-
-function PartSearchTile({
-  href,
-  partNum,
-  name,
-  imgUrl,
-}: {
-  href: string;
-  partNum: string;
-  name: string;
-  imgUrl: string | null | undefined;
-}) {
-  const title = `${partNum} · ${name}`;
-  return (
-    <li className="min-w-0">
-      <Link href={href} className="parts-search-tile block text-inherit no-underline" title={title}>
-        <div className="parts-search-thumb relative">
-          {usableImgUrl(imgUrl) ? (
-            <RemoteCoverImage
-              src={imgUrl.trim()}
-              fill
-              className="object-contain p-0.5"
-              sizes="(max-width:640px)20vw,4.5rem"
-              alt=""
-              fallbackLabel="无图"
-              fallbackClassName="text-[9px]"
-            />
-          ) : (
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
-              无图
-            </span>
-          )}
-        </div>
-        <p className="parts-search-part-num">{partNum}</p>
-        <p className="parts-search-meta">{name}</p>
-      </Link>
-    </li>
-  );
-}
-
-function ElementSearchTile({
-  href,
-  elementId,
-  partNum,
-  subtitle,
-  imgUrl,
-}: {
-  href: string;
-  elementId: string;
-  partNum: string;
-  subtitle: string;
-  imgUrl: string | null | undefined;
-}) {
-  const colorLabel =
-    subtitle.includes(" · ") ? subtitle.split(" · ").slice(1).join(" · ").trim() : subtitle;
-  const title = `${elementId} · ${partNum} · ${colorLabel}`;
-  return (
-    <li className="min-w-0">
-      <Link href={href} className="parts-search-tile block text-inherit no-underline" title={title}>
-        <div className="parts-search-thumb relative">
-          {usableImgUrl(imgUrl) ? (
-            <RemoteCoverImage
-              src={imgUrl.trim()}
-              fill
-              className="object-contain p-0.5"
-              sizes="(max-width:640px)20vw,4.5rem"
-              alt=""
-              fallbackLabel="无图"
-              fallbackClassName="text-[9px]"
-            />
-          ) : (
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
-              无图
-            </span>
-          )}
-        </div>
-        <p className="parts-search-part-num">{partNum}</p>
-        <p className="parts-search-element-id">{elementId}</p>
-        {colorLabel ? <p className="parts-search-meta">{colorLabel}</p> : null}
-      </Link>
-    </li>
-  );
-}
-
-function HitCard({
-  href,
-  media,
-  kicker,
-  title,
-  titleMono,
-  meta,
-}: {
-  href: string;
-  media: ReactNode;
-  kicker?: string;
-  title: string;
-  titleMono?: boolean;
-  meta: string;
-}) {
-  return (
-    <li className="min-w-0">
-      <Link href={href} className="search-hit-card">
-        <div className="search-hit-card-media">{media}</div>
-        <div className="search-hit-card-body">
-          {kicker ? <p className="search-hit-card-kicker">{kicker}</p> : null}
-          <p
-            className={`search-hit-card-title line-clamp-2 ${titleMono ? "font-mono text-[0.9rem] tracking-tight" : ""}`}
-          >
-            {title}
-          </p>
-          <p className="search-hit-card-meta line-clamp-2">{meta}</p>
-        </div>
-      </Link>
-    </li>
-  );
-}
-
-function ColorHitCard({ h }: { h: GlobalSearchColorHit }) {
-  return (
-    <li className="min-w-0">
-      <Link href={h.href} className="search-hit-card">
-        <div
-          className="search-hit-card-media search-hit-card-media-swatch"
-          style={{ background: `#${h.rgb}` }}
-          aria-hidden
-        />
-        <div className="search-hit-card-body">
-          <p className="search-hit-card-title line-clamp-2">{h.title}</p>
-          <p className="search-hit-card-meta font-mono text-[0.72rem]">{h.subtitle}</p>
-        </div>
-      </Link>
-    </li>
   );
 }
 
@@ -215,6 +78,19 @@ export default async function SearchPage({ searchParams }: Props) {
     data.colors.length +
     data.elements.length;
 
+  const mocIds = [
+    ...new Set(
+      data.mocs.map((h) => subjectIdFromListHref(h.href, "mocs")).filter((x): x is string => x != null && x.length > 0),
+    ),
+  ];
+  const setNums = [
+    ...new Set(
+      data.sets.map((h) => subjectIdFromListHref(h.href, "sets")).filter((x): x is string => x != null && x.length > 0),
+    ),
+  ];
+
+  const enrich = await enrichSearchSubjectHits(mocIds, setNums);
+
   return (
     <div className="page-stack">
       <section className="hero-panel">
@@ -240,27 +116,40 @@ export default async function SearchPage({ searchParams }: Props) {
                 label: "前往 MOC 列表继续筛选",
               }}
             >
-              <ul className="search-results-grid">
-                {data.mocs.map((h) => (
-                  <HitCard
-                    key={h.href}
-                    href={h.href}
-                    kicker="MOC"
-                    title={h.title}
-                    meta={h.subtitle}
-                    media={
-                      <RemoteCoverImage
-                        src={(h.imgUrl ?? "").trim()}
-                        fill
-                        className="object-contain p-3"
-                        sizes={thumbSizes()}
-                        alt=""
-                        fallbackLabel="MOC"
-                        fallbackClassName="text-sm font-bold text-[var(--muted-2)]"
-                      />
-                    }
-                  />
-                ))}
+              <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
+                {data.mocs.map((h) => {
+                  const subjectId = subjectIdFromListHref(h.href, "mocs") ?? "";
+                  if (!subjectId) return null;
+                  const prof = enrich.mocProfileById.get(subjectId);
+                  const displayName = prof?.displayName?.trim() ?? "";
+                  const title = displayName || h.title || `MOC ${subjectId}`;
+                  const tags = prof?.tags ?? [];
+                  const stored = enrich.mocCoverStored.get(subjectId);
+                  const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, subjectId, stored) : null;
+                  const sheet = enrich.sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${subjectId}`);
+                  const totalPartQty = sheet?.totalPartQty ?? 0;
+                  const updatedAtIso = sheet?.updatedAt ?? "2000-01-01T00:00:00.000Z";
+                  const owned = enrich.ownedMocIds.has(subjectId);
+                  const favorite = enrich.favoriteMocIds.has(subjectId);
+                  return (
+                    <SavedSubjectListRow
+                      key={h.href}
+                      kind={BUILD_SUBJECT_MOC}
+                      subjectId={subjectId}
+                      detailHref={h.href}
+                      title={title}
+                      coverUrl={uploadCoverUrl}
+                      tags={tags}
+                      mocTagHref={(tag) => mocListHref({ q: qSafe, tag })}
+                      totalPartQty={totalPartQty}
+                      updatedAtIso={updatedAtIso}
+                      owned={owned}
+                      favorite={favorite}
+                      showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
+                      showSourceBadge={Boolean(prof?.hasIoSource)}
+                    />
+                  );
+                })}
               </ul>
             </Section>
           ) : null}
@@ -273,28 +162,44 @@ export default async function SearchPage({ searchParams }: Props) {
                 label: "前往套装页继续筛选（官方目录 + 已存零件表）",
               }}
             >
-              <ul className="search-results-grid">
-                {data.sets.map((h) => (
-                  <HitCard
-                    key={h.href}
-                    href={h.href}
-                    kicker="套装"
-                    title={h.title}
-                    titleMono
-                    meta={h.subtitle}
-                    media={
-                      <RemoteCoverImage
-                        src={(h.imgUrl ?? "").trim()}
-                        fill
-                        className="object-contain p-3"
-                        sizes={thumbSizes()}
-                        alt=""
-                        fallbackLabel="套"
-                        fallbackClassName="text-sm font-bold text-[var(--muted-2)]"
-                      />
-                    }
-                  />
-                ))}
+              <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
+                {data.sets.map((h) => {
+                  const setNum = subjectIdFromListHref(h.href, "sets") ?? h.title;
+                  if (!setNum) return null;
+                  const prof = enrich.setProfileByNum.get(setNum);
+                  const displayName = prof?.displayName?.trim() ?? "";
+                  const catalogName = (h.subtitle ?? "").trim();
+                  const title = displayName || catalogName || `套装 ${setNum}`;
+                  const tags = prof?.tags ?? [];
+                  const officialUrl = enrich.officialHeroBySet.get(setNum) ?? null;
+                  const stored = enrich.setCoverStored.get(setNum);
+                  const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, setNum, stored) : null;
+                  const coverUrl =
+                    (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
+                  const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
+                  const sheet = enrich.sheetByKindId.get(`${BUILD_SUBJECT_SET}:${setNum}`);
+                  const totalPartQty = sheet?.totalPartQty ?? 0;
+                  const updatedAtIso = sheet?.updatedAt ?? "2000-01-01T00:00:00.000Z";
+                  const owned = enrich.ownedSetNums.has(setNum);
+                  const favorite = enrich.favoriteSetNums.has(setNum);
+                  return (
+                    <SavedSubjectListRow
+                      key={h.href}
+                      kind={BUILD_SUBJECT_SET}
+                      subjectId={setNum}
+                      detailHref={detailHref}
+                      title={title}
+                      coverUrl={coverUrl}
+                      tags={tags}
+                      totalPartQty={totalPartQty}
+                      updatedAtIso={updatedAtIso}
+                      owned={owned}
+                      favorite={favorite}
+                      showInstructionBadge={false}
+                      showSourceBadge={false}
+                    />
+                  );
+                })}
               </ul>
             </Section>
           ) : null}
@@ -307,15 +212,22 @@ export default async function SearchPage({ searchParams }: Props) {
                 label: "前往零件列表继续搜索",
               }}
             >
-              <ul className="parts-search-grid">
+              <ul className="tiles-grid" role="list">
                 {data.parts.map((h) => (
-                  <PartSearchTile
-                    key={h.href}
-                    href={h.href}
-                    partNum={h.title}
-                    name={h.subtitle}
-                    imgUrl={h.imgUrl}
-                  />
+                  <li key={h.href} className="min-w-0">
+                    <PartGridTileLink
+                      href={h.href}
+                      titleAttr={`${h.title} · ${h.subtitle}`}
+                      partNum={h.title}
+                      thumbUrl={h.imgUrl}
+                    >
+                      {h.subtitle ? (
+                        <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-snug text-[var(--muted-2)]">
+                          {h.subtitle}
+                        </p>
+                      ) : null}
+                    </PartGridTileLink>
+                  </li>
                 ))}
               </ul>
             </Section>
@@ -329,9 +241,15 @@ export default async function SearchPage({ searchParams }: Props) {
                 label: "前往颜色表查看全部（可页内查找）",
               }}
             >
-              <ul className="search-results-grid">
+              <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
                 {data.colors.map((h) => (
-                  <ColorHitCard key={h.href} h={h} />
+                  <ColorSwatchResultCard
+                    key={h.href}
+                    href={h.href}
+                    rgb={h.rgb}
+                    title={h.title}
+                    subtitle={h.subtitle}
+                  />
                 ))}
               </ul>
             </Section>
@@ -345,17 +263,32 @@ export default async function SearchPage({ searchParams }: Props) {
                 label: "前往零件列表继续搜索（支持元素编号）",
               }}
             >
-              <ul className="parts-search-grid">
-                {data.elements.map((h) => (
-                  <ElementSearchTile
-                    key={h.href}
-                    href={h.href}
-                    elementId={h.title}
-                    partNum={h.partNum}
-                    subtitle={h.subtitle}
-                    imgUrl={h.imgUrl}
-                  />
-                ))}
+              <ul className="tiles-grid" role="list">
+                {data.elements.map((h) => {
+                  const colorLabel = h.subtitle.includes(" · ")
+                    ? h.subtitle.split(" · ").slice(1).join(" · ").trim()
+                    : h.subtitle;
+                  const titleTip = `${h.title} · ${h.partNum} · ${colorLabel}`;
+                  return (
+                    <li key={h.href} className="min-w-0">
+                      <PartGridTileLink
+                        href={h.href}
+                        titleAttr={titleTip}
+                        partNum={h.partNum}
+                        thumbUrl={h.imgUrl}
+                      >
+                        <p className="mt-0.5 line-clamp-2 px-0.5 text-center font-mono text-[8px] leading-tight text-[var(--accent)]">
+                          {h.title}
+                        </p>
+                        {colorLabel ? (
+                          <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-snug text-[var(--muted-2)]">
+                            {colorLabel}
+                          </p>
+                        ) : null}
+                      </PartGridTileLink>
+                    </li>
+                  );
+                })}
               </ul>
             </Section>
           ) : null}

@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, min, ne } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, min, ne, or } from "drizzle-orm";
 
-import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
-import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
+import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { getDb } from "@/db/client";
 import {
   buildImages,
   buildOwnedSubjects,
   buildProfiles,
+  buildFavoriteSubjects,
+  buildSavedPartsSheets,
   elements,
   inventoryParts,
   legoSets,
@@ -18,10 +20,11 @@ import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { OWNED_SUBJECT_PART } from "@/lib/build-owned-subject";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
+import { mocListHref } from "@/lib/moc-list-href";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { aggregateOwnedPartInventory } from "@/lib/owned-inventory-aggregate";
-import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
+import { PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +72,10 @@ export default async function OwnedCollectionPage() {
       })(),
       setNums.length > 0 ? batchSetCatalogHeroUrls(setNums) : Promise.resolve(new Map<string, string | null>()),
       (async () => {
-        const m = new Map<string, { displayName: string; tags: string[] }>();
+        const m = new Map<
+          string,
+          { displayName: string; tags: string[]; hasInstructionsPdf: boolean; hasIoSource: boolean }
+        >();
         if (mocIds.length === 0) return m;
         const profRows = await db
           .select()
@@ -79,6 +85,8 @@ export default async function OwnedCollectionPage() {
           m.set(p.subjectId, {
             displayName: (p.displayName ?? "").trim(),
             tags: parseTagsJson(p.tagsJson),
+            hasInstructionsPdf: Boolean(p.hasInstructionsPdf),
+            hasIoSource: Boolean(p.hasIoSource),
           });
         }
         return m;
@@ -176,6 +184,83 @@ export default async function OwnedCollectionPage() {
 
   const { elemCountByPart, colorCountByPart, printedPartNums } = partListMeta;
 
+  const sheetByKindId = new Map<string, { totalPartQty: number; updatedAt: string }>();
+  const favoriteMocIds = new Set<string>();
+  const favoriteSetNums = new Set<string>();
+  const setProfileByNum = new Map<string, { displayName: string; tags: string[] }>();
+  const setCoverStored = new Map<string, string>();
+
+  if (mocIds.length > 0 || setNums.length > 0) {
+    const sheetOrs = [];
+    if (mocIds.length > 0) {
+      sheetOrs.push(
+        and(eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_MOC), inArray(buildSavedPartsSheets.subjectId, mocIds)),
+      );
+    }
+    if (setNums.length > 0) {
+      sheetOrs.push(
+        and(eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_SET), inArray(buildSavedPartsSheets.subjectId, setNums)),
+      );
+    }
+    const favOrs = [];
+    if (mocIds.length > 0) {
+      favOrs.push(
+        and(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_MOC), inArray(buildFavoriteSubjects.subjectId, mocIds)),
+      );
+    }
+    if (setNums.length > 0) {
+      favOrs.push(
+        and(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET), inArray(buildFavoriteSubjects.subjectId, setNums)),
+      );
+    }
+
+    const [sheetRows, favRows, setProfRows, setImgRows] = await Promise.all([
+      sheetOrs.length > 0
+        ? db.select().from(buildSavedPartsSheets).where(or(...sheetOrs))
+        : Promise.resolve([]),
+      favOrs.length > 0
+        ? db.select().from(buildFavoriteSubjects).where(or(...favOrs))
+        : Promise.resolve([]),
+      setNums.length > 0
+        ? db
+            .select()
+            .from(buildProfiles)
+            .where(and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_SET), inArray(buildProfiles.subjectId, setNums)))
+        : Promise.resolve([]),
+      setNums.length > 0
+        ? db
+            .select({
+              subjectId: buildImages.subjectId,
+              storedFile: buildImages.storedFile,
+              createdAt: buildImages.createdAt,
+            })
+            .from(buildImages)
+            .where(and(eq(buildImages.subjectKind, BUILD_SUBJECT_SET), inArray(buildImages.subjectId, setNums)))
+            .orderBy(asc(buildImages.createdAt))
+        : Promise.resolve([]),
+    ]);
+
+    for (const row of sheetRows as { subjectKind: string; subjectId: string; totalPartQty: number; updatedAt: string }[]) {
+      sheetByKindId.set(`${row.subjectKind}:${row.subjectId}`, {
+        totalPartQty: row.totalPartQty,
+        updatedAt: row.updatedAt,
+      });
+    }
+    for (const f of favRows as { subjectKind: string; subjectId: string }[]) {
+      if (f.subjectKind === BUILD_SUBJECT_MOC) favoriteMocIds.add(f.subjectId);
+      else if (f.subjectKind === BUILD_SUBJECT_SET) favoriteSetNums.add(f.subjectId);
+    }
+    for (const p of setProfRows as (typeof buildProfiles.$inferSelect)[]) {
+      setProfileByNum.set(p.subjectId, {
+        displayName: (p.displayName ?? "").trim(),
+        tags: parseTagsJson(p.tagsJson),
+      });
+    }
+    for (const im of setImgRows as { subjectId: string; storedFile: string }[]) {
+      if (!setCoverStored.has(im.subjectId)) setCoverStored.set(im.subjectId, im.storedFile);
+    }
+  }
+
   const total = setRows.length + mocRows.length + partRows.length;
 
   const { rows: invAggRows, truncated: invAggTruncated } =
@@ -206,8 +291,6 @@ export default async function OwnedCollectionPage() {
       if (t.thumb && usableImgUrl(t.thumb)) invAggThumbByNum.set(t.partNum, t.thumb.trim());
     }
   }
-
-  const partTileOwnedClass = `${PART_GRID_TILE_CLASS_BASE} ${PART_GRID_TILE_OWNED_HIGHLIGHT}`;
 
   return (
     <div className="page-stack">
@@ -246,7 +329,7 @@ export default async function OwnedCollectionPage() {
       {mocRows.length > 0 ? (
         <section className="section-panel owned-category">
           <h2 className="section-title mb-4 text-[var(--text)]">MOC（{mocRows.length.toLocaleString("zh-CN")}）</h2>
-          <ul className="owned-grid list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {mocRows.map((r) => {
               const prof = mocProfileById.get(r.subjectId);
               const displayName = prof?.displayName?.trim() ?? "";
@@ -255,65 +338,26 @@ export default async function OwnedCollectionPage() {
               const stored = mocCoverStored.get(r.subjectId);
               const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.subjectId, stored) : null;
               const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_MOC, r.subjectId);
+              const sheet = sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${r.subjectId}`);
+              const totalPartQty = sheet?.totalPartQty ?? 0;
+              const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
               return (
-                <li key={`moc-${r.subjectId}`} className="result-card flex flex-col gap-0 overflow-hidden p-0">
-                  <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
-                    <Link href={detailHref} className="absolute inset-0 z-0 block" aria-label={`${title} 封面`}>
-                      {uploadCoverUrl ? (
-                        <RemoteCoverImage
-                          src={uploadCoverUrl}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                          alt=""
-                          fallbackLabel="无参考图"
-                        />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
-                          无参考图
-                        </span>
-                      )}
-                    </Link>
-                    <div className="pointer-events-none absolute right-2 top-2 z-10">
-                      <div className="pointer-events-auto">
-                        <BuildOwnedToggle
-                          subjectKind={BUILD_SUBJECT_MOC}
-                          subjectId={r.subjectId}
-                          initialOwned={true}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
-                    <div className="min-w-0">
-                      <Link
-                        href={detailHref}
-                        className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
-                      >
-                        {title}
-                      </Link>
-                      <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]" title={r.subjectId}>
-                        {r.subjectId}
-                      </p>
-                    </div>
-                    {tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {tags.map((t, i) => (
-                          <span
-                            key={`${r.subjectId}-${t}-${i}`}
-                            className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <p className="mt-auto border-t border-[var(--border-soft)] pt-2.5 text-xs tabular-nums text-[var(--muted)]">
-                      <span className="text-[var(--muted-2)]">标记时间 </span>
-                      <time dateTime={r.markedAt}>{formatMarkedAt(r.markedAt)}</time>
-                    </p>
-                  </div>
-                </li>
+                <SavedSubjectListRow
+                  key={`moc-${r.subjectId}`}
+                  kind={BUILD_SUBJECT_MOC}
+                  subjectId={r.subjectId}
+                  detailHref={detailHref}
+                  title={title}
+                  coverUrl={uploadCoverUrl}
+                  tags={tags}
+                  mocTagHref={(tag) => mocListHref({ tag })}
+                  totalPartQty={totalPartQty}
+                  updatedAtIso={updatedAtIso}
+                  owned={true}
+                  favorite={favoriteMocIds.has(r.subjectId)}
+                  showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
+                  showSourceBadge={Boolean(prof?.hasIoSource)}
+                />
               );
             })}
           </ul>
@@ -323,59 +367,38 @@ export default async function OwnedCollectionPage() {
       {setRows.length > 0 ? (
         <section className="section-panel owned-category">
           <h2 className="section-title mb-4 text-[var(--text)]">套装（{setRows.length.toLocaleString("zh-CN")}）</h2>
-          <ul className="owned-grid list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {setRows.map((r) => {
+              const prof = setProfileByNum.get(r.subjectId);
+              const displayName = prof?.displayName?.trim() ?? "";
               const catalogName = setNameByNum.get(r.subjectId) ?? "";
-              const title = catalogName || `套装 ${r.subjectId}`;
+              const title = displayName || catalogName || `套装 ${r.subjectId}`;
+              const tags = prof?.tags ?? [];
               const officialUrl = setHeroByNum.get(r.subjectId) ?? null;
+              const stored = setCoverStored.get(r.subjectId);
+              const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, r.subjectId, stored) : null;
+              const coverUrl =
+                (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
               const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId);
+              const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
+              const totalPartQty = sheet?.totalPartQty ?? 0;
+              const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
               return (
-                <li key={`set-${r.subjectId}`} className="result-card flex flex-col gap-0 overflow-hidden p-0">
-                  <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
-                    <Link href={detailHref} className="absolute inset-0 z-0 block" aria-label={`${title} 封面`}>
-                      {officialUrl ? (
-                        <RemoteCoverImage
-                          src={officialUrl}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                          alt=""
-                          fallbackLabel="无官方图"
-                        />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
-                          无官方图
-                        </span>
-                      )}
-                    </Link>
-                    <div className="pointer-events-none absolute right-2 top-2 z-10">
-                      <div className="pointer-events-auto">
-                        <BuildOwnedToggle
-                          subjectKind={BUILD_SUBJECT_SET}
-                          subjectId={r.subjectId}
-                          initialOwned={true}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
-                    <div className="min-w-0">
-                      <Link
-                        href={detailHref}
-                        className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
-                      >
-                        {title}
-                      </Link>
-                      <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]" title={r.subjectId}>
-                        {r.subjectId}
-                      </p>
-                    </div>
-                    <p className="mt-auto border-t border-[var(--border-soft)] pt-2.5 text-xs tabular-nums text-[var(--muted)]">
-                      <span className="text-[var(--muted-2)]">标记时间 </span>
-                      <time dateTime={r.markedAt}>{formatMarkedAt(r.markedAt)}</time>
-                    </p>
-                  </div>
-                </li>
+                <SavedSubjectListRow
+                  key={`set-${r.subjectId}`}
+                  kind={BUILD_SUBJECT_SET}
+                  subjectId={r.subjectId}
+                  detailHref={detailHref}
+                  title={title}
+                  coverUrl={coverUrl}
+                  tags={tags}
+                  totalPartQty={totalPartQty}
+                  updatedAtIso={updatedAtIso}
+                  owned={true}
+                  favorite={favoriteSetNums.has(r.subjectId)}
+                  showInstructionBadge={false}
+                  showSourceBadge={false}
+                />
               );
             })}
           </ul>
@@ -416,42 +439,22 @@ export default async function OwnedCollectionPage() {
                 .join(" · ");
               return (
                 <li key={`part-${partNum}`} className="min-w-0">
-                  <Link
+                  <PartGridTileLink
                     href={detailHref}
-                    className={`${partTileOwnedClass} block text-inherit no-underline`}
-                    title={`${title} · 散装 ×${qty} · 标记 ${formatMarkedAt(r.markedAt)}`}
-                  >
-                    <span
-                      className="pointer-events-none absolute right-1 top-1 z-[2] rounded border border-white/15 bg-black/70 px-1 py-px text-[10px] font-semibold tabular-nums leading-none text-white shadow-sm"
-                      aria-label={`拥有数量 ${qty}`}
-                    >
-                      {qty.toLocaleString("zh-CN")}
-                    </span>
-                    {isPrinted ? (
-                      <span className="pointer-events-none absolute left-1 top-1 z-[1] max-w-[45%] truncate text-[9px] font-medium leading-none text-orange-300/95">
-                        印刷
+                    titleAttr={`${title} · 散装 ×${qty} · 标记 ${formatMarkedAt(r.markedAt)}`}
+                    partNum={partNum}
+                    thumbUrl={thumb}
+                    isPrinted={isPrinted}
+                    extraTileClass={PART_GRID_TILE_OWNED_HIGHLIGHT}
+                    topRight={
+                      <span
+                        className="pointer-events-none absolute right-1 top-1 z-[2] rounded border border-white/15 bg-black/70 px-1 py-px text-[10px] font-semibold tabular-nums leading-none text-white shadow-sm"
+                        aria-label={`拥有数量 ${qty}`}
+                      >
+                        {qty.toLocaleString("zh-CN")}
                       </span>
-                    ) : null}
-                    <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-                      {usableImgUrl(thumb) ? (
-                        <RemoteCoverImage
-                          src={thumb.trim()}
-                          fill
-                          className="object-contain p-0.5"
-                          sizes="(max-width:640px)20vw,4.5rem"
-                          alt=""
-                          fallbackLabel="无图"
-                          fallbackClassName="text-[9px]"
-                        />
-                      ) : (
-                        <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
-                          无图
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-                      {partNum}
-                    </p>
+                    }
+                  >
                     {colorCount > 0 || elemCount > 0 ? (
                       <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">
                         {colorCount > 0 ? `${colorCount} 色` : null}
@@ -459,7 +462,7 @@ export default async function OwnedCollectionPage() {
                         {elemCount > 0 ? `${elemCount} 元素` : null}
                       </p>
                     ) : null}
-                  </Link>
+                  </PartGridTileLink>
                 </li>
               );
             })}
@@ -497,38 +500,21 @@ export default async function OwnedCollectionPage() {
                     .join(" · ");
                   return (
                     <li key={`agg-${row.partNum}`} className="min-w-0">
-                      <Link
+                      <PartGridTileLink
                         href={detailHref}
-                        className={`${partTileOwnedClass} block text-inherit no-underline`}
-                        title={titleTip}
-                      >
-                        <span
-                          className="pointer-events-none absolute right-1 top-1 z-[2] rounded border border-white/15 bg-black/70 px-1 py-px text-[10px] font-semibold tabular-nums leading-none text-white shadow-sm"
-                          aria-label={`合计 ${row.totalQty}`}
-                        >
-                          {row.totalQty.toLocaleString("zh-CN")}
-                        </span>
-                        <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-                          {usableImgUrl(thumb) ? (
-                            <RemoteCoverImage
-                              src={thumb.trim()}
-                              fill
-                              className="object-contain p-0.5"
-                              sizes="(max-width:640px)20vw,4.5rem"
-                              alt=""
-                              fallbackLabel="无图"
-                              fallbackClassName="text-[9px]"
-                            />
-                          ) : (
-                            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
-                              无图
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-                          {row.partNum}
-                        </p>
-                      </Link>
+                        titleAttr={titleTip}
+                        partNum={row.partNum}
+                        thumbUrl={thumb}
+                        extraTileClass={PART_GRID_TILE_OWNED_HIGHLIGHT}
+                        topRight={
+                          <span
+                            className="pointer-events-none absolute right-1 top-1 z-[2] rounded border border-white/15 bg-black/70 px-1 py-px text-[10px] font-semibold tabular-nums leading-none text-white shadow-sm"
+                            aria-label={`合计 ${row.totalQty}`}
+                          >
+                            {row.totalQty.toLocaleString("zh-CN")}
+                          </span>
+                        }
+                      />
                     </li>
                   );
                 })}

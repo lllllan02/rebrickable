@@ -34,7 +34,7 @@ export function BuildFavoriteToggle({ subjectKind, subjectId, initialFavorite, c
       disabled={pending}
       className={`${baseBtn} ${
         favorite
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]/25 hover:bg-[var(--accent)]/20"
+          ? "border-[var(--accent)] bg-[var(--accent)] text-[#141414] shadow-sm hover:opacity-90"
           : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
       } ${className}`.trim()}
       onClick={(e) => {

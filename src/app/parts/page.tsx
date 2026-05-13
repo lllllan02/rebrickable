@@ -18,6 +18,7 @@ import {
 } from "drizzle-orm";
 
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
+import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getDb } from "@/db/client";
 import {
@@ -29,7 +30,7 @@ import {
   parts,
 } from "@/db/schema";
 import { OWNED_SUBJECT_PART } from "@/lib/build-owned-subject";
-import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
+import { PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 import { likeFragment } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
@@ -536,12 +537,6 @@ export default async function PartsPage({ searchParams }: Props) {
           const colorCount = colorCountByPart.get(r.partNum) ?? 0;
           const isPrinted = printedPartNums.has(r.partNum);
           const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
-          const tileClass = [
-            PART_GRID_TILE_CLASS_BASE,
-            ownedPartNums.has(r.partNum) ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
-          ]
-            .filter(Boolean)
-            .join(" ");
           const title = [
             r.partNum,
             r.name,
@@ -553,36 +548,14 @@ export default async function PartsPage({ searchParams }: Props) {
             .join(" · ");
           return (
             <li key={r.partNum} className="min-w-0">
-              <Link
+              <PartGridTileLink
                 href={`/parts/${encodeURIComponent(r.partNum)}`}
-                className={`${tileClass} block text-inherit no-underline`}
-                title={title}
+                titleAttr={title}
+                partNum={r.partNum}
+                thumbUrl={thumb}
+                isPrinted={isPrinted}
+                extraTileClass={ownedPartNums.has(r.partNum) ? PART_GRID_TILE_OWNED_HIGHLIGHT : ""}
               >
-                {isPrinted ? (
-                  <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-orange-300/95">
-                    印刷
-                  </span>
-                ) : null}
-                <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-                  {usableImgUrl(thumb) ? (
-                    <RemoteCoverImage
-                      src={thumb.trim()}
-                      fill
-                      className="object-contain p-0.5"
-                      sizes="(max-width:640px)20vw,4.5rem"
-                      alt=""
-                      fallbackLabel="无图"
-                      fallbackClassName="text-[9px]"
-                    />
-                  ) : (
-                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
-                      无图
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-                  {r.partNum}
-                </p>
                 {colorCount > 0 || elemCount > 0 ? (
                   <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">
                     {colorCount > 0 ? `${colorCount} 色` : null}
@@ -596,7 +569,7 @@ export default async function PartsPage({ searchParams }: Props) {
                     {elementMatchTruncated.has(r.partNum) ? " …" : null}
                   </p>
                 ) : null}
-              </Link>
+              </PartGridTileLink>
             </li>
           );
         })}
