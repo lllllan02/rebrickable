@@ -80,7 +80,8 @@ select {
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 20;
+  /* 高于正文内常见 z-10/z-20（如轮播控件），避免滚动叠层时盖住顶栏 */
+  z-index: 60;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(7, 10, 18, 0.78);
   backdrop-filter: blur(18px);
@@ -379,6 +380,29 @@ select {
 .hero-panel {
   border-radius: var(--radius-lg);
   padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+/* MOC/套装详情轮播：仅自动切换时由组件挂上此类名，做轻微淡入与高亮回落 */
+@keyframes moc-carousel-autoplay-enter {
+  from {
+    opacity: 0.4;
+    filter: brightness(1.14);
+  }
+
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+.moc-carousel-autoplay-enter {
+  animation: moc-carousel-autoplay-enter 0.42s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moc-carousel-autoplay-enter {
+    animation: none;
+  }
 }
 
 .section-panel {

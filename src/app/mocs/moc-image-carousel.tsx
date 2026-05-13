@@ -77,9 +77,13 @@ export function MocImageCarousel({
   const ui = buildSubjectUi(subjectKind);
   const router = useRouter();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const thumbStripRef = useRef<HTMLDivElement>(null);
   const thumbRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const hoverPauseRef = useRef(false);
   const regionId = useId();
   const [idx, setIdx] = useState(0);
+  /** 仅定时自动切图时短暂为 true，用于主图区入场动效（手动切图不加） */
+  const [autoplayEnterFx, setAutoplayEnterFx] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -113,12 +117,23 @@ export function MocImageCarousel({
   }, [slideCount]);
 
   useEffect(() => {
-    thumbRefs.current[idx]?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "center",
+    const strip = thumbStripRef.current;
+    const btn = thumbRefs.current[idx];
+    if (!strip || !btn || slideCount <= 1) return;
+    const stripRect = strip.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const btnCenter = btnRect.left + btnRect.width / 2;
+    const stripCenter = stripRect.left + strip.clientWidth / 2;
+    const delta = btnCenter - stripCenter;
+    const next = strip.scrollLeft + delta;
+    const max = Math.max(0, strip.scrollWidth - strip.clientWidth);
+    const smooth =
+      typeof window !== "undefined" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    strip.scrollTo({
+      left: Math.max(0, Math.min(next, max)),
+      behavior: smooth ? "smooth" : "auto",
     });
-  }, [idx]);
+  }, [idx, slideCount]);
 
   const uploadImageFiles = useCallback(
     (files: File[]) => {
@@ -191,6 +206,45 @@ export function MocImageCarousel({
     return () => el.removeEventListener("keydown", onKey);
   }, [go]);
 
+  useEffect(() => {
+    const root = wrapRef.current;
+    if (!root) return;
+    const onEnter = () => {
+      hoverPauseRef.current = true;
+    };
+    const onLeave = () => {
+      hoverPauseRef.current = false;
+    };
+    root.addEventListener("pointerenter", onEnter);
+    root.addEventListener("pointerleave", onLeave);
+    return () => {
+      root.removeEventListener("pointerenter", onEnter);
+      root.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!autoplayEnterFx) return;
+    const id = window.setTimeout(() => setAutoplayEnterFx(false), 480);
+    return () => window.clearTimeout(id);
+  }, [autoplayEnterFx]);
+
+  useEffect(() => {
+    if (slideCount <= 1) return;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (hoverPauseRef.current) return;
+      if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        go(1);
+        return;
+      }
+      setAutoplayEnterFx(true);
+      go(1);
+    };
+    const id = window.setInterval(tick, 5500);
+    return () => window.clearInterval(id);
+  }, [go, slideCount]);
+
   const onDeleteCurrent = useCallback(() => {
     const cur = slides[idx];
     if (!cur || cur.kind !== "upload") return;
@@ -222,8 +276,8 @@ export function MocImageCarousel({
       >
         <p id={regionId} className="sr-only">
           {galleryKind === "set"
-            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图），左右方向键切换；本区域聚焦时可使用键盘。`
-            : `${ui.noun} 参考图轮播，左右方向键切换；本区域聚焦时可使用键盘。`}
+            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图）；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；可点击大图左右半区、缩略图或两侧箭头切换；左右方向键在区域聚焦时可用。`
+            : `${ui.noun} 参考图轮播；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；可点击大图左右半区、缩略图或两侧箭头切换；左右方向键在区域聚焦时可用。`}
         </p>
 
         {slideCount === 0 ? (
@@ -256,8 +310,16 @@ export function MocImageCarousel({
             )}
           </div>
         ) : (
-          <div className="relative overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-3)]">
-            <div className="relative aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem]">
+          <div className="relative isolate z-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-3)]">
+            <div
+              className={`relative z-0 isolate aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem] cursor-default select-none ${autoplayEnterFx ? "moc-carousel-autoplay-enter" : ""}`}
+              onClick={(e) => {
+                if (slideCount <= 1) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                go(x < rect.width / 2 ? -1 : 1);
+              }}
+            >
               {current ? (
                 <RemoteCoverImage
                   key={
@@ -267,7 +329,7 @@ export function MocImageCarousel({
                   }
                   src={current.url}
                   fill
-                  className="object-contain p-2"
+                  className="pointer-events-none object-contain p-2"
                   sizes="(max-width: 1024px) 100vw, 66vw"
                   alt={
                     current.kind === "catalog"
@@ -277,6 +339,7 @@ export function MocImageCarousel({
                   priority={idx === 0}
                   unoptimized={current.kind === "upload"}
                   fallbackLabel={galleryKind === "set" ? "暂无官方图" : "无图"}
+                  fallbackClassName="pointer-events-none"
                 />
               ) : null}
             </div>
@@ -285,8 +348,7 @@ export function MocImageCarousel({
                 <button
                   type="button"
                   aria-label="上一张"
-                  disabled={pending}
-                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm text-[var(--text)] opacity-80 shadow backdrop-blur-sm transition hover:opacity-100 disabled:opacity-40"
+                  className="absolute left-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm text-[var(--text)] opacity-80 shadow backdrop-blur-sm transition hover:opacity-100"
                   onClick={() => go(-1)}
                 >
                   ‹
@@ -294,8 +356,7 @@ export function MocImageCarousel({
                 <button
                   type="button"
                   aria-label="下一张"
-                  disabled={pending}
-                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm text-[var(--text)] opacity-80 shadow backdrop-blur-sm transition hover:opacity-100 disabled:opacity-40"
+                  className="absolute right-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm text-[var(--text)] opacity-80 shadow backdrop-blur-sm transition hover:opacity-100"
                   onClick={() => go(1)}
                 >
                   ›
@@ -305,7 +366,8 @@ export function MocImageCarousel({
 
             {slideCount > 1 ? (
               <div
-                className="flex gap-2 overflow-x-auto border-t border-[var(--border-soft)] bg-[var(--surface-2)]/80 px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:thin]"
+                ref={thumbStripRef}
+                className="relative z-10 flex gap-2 overflow-x-auto border-t border-[var(--border-soft)] bg-[var(--surface-2)]/80 px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:thin]"
                 role="tablist"
                 aria-label="缩略图，点击切换大图"
               >
@@ -323,16 +385,15 @@ export function MocImageCarousel({
                         ? `第 1 张：官方目录图（封面）`
                         : `第 ${i + 1} 张${img.originalName ? `：${img.originalName}` : ""}`
                     }
-                    disabled={pending}
                     title={
                       img.kind === "catalog"
                         ? "官方目录图（封面）"
                         : (img.originalName ?? `图片 ${i + 1}`)
                     }
-                    className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-50 ${
+                    className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
                       i === idx
                         ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--surface-2)]"
-                        : "opacity-75 ring-1 ring-[var(--border)] hover:opacity-100"
+                        : "opacity-75 ring-1 ring-[var(--border)]"
                     }`}
                     onClick={() => setIdx(i)}
                   >
@@ -340,7 +401,7 @@ export function MocImageCarousel({
                       key={img.kind === "catalog" ? `t-cat-${img.url}` : `t-up-${img.id}`}
                       src={img.url}
                       fill
-                      className="object-cover"
+                      className="pointer-events-none object-cover"
                       sizes="56px"
                       alt=""
                       unoptimized={img.kind === "upload"}
