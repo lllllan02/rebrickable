@@ -193,6 +193,7 @@ export async function HomeOwnedCollection() {
       shortageLineCount: number | null;
       shortageTotalQty: number | null;
       shortageClearedAt: string | null;
+      gobricksShortageSyncAt: string | null;
     }
   >();
   const favoriteMocIds = new Set<string>();
@@ -290,6 +291,7 @@ export async function HomeOwnedCollection() {
         shortageLineCount: row.shortageLineCount ?? null,
         shortageTotalQty: row.shortageTotalQty ?? null,
         shortageClearedAt: row.shortageClearedAt ?? null,
+        gobricksShortageSyncAt: row.gobricksShortageSyncAt ?? null,
       });
     }
     for (const f of favRows as { subjectKind: string; subjectId: string }[]) {
@@ -368,6 +370,7 @@ export async function HomeOwnedCollection() {
                   shortageLineCount={sheet?.shortageLineCount ?? null}
                   shortageTotalQty={sheet?.shortageTotalQty ?? null}
                   shortageClearedAt={sheet?.shortageClearedAt ?? null}
+                  gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
                   updatedAtIso={updatedAtIso}
                   owned={true}
                   favorite={favoriteMocIds.has(r.subjectId)}
@@ -413,6 +416,7 @@ export async function HomeOwnedCollection() {
                   shortageLineCount={sheet?.shortageLineCount ?? null}
                   shortageTotalQty={sheet?.shortageTotalQty ?? null}
                   shortageClearedAt={sheet?.shortageClearedAt ?? null}
+                  gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
                   updatedAtIso={updatedAtIso}
                   owned={true}
                   favorite={favoriteSetNums.has(r.subjectId)}

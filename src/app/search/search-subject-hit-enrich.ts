@@ -35,6 +35,7 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
       shortageLineCount: number | null;
       shortageTotalQty: number | null;
       shortageClearedAt: string | null;
+      gobricksShortageSyncAt: string | null;
     }
   >();
   const favoriteMocIds = new Set<string>();
@@ -158,6 +159,7 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
       shortageLineCount: row.shortageLineCount ?? null,
       shortageTotalQty: row.shortageTotalQty ?? null,
       shortageClearedAt: row.shortageClearedAt ?? null,
+      gobricksShortageSyncAt: row.gobricksShortageSyncAt ?? null,
     });
   }
   for (const f of favRows as { subjectKind: string; subjectId: string }[]) {

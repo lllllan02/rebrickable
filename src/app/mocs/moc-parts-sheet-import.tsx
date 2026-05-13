@@ -10,10 +10,9 @@ import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
 import {
   type InitialMocSheetFromServer,
-  cancelBuildPartsSheetShortageMarkInDb,
-  clearBuildPartsSheetShortageInDb,
   saveBuildPartsSheetToDb,
 } from "./moc-parts-sheet-actions";
+import { syncGobricksShortageForSubjectAction } from "./gobricks-shortage-sync-action";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
@@ -127,6 +126,7 @@ export function PartsSheetImport({
   const [error, setError] = useState<string | null>(null);
   const [lineNumber, setLineNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gobricksBusy, setGobricksBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [colorEditRow, setColorEditRow] = useState<ShortageRow | null>(null);
   const [selectedColorId, setSelectedColorId] = useState<number>(0);
@@ -293,97 +293,6 @@ export function PartsSheetImport({
     [buildSubjectKind, router, scrollMocFeedbackIntoView]
   );
 
-  const markNoShortage = useCallback(async () => {
-    if (!mocDetailEmbed) return;
-    const mid = (requestedLoadMocId ?? "").trim();
-    if (!mid) return;
-    setMocLocalMessage(null);
-    setError(null);
-    setLineNumber(null);
-    setMocActionBusy(true);
-    try {
-      const result = await clearBuildPartsSheetShortageInDb({
-        subjectKind: buildSubjectKind,
-        subjectId: mid,
-      });
-      if (!result.ok) {
-        setError(result.error);
-        scrollMocFeedbackIntoView();
-        return;
-      }
-      if (result.code === "cleared") {
-        setShortageItems(null);
-        setShortageFileName(null);
-        setShortageSkippedHeader(false);
-      }
-      router.refresh();
-      const clearedStamp = new Date().toISOString();
-      if (result.code === "cleared" || result.code === "noop_no_shortage") {
-        setShortageClearedAtLocal(clearedStamp);
-      }
-      setMocLocalMessage(
-        result.code === "cleared"
-          ? "已确认无缺件\n\n缺件表已从本记录移除。若之后缺件情况有变，请先使用上方的「上传缺件表 CSV」；保存成功后，「标记为不缺」会再次出现。"
-          : result.code === "noop_no_shortage"
-            ? "已记录为「当前无缺件」\n\n当前没有缺件表数据；若需记录缺件，请上传缺件表 CSV，保存后即可再次使用「标记为不缺」。"
-            : "尚未保存过零件表，无需标记。"
-      );
-      scrollMocFeedbackIntoView();
-    } catch {
-      setError("操作失败，请重试。");
-      scrollMocFeedbackIntoView();
-    } finally {
-      setMocActionBusy(false);
-    }
-  }, [
-    buildSubjectKind,
-    mocDetailEmbed,
-    requestedLoadMocId,
-    router,
-    scrollMocFeedbackIntoView,
-  ]);
-
-  const cancelShortageMark = useCallback(async () => {
-    if (!mocDetailEmbed || buildSubjectKind !== BUILD_SUBJECT_SET) return;
-    const mid = (requestedLoadMocId ?? "").trim();
-    if (!mid) return;
-    setMocLocalMessage(null);
-    setError(null);
-    setLineNumber(null);
-    setMocActionBusy(true);
-    try {
-      const result = await cancelBuildPartsSheetShortageMarkInDb({
-        subjectKind: buildSubjectKind,
-        subjectId: mid,
-      });
-      if (!result.ok) {
-        setError(result.error);
-        scrollMocFeedbackIntoView();
-        return;
-      }
-      setShortageClearedAtLocal(null);
-      router.refresh();
-      setMocLocalMessage("已取消「不缺件」标记。");
-      scrollMocFeedbackIntoView();
-    } catch {
-      setError("操作失败，请重试。");
-      scrollMocFeedbackIntoView();
-    } finally {
-      setMocActionBusy(false);
-    }
-  }, [buildSubjectKind, mocDetailEmbed, requestedLoadMocId, router, scrollMocFeedbackIntoView]);
-
-  const showCancelSetShortageMark = useMemo(
-    () => noFullSheetForSet && Boolean(shortageClearedAtLocal?.trim()),
-    [noFullSheetForSet, shortageClearedAtLocal]
-  );
-
-  /** 仅在有缺件表行可清除时显示「标记为不缺」；标记后隐藏直至重新上传并保存缺件表 */
-  const showMarkNoShortageButton = useMemo(
-    () => (shortageItems?.length ?? 0) > 0,
-    [shortageItems]
-  );
-
   const onFile = useCallback(
     async (file: File | null, sheetKind?: "full" | "shortage") => {
       setError(null);
@@ -436,7 +345,28 @@ export function PartsSheetImport({
             setShortageItems(rows);
           }
           const mid = (requestedLoadMocId ?? "").trim();
-          if (mid) await saveSheetToMocDbCore(mid, rows, result.skippedHeader, file.name, kind);
+          if (mid) {
+            const okSave = await saveSheetToMocDbCore(mid, rows, result.skippedHeader, file.name, kind);
+            if (okSave && kind === "full" && !noFullSheetForSet) {
+              setGobricksBusy(true);
+              try {
+                const sync = await syncGobricksShortageForSubjectAction({
+                  subjectKind: buildSubjectKind,
+                  subjectId: mid,
+                });
+                if (sync.ok) {
+                  setMocLocalMessage(sync.message);
+                  setError(null);
+                  setLineNumber(null);
+                  router.refresh();
+                } else {
+                  setError(sync.error);
+                }
+              } finally {
+                setGobricksBusy(false);
+              }
+            }
+          }
         } else {
           setSkippedHeader(result.skippedHeader);
           setItems(rows);
@@ -447,8 +377,45 @@ export function PartsSheetImport({
         setLoading(false);
       }
     },
-    [mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, saveSheetToMocDbCore]
+    [buildSubjectKind, mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, router, saveSheetToMocDbCore]
   );
+
+  const fetchShortageFromGobricks = useCallback(async () => {
+    if (!mocDetailEmbed) return;
+    const mid = (requestedLoadMocId ?? "").trim();
+    if (!noFullSheetForSet && !fullItems?.length) {
+      setError("请先在当前页上传并解析完整零件表（或从服务器加载完整表）后再试。");
+      setLineNumber(null);
+      return;
+    }
+    if (!mid) {
+      setError("主体 ID 无效。");
+      setLineNumber(null);
+      return;
+    }
+
+    setError(null);
+    setLineNumber(null);
+    setMocLocalMessage(null);
+    setGobricksBusy(true);
+    try {
+      const sync = await syncGobricksShortageForSubjectAction({
+        subjectKind: buildSubjectKind,
+        subjectId: mid,
+      });
+      if (!sync.ok) {
+        setError(sync.error);
+        return;
+      }
+      setMocLocalMessage(sync.message);
+      setShortageFileName("高砖缺件查询.csv");
+      router.refresh();
+    } catch {
+      setError("从高砖获取缺件表失败，请重试。");
+    } finally {
+      setGobricksBusy(false);
+    }
+  }, [buildSubjectKind, fullItems, mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, router]);
 
   const applyColorChange = useCallback(async () => {
     const editing = colorEditRow;
@@ -841,7 +808,7 @@ export function PartsSheetImport({
                   type="file"
                   accept=".csv,text/csv"
                   className="sr-only"
-                  disabled={loading || mocActionBusy}
+                  disabled={loading || gobricksBusy || mocActionBusy}
                   onChange={(e) => {
                     const f = e.target.files?.[0] ?? null;
                     void onFile(f, "full");
@@ -852,45 +819,24 @@ export function PartsSheetImport({
               </label>
             ) : null}
             <span className="inline-flex flex-wrap items-center gap-2">
-              <label
-                className={
-                  noFullSheetForSet
-                    ? "button-primary cursor-pointer text-sm"
-                    : "cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+              <button
+                type="button"
+                className="button-primary text-sm disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={
+                  loading ||
+                  gobricksBusy ||
+                  mocActionBusy ||
+                  (!noFullSheetForSet && !(fullItems?.length))
                 }
+                title={
+                  !noFullSheetForSet && !(fullItems?.length)
+                    ? "请先上传并保存完整零件表，或从服务器加载完整表"
+                    : undefined
+                }
+                onClick={() => void fetchShortageFromGobricks()}
               >
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="sr-only"
-                  disabled={loading || mocActionBusy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null;
-                    void onFile(f, "shortage");
-                    e.target.value = "";
-                  }}
-                />
-                上传缺件表 CSV
-              </label>
-              {showCancelSetShortageMark ? (
-                <button
-                  type="button"
-                  className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-40"
-                  disabled={loading || mocActionBusy || !(requestedLoadMocId ?? "").trim()}
-                  onClick={() => void cancelShortageMark()}
-                >
-                  取消标记
-                </button>
-              ) : showMarkNoShortageButton ? (
-                <button
-                  type="button"
-                  className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-40"
-                  disabled={loading || mocActionBusy || !(requestedLoadMocId ?? "").trim()}
-                  onClick={() => void markNoShortage()}
-                >
-                  标记为不缺
-                </button>
-              ) : null}
+                {gobricksBusy ? "查询中…" : "从高砖获取缺件表"}
+              </button>
             </span>
           </>
         ) : (
@@ -941,8 +887,11 @@ export function PartsSheetImport({
             缺件表 {shortageItems ? `${shortageItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
             {shortageFileName ? `（${shortageFileName}）` : ""}
             。导出请使用下方列表旁的按钮。
-            {shortageClearedAtLocal?.trim() && !showCancelSetShortageMark && !(shortageItems?.length) ? (
-              <> 当前为「不缺件」；若要再次记录缺件，请重新上传缺件表 CSV。</>
+            {shortageClearedAtLocal?.trim() && !(shortageItems?.length) ? (
+              <>
+                {" "}
+                当前为「不缺件」；若要再次记录缺件，请使用「从高砖获取缺件表」。
+              </>
             ) : null}
           </span>
         ) : fileName ? (

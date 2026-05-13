@@ -32,6 +32,22 @@ function buildProfileKey(kind: BuildSubjectKind, subjectId: string) {
   return and(eq(buildProfiles.subjectKind, kind), eq(buildProfiles.subjectId, subjectId));
 }
 
+/** 高砖缺件对照成功后写入；上传新的完整表时会在 {@link saveBuildPartsSheetToDb} 中清空。 */
+export async function setGobricksShortageSyncAtInDb(
+  subjectKind: BuildSubjectKind,
+  subjectIdRaw: string,
+  syncedAtIso: string
+): Promise<void> {
+  const subjectId = subjectIdRaw.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) return;
+  if (!isSafeBuildSubjectId(subjectKind, subjectId)) return;
+  const db = getDb();
+  db.update(buildSavedPartsSheets)
+    .set({ gobricksShortageSyncAt: syncedAtIso })
+    .where(buildSheetKey(subjectKind, subjectId))
+    .run();
+}
+
 export type InitialBuildSheetFromServer = {
   subjectId: string;
   skippedHeader: boolean;
@@ -315,6 +331,7 @@ export async function saveBuildPartsSheetToDb(input: {
           lineCount,
           totalPartQty,
           updatedAt: savedAt,
+          firstSavedAt: savedAt,
           shortageLineCount: shortageCols.shortageLineCount,
           shortageTotalQty: shortageCols.shortageTotalQty,
           shortageStatsOk: true,
@@ -332,6 +349,7 @@ export async function saveBuildPartsSheetToDb(input: {
             shortageTotalQty: shortageCols.shortageTotalQty,
             shortageStatsOk: true,
             shortageClearedAt: nextShortageClearedAt,
+            ...(input.kind === "full" ? { gobricksShortageSyncAt: null } : {}),
           },
         })
         .run();
@@ -404,6 +422,91 @@ export async function saveSetPartsSheetToDb(input: {
     items: input.items,
     sourceFileName: input.sourceFileName,
   });
+}
+
+/**
+ * 在已有完整零件表的前提下移除缺件表分支，并清空「标记为不缺」时间戳（用于高砖查询结果为 0 条缺件）。
+ */
+export async function stripShortageBranchKeepingFullInDb(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+}): Promise<SaveBuildPartsSheetResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
+  }
+
+  const savedAt = new Date().toISOString();
+  const db = getDb();
+  const existingRows = db
+    .select({ payloadJson: buildSavedPartsSheets.payloadJson })
+    .from(buildSavedPartsSheets)
+    .where(buildSheetKey(input.subjectKind, subjectId))
+    .limit(1)
+    .all();
+  const existingJson = existingRows[0]?.payloadJson;
+  if (!existingJson) {
+    return { ok: false, error: "尚无已保存的零件表记录。" };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(existingJson) as unknown;
+  } catch {
+    return { ok: false, error: "数据库中已存数据损坏，无法解析。" };
+  }
+  const dual = parseStoredMocDualSheets(parsed);
+  if (!dual?.full) {
+    return { ok: false, error: "仅在有已存完整零件表时可清空缺件表。" };
+  }
+
+  const nextDual: StoredMocDualSheets = { ...dual, shortage: null };
+
+  try {
+    db.transaction((tx) => {
+      const payload = dualSheetsToPayloadV2(nextDual);
+      const { skippedHeader, lineCount, totalPartQty } = aggregateRowFromDual(nextDual);
+      const shortageCols = shortageSummaryColumns(nextDual);
+
+      tx.insert(buildSavedPartsSheets)
+        .values({
+          subjectKind: input.subjectKind,
+          subjectId,
+          skippedHeader,
+          payloadJson: JSON.stringify(payload),
+          lineCount,
+          totalPartQty,
+          updatedAt: savedAt,
+          firstSavedAt: savedAt,
+          shortageLineCount: shortageCols.shortageLineCount,
+          shortageTotalQty: shortageCols.shortageTotalQty,
+          shortageStatsOk: true,
+          shortageClearedAt: null,
+        })
+        .onConflictDoUpdate({
+          target: [buildSavedPartsSheets.subjectKind, buildSavedPartsSheets.subjectId],
+          set: {
+            skippedHeader,
+            payloadJson: JSON.stringify(payload),
+            lineCount,
+            totalPartQty,
+            updatedAt: savedAt,
+            shortageLineCount: shortageCols.shortageLineCount,
+            shortageTotalQty: shortageCols.shortageTotalQty,
+            shortageStatsOk: true,
+            shortageClearedAt: null,
+          },
+        })
+        .run();
+    });
+
+    revalidateBuildSubjectPaths(input.subjectKind, subjectId);
+    return { ok: true, savedAt };
+  } catch {
+    return { ok: false, error: "写入数据库失败。" };
+  }
 }
 
 export type ClearBuildPartsSheetShortageResult =
@@ -488,6 +591,7 @@ export async function clearBuildPartsSheetShortageInDb(input: {
           lineCount,
           totalPartQty,
           updatedAt: savedAt,
+          firstSavedAt: savedAt,
           shortageLineCount: shortageCols.shortageLineCount,
           shortageTotalQty: shortageCols.shortageTotalQty,
           shortageStatsOk: true,

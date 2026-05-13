@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
+import { GobricksShortageListInlineCheck } from "@/app/build/gobricks-shortage-list-check-button";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 
@@ -29,6 +30,7 @@ export function SavedSubjectListRow({
   shortageLineCount,
   shortageTotalQty,
   shortageClearedAt,
+  gobricksShortageSyncAt,
 }: {
   kind: BuildSubjectKind;
   subjectId: string;
@@ -50,6 +52,8 @@ export function SavedSubjectListRow({
   shortageTotalQty: number | null;
   /** 用户「标记为不缺」写入的时间（ISO）；仅非空时表示已确认无缺件表 */
   shortageClearedAt: string | null;
+  /** 最近一次高砖缺件对照成功的时间（ISO） */
+  gobricksShortageSyncAt: string | null;
 }) {
   const coverImageClassName = kind === BUILD_SUBJECT_SET ? "object-contain p-3" : "object-cover";
   const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
@@ -139,32 +143,22 @@ export function SavedSubjectListRow({
             )}
           </div>
         ) : null}
-        <div className="mt-auto border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className="min-w-0 tabular-nums text-[var(--text)]">
-              <span className="text-[var(--muted-2)]">零件总数 </span>
-              {totalPartQty.toLocaleString("zh-CN")}
-              {hasShortage ? (
-                <span
-                  className="font-medium text-amber-200/95"
-                  title={`缺件表 ${shortageLineCount.toLocaleString("zh-CN")} 行`}
-                >
-                  （缺件 {(shortageTotalQty ?? 0).toLocaleString("zh-CN")} 件）
-                </span>
-              ) : markedNoShortage ? (
-                <span className="font-semibold text-emerald-200/95" title="已通过「标记为不缺」确认">
-                  （不缺件）
-                </span>
-              ) : (
-                <span className="text-[var(--muted-2)]" title="尚未上传缺件表，或未确认缺件情况">
-                  （未检查）
-                </span>
-              )}
-            </span>
-            <span className="shrink-0 text-right tabular-nums">
+        <div className="mt-auto min-w-0 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <GobricksShortageListInlineCheck
+              subjectKind={kind}
+              subjectId={subjectId}
+              totalPartQty={totalPartQty}
+              hasShortage={hasShortage}
+              shortageLineCount={shortageLineCount}
+              shortageTotalQty={shortageTotalQty}
+              markedNoShortage={markedNoShortage}
+              gobricksShortageSyncAt={gobricksShortageSyncAt}
+            />
+            <div className="text-left tabular-nums">
               <span className="text-[var(--muted-2)]">保存时间 </span>
               <time dateTime={updatedAtIso}>{savedAt}</time>
-            </span>
+            </div>
           </div>
         </div>
       </div>

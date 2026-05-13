@@ -168,6 +168,8 @@ export const buildSavedPartsSheets = sqliteTable(
     lineCount: integer("line_count").notNull(),
     totalPartQty: integer("total_part_qty").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** 首次保存本行零件表的时间（ISO）；MOC 列表排序用，缺件检查等更新 updated_at 时不改此列 */
+    firstSavedAt: text("first_saved_at"),
     /** 缺件表行数；无缺件表分支时为 null */
     shortageLineCount: integer("shortage_line_count"),
     /** 缺件表各行列 quantity 之和；无缺件表时为 null */
@@ -176,6 +178,8 @@ export const buildSavedPartsSheets = sqliteTable(
     shortageStatsOk: integer("shortage_stats_ok", { mode: "boolean" }).notNull().default(false),
     /** 用户通过「标记为不缺」确认无缺件表的时间（ISO）；仅此时列表显示「不缺件」 */
     shortageClearedAt: text("shortage_cleared_at"),
+    /** 最近一次高砖缺件对照成功完成的时间（ISO）；无缺件行时用于列表显示「全」 */
+    gobricksShortageSyncAt: text("gobricks_shortage_sync_at"),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),

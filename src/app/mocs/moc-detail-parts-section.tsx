@@ -115,11 +115,7 @@ export function MocDetailPartsSection({
                 <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
                   inventory_parts
                 </code>
-                ），不支持上传完整零件表 CSV。缺件表可与{" "}
-                <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
-                  rebrickable_parts_*_缺货表.csv
-                </code>{" "}
-                相同结构单独上传，解析后写入本套装；可在「缺件表」Tab 编辑。已保存的缺件表会出现在{" "}
+                ），不支持上传完整零件表 CSV。缺件由上方「从高砖获取缺件表」对照本地官方清单写入；可在「缺件表」Tab 查看。已保存的缺件会出现在{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   套装列表
                 </Link>{" "}
@@ -131,7 +127,7 @@ export function MocDetailPartsSection({
                 <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
                   rebrickable_parts_*_缺货表.csv
                 </code>{" "}
-                相同结构。可分别上传完整零件表与缺件表；解析成功后写入本 {ui.noun}（两侧互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新记录也可从{" "}
+                相同结构。可先上传完整零件表，保存后将自动对照高砖写入缺件表；亦可在上方手动「从高砖获取缺件表」。解析成功后写入本 {ui.noun}（两侧互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新记录也可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}
@@ -185,7 +181,7 @@ export function MocDetailPartsSection({
                     <button
                       type="button"
                       disabled={!initialShortage}
-                      title={!initialShortage ? "尚未上传缺件表" : undefined}
+                      title={!initialShortage ? "尚无缺件表数据，请先用高砖检查" : undefined}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                         listTab === "shortage"
                           ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
@@ -218,7 +214,7 @@ export function MocDetailPartsSection({
                     <button
                       type="button"
                       disabled={!initialShortage}
-                      title={!initialShortage ? "尚未上传缺件表" : undefined}
+                      title={!initialShortage ? "尚无缺件表数据，请先用高砖检查" : undefined}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                         listTab === "shortage"
                           ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
@@ -297,7 +293,9 @@ export function MocDetailPartsSection({
               </p>
             ) : null}
             {listTab === "shortage" && !initialShortage ? (
-              <p className="text-sm text-[var(--muted)]">尚未上传缺件表，请使用上方「上传缺件表 CSV」。</p>
+              <p className="text-sm text-[var(--muted)]">
+                尚无缺件表，请使用上方「从高砖获取缺件表」。
+              </p>
             ) : null}
           </div>
         ) : null}

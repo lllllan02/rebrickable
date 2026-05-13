@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
@@ -48,6 +48,13 @@ export async function BuildSubjectListPage({
   }
 
   const db = getDb();
+  const listOrderBy =
+    kind === BUILD_SUBJECT_MOC
+      ? [
+          desc(sql`coalesce(${buildSavedPartsSheets.firstSavedAt}, ${buildSavedPartsSheets.updatedAt})`),
+          asc(buildSavedPartsSheets.subjectId),
+        ]
+      : [desc(buildSavedPartsSheets.updatedAt), asc(buildSavedPartsSheets.subjectId)];
   const rows = await db
     .select({
       subjectId: buildSavedPartsSheets.subjectId,
@@ -56,10 +63,11 @@ export async function BuildSubjectListPage({
       shortageLineCount: buildSavedPartsSheets.shortageLineCount,
       shortageTotalQty: buildSavedPartsSheets.shortageTotalQty,
       shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
+      gobricksShortageSyncAt: buildSavedPartsSheets.gobricksShortageSyncAt,
     })
     .from(buildSavedPartsSheets)
     .where(eq(buildSavedPartsSheets.subjectKind, kind))
-    .orderBy(desc(buildSavedPartsSheets.updatedAt));
+    .orderBy(...listOrderBy);
 
   const subjectIds = rows.map((r) => r.subjectId);
 
@@ -460,6 +468,7 @@ export async function BuildSubjectListPage({
                     shortageLineCount={r.shortageLineCount ?? null}
                     shortageTotalQty={r.shortageTotalQty ?? null}
                     shortageClearedAt={r.shortageClearedAt ?? null}
+                    gobricksShortageSyncAt={r.gobricksShortageSyncAt ?? null}
                     updatedAtIso={r.updatedAt}
                     owned={owned}
                     favorite={favorite}

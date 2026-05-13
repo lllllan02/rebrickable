@@ -52,10 +52,12 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
       line_count INTEGER NOT NULL,
       total_part_qty INTEGER NOT NULL,
       updated_at TEXT NOT NULL,
+      first_saved_at TEXT,
       shortage_line_count INTEGER,
       shortage_total_qty INTEGER,
       shortage_stats_ok INTEGER NOT NULL DEFAULT 0,
       shortage_cleared_at TEXT,
+      gobricks_shortage_sync_at TEXT,
       PRIMARY KEY (subject_kind, subject_id)
     );
     CREATE INDEX IF NOT EXISTS build_saved_parts_updated_idx ON build_saved_parts_sheets(updated_at);
@@ -187,6 +189,15 @@ export function ensureBuildTables(sqlite: Database.Database, cwd = process.cwd()
     if (!sheetCols.has("shortage_cleared_at")) {
       sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN shortage_cleared_at TEXT`);
     }
+    if (!sheetCols.has("first_saved_at")) {
+      sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN first_saved_at TEXT`);
+    }
+    if (!sheetCols.has("gobricks_shortage_sync_at")) {
+      sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN gobricks_shortage_sync_at TEXT`);
+    }
+    sqlite.exec(
+      `UPDATE build_saved_parts_sheets SET first_saved_at = updated_at WHERE first_saved_at IS NULL OR trim(first_saved_at) = ''`
+    );
 
     const pending = sqlite
       .prepare(
