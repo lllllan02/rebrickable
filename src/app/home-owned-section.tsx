@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, min, ne, or } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, min, ne, or, sql } from "drizzle-orm";
 
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
@@ -11,6 +11,7 @@ import {
   buildFavoriteSubjects,
   buildSavedPartsSheets,
   elements,
+  inventories,
   inventoryParts,
   legoSets,
   partRelationships,
@@ -189,6 +190,7 @@ export async function HomeOwnedCollection() {
   const favoriteSetNums = new Set<string>();
   const setProfileByNum = new Map<string, { displayName: string; tags: string[] }>();
   const setCoverStored = new Map<string, string>();
+  let setOfficialPartQtyByNum = new Map<string, number>();
 
   if (mocIds.length > 0 || setNums.length > 0) {
     const sheetOrs = [];
@@ -214,7 +216,7 @@ export async function HomeOwnedCollection() {
       );
     }
 
-    const [sheetRows, favRows, setProfRows, setImgRows] = await Promise.all([
+    const [sheetRows, favRows, setProfRows, setImgRows, officialPartQtyBySet] = await Promise.all([
       sheetOrs.length > 0
         ? db.select().from(buildSavedPartsSheets).where(or(...sheetOrs))
         : Promise.resolve([]),
@@ -238,7 +240,39 @@ export async function HomeOwnedCollection() {
             .where(and(eq(buildImages.subjectKind, BUILD_SUBJECT_SET), inArray(buildImages.subjectId, setNums)))
             .orderBy(asc(buildImages.createdAt))
         : Promise.resolve([]),
+      setNums.length > 0
+        ? (async () => {
+            const invRows = await db
+              .select({ setNum: inventories.setNum, id: inventories.id })
+              .from(inventories)
+              .where(inArray(inventories.setNum, setNums))
+              .orderBy(desc(inventories.version), desc(inventories.id));
+            const latestInvIdBySet = new Map<string, number>();
+            for (const row of invRows) {
+              if (!latestInvIdBySet.has(row.setNum)) latestInvIdBySet.set(row.setNum, row.id);
+            }
+            const invIds = [...new Set(latestInvIdBySet.values())];
+            if (invIds.length === 0) return new Map<string, number>();
+            const sumRows = await db
+              .select({
+                inventoryId: inventoryParts.inventoryId,
+                total: sql<number>`coalesce(sum(${inventoryParts.quantity}), 0)`,
+              })
+              .from(inventoryParts)
+              .where(inArray(inventoryParts.inventoryId, invIds))
+              .groupBy(inventoryParts.inventoryId);
+            const totalByInvId = new Map<number, number>();
+            for (const s of sumRows) totalByInvId.set(s.inventoryId, Number(s.total));
+            const out = new Map<string, number>();
+            for (const [setNum, invId] of latestInvIdBySet) {
+              out.set(setNum, totalByInvId.get(invId) ?? 0);
+            }
+            return out;
+          })()
+        : Promise.resolve(new Map<string, number>()),
     ]);
+
+    setOfficialPartQtyByNum = officialPartQtyBySet;
 
     for (const row of sheetRows as { subjectKind: string; subjectId: string; totalPartQty: number; updatedAt: string }[]) {
       sheetByKindId.set(`${row.subjectKind}:${row.subjectId}`, {
@@ -348,7 +382,8 @@ export async function HomeOwnedCollection() {
                 (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
               const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId);
               const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
-              const totalPartQty = sheet?.totalPartQty ?? 0;
+              const totalPartQty =
+                sheet?.totalPartQty ?? setOfficialPartQtyByNum.get(r.subjectId) ?? 0;
               const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
               return (
                 <SavedSubjectListRow
