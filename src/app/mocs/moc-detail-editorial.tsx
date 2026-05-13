@@ -97,18 +97,14 @@ export function MocDetailEditorial({
             initialDisplayName={initialDisplayName}
             initialTags={initialTags}
             partTotalQty={partTotalQty}
+            sidebarTitleAside={
+              <>
+                <span className="sr-only">拥有与收藏</span>
+                <BuildOwnedToggle subjectKind={subjectKind} subjectId={subjectId} initialOwned={initialOwned} />
+                <BuildFavoriteToggle subjectKind={subjectKind} subjectId={subjectId} initialFavorite={initialFavorite} />
+              </>
+            }
           />
-
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-[var(--border-soft)] pt-4">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <span className="text-sm text-[var(--text)]">拥有此{ui.noun}</span>
-              <BuildOwnedToggle subjectKind={subjectKind} subjectId={subjectId} initialOwned={initialOwned} />
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-sm text-[var(--muted)]">收藏</span>
-              <BuildFavoriteToggle subjectKind={subjectKind} subjectId={subjectId} initialFavorite={initialFavorite} />
-            </div>
-          </div>
 
           {o ? (
             <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] pt-4">

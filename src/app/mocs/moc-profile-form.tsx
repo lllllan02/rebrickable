@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 
@@ -21,6 +22,8 @@ type Props = {
   variant?: "default" | "sidebar";
   /** 侧边栏：显示在标题与主体 ID 之下、标签之上（无已存零件表时为 null 则不显示） */
   partTotalQty?: number | null;
+  /** 侧边栏：与主标题同一行右侧（如拥有 / 收藏按钮） */
+  sidebarTitleAside?: ReactNode;
 };
 
 type OptimisticProfile = { displayName: string; tags: string[] };
@@ -32,6 +35,7 @@ export function MocProfileForm({
   initialTags,
   variant = "default",
   partTotalQty = null,
+  sidebarTitleAside = null,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const router = useRouter();
@@ -124,36 +128,41 @@ export function MocProfileForm({
 
   const readOnlyBlock = (
     <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
-      <div>
-        <p
-          id={isSidebar ? formTitleId : undefined}
-          className={
-            isSidebar
-              ? "text-xl font-extrabold tracking-tight text-[var(--text)] sm:text-2xl"
-              : "text-lg font-semibold text-[var(--text)]"
-          }
-        >
-          {viewTitle}
-        </p>
-        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
-          <span>
-            {ui.subjectIdLabel} · {subjectId}
-          </span>
-          {isSidebar && partTotalQty !== null ? (
-            <>
-              <span className="select-none text-[var(--muted-2)]" aria-hidden>
-                ·
-              </span>
-              <span>
-                零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
-              </span>
-            </>
-          ) : null}
-        </p>
-        {!isSidebar ? (
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
+      <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-start gap-x-3 gap-y-2" : undefined}>
+        <div className={isSidebar && sidebarTitleAside ? "min-w-0 flex-1" : undefined}>
+          <p
+            id={isSidebar ? formTitleId : undefined}
+            className={
+              isSidebar
+                ? "text-xl font-extrabold tracking-tight text-[var(--text)] sm:text-2xl"
+                : "text-lg font-semibold text-[var(--text)]"
+            }
+          >
+            {viewTitle}
           </p>
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
+            <span>
+              {ui.subjectIdLabel} · {subjectId}
+            </span>
+            {isSidebar && partTotalQty !== null ? (
+              <>
+                <span className="select-none text-[var(--muted-2)]" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
+                </span>
+              </>
+            ) : null}
+          </p>
+          {!isSidebar ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
+            </p>
+          ) : null}
+        </div>
+        {isSidebar && sidebarTitleAside ? (
+          <div className="flex shrink-0 items-center gap-2 self-start pt-0.5">{sidebarTitleAside}</div>
         ) : null}
       </div>
 
@@ -196,46 +205,51 @@ export function MocProfileForm({
 
   const editFields = (
     <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
-      <div>
-        <label className={isSidebar ? "block" : "block text-xs text-[var(--muted)]"}>
-          {isSidebar ? <span className="sr-only">显示名称</span> : "显示名称"}
-          <input
-            id={isSidebar ? formTitleId : undefined}
-            type="text"
-            value={displayName}
-            onChange={(e) => {
-              setDisplayName(e.target.value.slice(0, MOC_PROFILE_MAX_DISPLAY_NAME));
-              setError(null);
-            }}
-            maxLength={MOC_PROFILE_MAX_DISPLAY_NAME}
-            placeholder={`${ui.noun} ${subjectId}`}
-            aria-label="显示名称"
-            className={
-              isSidebar
-                ? "field mt-0 w-full border-0 border-b border-[var(--border-soft)] bg-transparent px-0 py-1.5 text-xl font-extrabold tracking-tight text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-0 sm:text-2xl"
-                : "field mt-1 w-full max-w-md text-sm text-[var(--text)]"
-            }
-          />
-        </label>
-        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
-          <span>
-            {ui.subjectIdLabel} · {subjectId}
-          </span>
-          {isSidebar && partTotalQty !== null ? (
-            <>
-              <span className="select-none text-[var(--muted-2)]" aria-hidden>
-                ·
-              </span>
-              <span>
-                零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
-              </span>
-            </>
-          ) : null}
-        </p>
-        {!isSidebar ? (
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
+      <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-end gap-x-3 gap-y-2" : undefined}>
+        <div className={isSidebar && sidebarTitleAside ? "min-w-0 flex-1" : undefined}>
+          <label className={isSidebar ? "block" : "block text-xs text-[var(--muted)]"}>
+            {isSidebar ? <span className="sr-only">显示名称</span> : "显示名称"}
+            <input
+              id={isSidebar ? formTitleId : undefined}
+              type="text"
+              value={displayName}
+              onChange={(e) => {
+                setDisplayName(e.target.value.slice(0, MOC_PROFILE_MAX_DISPLAY_NAME));
+                setError(null);
+              }}
+              maxLength={MOC_PROFILE_MAX_DISPLAY_NAME}
+              placeholder={`${ui.noun} ${subjectId}`}
+              aria-label="显示名称"
+              className={
+                isSidebar
+                  ? "field mt-0 w-full border-0 border-b border-[var(--border-soft)] bg-transparent px-0 py-1.5 text-xl font-extrabold tracking-tight text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-0 sm:text-2xl"
+                  : "field mt-1 w-full max-w-md text-sm text-[var(--text)]"
+              }
+            />
+          </label>
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
+            <span>
+              {ui.subjectIdLabel} · {subjectId}
+            </span>
+            {isSidebar && partTotalQty !== null ? (
+              <>
+                <span className="select-none text-[var(--muted-2)]" aria-hidden>
+                  ·
+                </span>
+                <span>
+                  零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
+                </span>
+              </>
+            ) : null}
           </p>
+          {!isSidebar ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
+            </p>
+          ) : null}
+        </div>
+        {isSidebar && sidebarTitleAside ? (
+          <div className="flex shrink-0 items-center gap-2 pb-1">{sidebarTitleAside}</div>
         ) : null}
       </div>
 

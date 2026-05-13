@@ -82,8 +82,11 @@ export function MocImageCarousel({
   const hoverPauseRef = useRef(false);
   const regionId = useId();
   const [idx, setIdx] = useState(0);
+  /** 用户手动切换幻灯片后为 true，关闭定时自动轮播 */
+  const [userStoppedAutoplay, setUserStoppedAutoplay] = useState(false);
   /** 仅定时自动切图时短暂为 true，用于主图区入场动效（手动切图不加） */
   const [autoplayEnterFx, setAutoplayEnterFx] = useState(false);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -189,6 +192,10 @@ export function MocImageCarousel({
     [slideCount]
   );
 
+  const stopAutoplay = useCallback(() => {
+    setUserStoppedAutoplay(true);
+  }, []);
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -196,15 +203,17 @@ export function MocImageCarousel({
       if (isEditablePasteTarget(e.target)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
+        stopAutoplay();
         go(-1);
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
+        stopAutoplay();
         go(1);
       }
     };
     el.addEventListener("keydown", onKey);
     return () => el.removeEventListener("keydown", onKey);
-  }, [go]);
+  }, [go, stopAutoplay]);
 
   useEffect(() => {
     const root = wrapRef.current;
@@ -230,7 +239,7 @@ export function MocImageCarousel({
   }, [autoplayEnterFx]);
 
   useEffect(() => {
-    if (slideCount <= 1) return;
+    if (slideCount <= 1 || userStoppedAutoplay) return;
     const tick = () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (hoverPauseRef.current) return;
@@ -243,7 +252,16 @@ export function MocImageCarousel({
     };
     const id = window.setInterval(tick, 5500);
     return () => window.clearInterval(id);
-  }, [go, slideCount]);
+  }, [go, slideCount, userStoppedAutoplay]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightbox(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
 
   const onDeleteCurrent = useCallback(() => {
     const cur = slides[idx];
@@ -276,8 +294,8 @@ export function MocImageCarousel({
       >
         <p id={regionId} className="sr-only">
           {galleryKind === "set"
-            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图）；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；可点击大图左右半区、缩略图或两侧箭头切换；左右方向键在区域聚焦时可用。`
-            : `${ui.noun} 参考图轮播；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；可点击大图左右半区、缩略图或两侧箭头切换；左右方向键在区域聚焦时可用。`}
+            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图）；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；点击主图打开放大预览；手动切换请用缩略图、两侧箭头或左右方向键，切换后将停止自动轮播；右下角亦有放大按钮；左右方向键在区域聚焦时可用于换图。`
+            : `${ui.noun} 参考图轮播；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；点击主图打开放大预览；手动切换请用缩略图、两侧箭头或左右方向键，切换后将停止自动轮播；右下角亦有放大按钮；左右方向键在区域聚焦时可用于换图。`}
         </p>
 
         {slideCount === 0 ? (
@@ -312,12 +330,15 @@ export function MocImageCarousel({
         ) : (
           <div className="relative isolate z-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-3)]">
             <div
-              className={`relative z-0 isolate aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem] cursor-default select-none ${autoplayEnterFx ? "moc-carousel-autoplay-enter" : ""}`}
-              onClick={(e) => {
-                if (slideCount <= 1) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                go(x < rect.width / 2 ? -1 : 1);
+              className={`relative z-0 isolate aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem] select-none ${current ? "cursor-zoom-in" : "cursor-default"} ${autoplayEnterFx ? "moc-carousel-autoplay-enter" : ""}`}
+              onClick={() => {
+                if (!current) return;
+                stopAutoplay();
+                const alt =
+                  current.kind === "catalog"
+                    ? current.alt
+                    : (current.originalName ?? `${ui.noun} 参考图`);
+                setLightbox({ src: current.url, alt });
               }}
             >
               {current ? (
@@ -342,22 +363,47 @@ export function MocImageCarousel({
                   fallbackClassName="pointer-events-none"
                 />
               ) : null}
+              {current ? (
+                <button
+                  type="button"
+                  className="absolute bottom-3 right-3 z-20 rounded-md border border-[var(--border)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-xs font-medium text-[var(--text)] shadow backdrop-blur-sm transition hover:bg-[var(--surface-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  aria-label="放大查看当前图片"
+                  title="放大查看"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    stopAutoplay();
+                    const alt =
+                      current.kind === "catalog"
+                        ? current.alt
+                        : (current.originalName ?? `${ui.noun} 参考图`);
+                    setLightbox({ src: current.url, alt });
+                  }}
+                >
+                  放大
+                </button>
+              ) : null}
             </div>
             {slideCount > 1 ? (
               <>
                 <button
                   type="button"
                   aria-label="上一张"
-                  className="absolute left-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm text-[var(--text)] opacity-80 shadow backdrop-blur-sm transition hover:opacity-100"
-                  onClick={() => go(-1)}
+                  className="absolute left-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm font-medium text-[var(--text)] opacity-85 shadow backdrop-blur-sm transition-all duration-200 ease-out hover:scale-105 hover:border-[var(--accent)] hover:bg-[var(--accent)]/18 hover:opacity-100 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/45 active:scale-100"
+                  onClick={() => {
+                    stopAutoplay();
+                    go(-1);
+                  }}
                 >
                   ‹
                 </button>
                 <button
                   type="button"
                   aria-label="下一张"
-                  className="absolute right-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm text-[var(--text)] opacity-80 shadow backdrop-blur-sm transition hover:opacity-100"
-                  onClick={() => go(1)}
+                  className="absolute right-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm font-medium text-[var(--text)] opacity-85 shadow backdrop-blur-sm transition-all duration-200 ease-out hover:scale-105 hover:border-[var(--accent)] hover:bg-[var(--accent)]/18 hover:opacity-100 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/45 active:scale-100"
+                  onClick={() => {
+                    stopAutoplay();
+                    go(1);
+                  }}
                 >
                   ›
                 </button>
@@ -395,7 +441,10 @@ export function MocImageCarousel({
                         ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--surface-2)]"
                         : "opacity-75 ring-1 ring-[var(--border)]"
                     }`}
-                    onClick={() => setIdx(i)}
+                    onClick={() => {
+                      stopAutoplay();
+                      setIdx(i);
+                    }}
                   >
                     <RemoteCoverImage
                       key={img.kind === "catalog" ? `t-cat-${img.url}` : `t-up-${img.id}`}
@@ -465,6 +514,37 @@ export function MocImageCarousel({
         <p className="text-xs text-red-200/95" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/82 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="大图预览"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-[101] rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            aria-label="关闭大图预览"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightbox(null);
+            }}
+          >
+            关闭
+          </button>
+          <div className="max-h-[min(92vh,100%)] max-w-full overflow-auto" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- 灯箱需原生 img 以支持任意外链与本地上传 URL */}
+            <img
+              src={lightbox.src}
+              alt={lightbox.alt}
+              className="max-h-[88vh] w-auto max-w-full object-contain shadow-2xl"
+            />
+          </div>
+          <p className="mt-3 max-w-prose text-center text-xs text-white/75">点击背景或「关闭」退出；按 Esc 亦可关闭。</p>
+        </div>
       ) : null}
     </div>
   );
