@@ -4,7 +4,7 @@ import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subjec
 import { OWNED_SUBJECT_PART, type OwnedSubjectKind } from "@/lib/build-owned-subject";
 
 export function revalidateOwnedPaths(kind: OwnedSubjectKind, subjectId: string): void {
-  revalidatePath("/owned");
+  revalidatePath("/");
   if (kind === OWNED_SUBJECT_PART) {
     revalidatePath("/parts");
     revalidatePath(`/parts/${encodeURIComponent(subjectId)}`);

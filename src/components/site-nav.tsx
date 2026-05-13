@@ -3,7 +3,6 @@ import Link from "next/link";
 import { GlobalSearch } from "@/components/global-search";
 
 const trailingLinks = [
-  { href: "/owned", label: "拥有" },
   { href: "/mocs", label: "MOCs" },
   { href: "/sets", label: "Sets" },
   { href: "/parts", label: "Parts" },

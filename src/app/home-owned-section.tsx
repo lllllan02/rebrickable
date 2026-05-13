@@ -23,7 +23,6 @@ import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { mocListHref } from "@/lib/moc-list-href";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
-import { aggregateOwnedPartInventory } from "@/lib/owned-inventory-aggregate";
 import { PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +35,8 @@ function formatMarkedAt(iso: string): string {
   return iso.slice(0, 19).replace("T", " ");
 }
 
-export default async function OwnedCollectionPage() {
+/** 首页「我的拥有」区块：MOC / 套装 / 散装零件列表与库存汇总（原 `/owned` 页面逻辑）。 */
+export async function HomeOwnedCollection() {
   const db = getDb();
   const rows = await db
     .select()
@@ -263,49 +263,16 @@ export default async function OwnedCollectionPage() {
 
   const total = setRows.length + mocRows.length + partRows.length;
 
-  const { rows: invAggRows, truncated: invAggTruncated } =
-    total > 0 ? await aggregateOwnedPartInventory() : { rows: [], truncated: false };
-  const invAggPartNums = invAggRows.map((r) => r.partNum);
-  const invAggNameByNum = new Map<string, string>();
-  const invAggThumbByNum = new Map<string, string>();
-  if (invAggPartNums.length > 0) {
-    const [pr, thumbRows] = await Promise.all([
-      db
-        .select({ partNum: parts.partNum, name: parts.name })
-        .from(parts)
-        .where(inArray(parts.partNum, invAggPartNums)),
-      db
-        .select({ partNum: inventoryParts.partNum, thumb: min(inventoryParts.imgUrl) })
-        .from(inventoryParts)
-        .where(
-          and(
-            inArray(inventoryParts.partNum, invAggPartNums),
-            isNotNull(inventoryParts.imgUrl),
-            ne(inventoryParts.imgUrl, "")
-          )
-        )
-        .groupBy(inventoryParts.partNum),
-    ]);
-    for (const p of pr) invAggNameByNum.set(p.partNum, (p.name ?? "").trim());
-    for (const t of thumbRows) {
-      if (t.thumb && usableImgUrl(t.thumb)) invAggThumbByNum.set(t.partNum, t.thumb.trim());
-    }
-  }
-
   return (
-    <div className="page-stack">
-      <section className="hero-panel">
-        <p className="page-kicker">本地收藏</p>
-        <h1 className="page-title">我的拥有</h1>
-        <p className="page-description">
-          汇总在 MOC、套装与零件详情页标记为「拥有」的项目（数据存于本地 SQLite）。散装零件可填写数量；已拥有套装与
-          MOC 会按官方库存或已存零件表计入页面底部「零件数量汇总」，并在对应详情页的零件表上以拥有样式高亮显示。共{" "}
+    <div className="flex flex-col gap-5">
+      {total > 0 ? (
+        <p className="text-sm text-[var(--muted)]">
+          共{" "}
           <strong className="font-medium text-[var(--text)]">{total.toLocaleString("zh-CN")}</strong>{" "}
           条：MOC {mocRows.length.toLocaleString("zh-CN")} · 套装 {setRows.length.toLocaleString("zh-CN")} · 零件{" "}
           {partRows.length.toLocaleString("zh-CN")}。
         </p>
-      </section>
-
+      ) : null}
       {total === 0 ? (
         <section className="section-panel">
           <p className="text-sm text-[var(--muted)]">
@@ -328,7 +295,7 @@ export default async function OwnedCollectionPage() {
 
       {mocRows.length > 0 ? (
         <section className="section-panel owned-category">
-          <h2 className="section-title mb-4 text-[var(--text)]">MOC（{mocRows.length.toLocaleString("zh-CN")}）</h2>
+          <h3 className="section-title mb-4 text-[var(--text)]">MOC（{mocRows.length.toLocaleString("zh-CN")}）</h3>
           <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {mocRows.map((r) => {
               const prof = mocProfileById.get(r.subjectId);
@@ -366,7 +333,7 @@ export default async function OwnedCollectionPage() {
 
       {setRows.length > 0 ? (
         <section className="section-panel owned-category">
-          <h2 className="section-title mb-4 text-[var(--text)]">套装（{setRows.length.toLocaleString("zh-CN")}）</h2>
+          <h3 className="section-title mb-4 text-[var(--text)]">套装（{setRows.length.toLocaleString("zh-CN")}）</h3>
           <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {setRows.map((r) => {
               const prof = setProfileByNum.get(r.subjectId);
@@ -407,7 +374,7 @@ export default async function OwnedCollectionPage() {
 
       {partRows.length > 0 ? (
         <section className="section-panel owned-category">
-          <h2 className="section-title mb-4 text-[var(--text)]">零件（{partRows.length.toLocaleString("zh-CN")}）</h2>
+          <h3 className="section-title mb-4 text-[var(--text)]">零件（{partRows.length.toLocaleString("zh-CN")}）</h3>
           <p className="mb-3 text-sm text-[var(--muted)]">
             与{" "}
             <Link href="/parts?cat=all" className="text-[var(--accent)] underline underline-offset-2">
@@ -467,63 +434,6 @@ export default async function OwnedCollectionPage() {
               );
             })}
           </ul>
-        </section>
-      ) : null}
-
-      {total > 0 ? (
-        <section className="section-panel owned-category">
-          <h2 className="section-title mb-2 text-[var(--text)]">零件数量汇总</h2>
-          <p className="mb-3 text-sm leading-relaxed text-[var(--muted)]">
-            散装登记数量，加上已拥有套装（优先本地 Rebrickable 官方 inventory；若无库存行则使用已上传套装零件表）与
-            MOC（已存完整表优先，否则缺件表）中的零件数量，按零件号合并。下方为与零件列表相同的方格缩略图，右上角数字为合计数量；悬停可看名称与散装 / 套装 / MOC 分项。
-          </p>
-          {invAggRows.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              当前无可用行：请为已拥有的 MOC 上传零件表 CSV，或确认套装在本地库中有 inventory；亦可单独在零件页登记散装数量。
-            </p>
-          ) : (
-            <>
-              <ul className="tiles-grid" role="list">
-                {invAggRows.map((row) => {
-                  const nm = invAggNameByNum.get(row.partNum) ?? "";
-                  const thumb = invAggThumbByNum.get(row.partNum) ?? null;
-                  const detailHref = `/parts/${encodeURIComponent(row.partNum)}`;
-                  const titleTip = [
-                    row.partNum,
-                    nm || null,
-                    `合计 ${row.totalQty.toLocaleString("zh-CN")}`,
-                    `散装 ${row.looseQty.toLocaleString("zh-CN")}`,
-                    `套装 ${row.fromSetQty.toLocaleString("zh-CN")}`,
-                    `MOC ${row.fromMocQty.toLocaleString("zh-CN")}`,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
-                  return (
-                    <li key={`agg-${row.partNum}`} className="min-w-0">
-                      <PartGridTileLink
-                        href={detailHref}
-                        titleAttr={titleTip}
-                        partNum={row.partNum}
-                        thumbUrl={thumb}
-                        extraTileClass={PART_GRID_TILE_OWNED_HIGHLIGHT}
-                        topRight={
-                          <span
-                            className="pointer-events-none absolute right-1 top-1 z-[2] rounded border border-white/15 bg-black/70 px-1 py-px text-[10px] font-semibold tabular-nums leading-none text-white shadow-sm"
-                            aria-label={`合计 ${row.totalQty}`}
-                          >
-                            {row.totalQty.toLocaleString("zh-CN")}
-                          </span>
-                        }
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-              {invAggTruncated ? (
-                <p className="mt-3 text-xs text-[var(--muted)]">仅展示前 500 个零件号，其余已省略。</p>
-              ) : null}
-            </>
-          )}
         </section>
       ) : null}
     </div>

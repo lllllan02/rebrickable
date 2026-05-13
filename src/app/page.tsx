@@ -1,6 +1,7 @@
 import { count, countDistinct } from "drizzle-orm";
 import Link from "next/link";
 
+import { HomeOwnedCollection } from "@/app/home-owned-section";
 import { getDb } from "@/db/client";
 import {
   colors,
@@ -15,14 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const db = getDb();
-  const [
-    partsRow,
-    colorsRow,
-    setsRow,
-    invPartsRow,
-    elementsRow,
-    relRow,
-  ] = await Promise.all([
+  const [partsRow, colorsRow, setsRow, invPartsRow, elementsRow, relRow] = await Promise.all([
     db.select({ c: count() }).from(parts),
     db.select({ c: count() }).from(colors),
     db.select({ c: countDistinct(inventories.setNum) }).from(inventories),
@@ -46,45 +40,40 @@ export default async function HomePage() {
 
   return (
     <div className="page-stack">
-      <section className="hero-panel">
-        <p className="page-kicker">Local brick catalog</p>
-        <h1 className="page-title">你自己的 Rebrickable</h1>
-        <p className="page-description">
-          数据来自仓库内{" "}
-          <code className="code-pill">assets/*.csv.gz</code>
-          ，经{" "}
-          <code className="code-pill">pnpm db:import</code>{" "}
-          导入为本地 SQLite。无需官方 API Key，可离线浏览零件、套装清单与颜色。
-        </p>
+      <section className="section-panel" aria-labelledby="catalog-stats-heading">
+        <h2 id="catalog-stats-heading" className="section-title text-[var(--text)]">
+          目录规模
+        </h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">点击卡片跳转到对应栏目。</p>
+        <ul className="stat-grid mt-4">
+          {stats.map((s) => (
+            <li key={s.label}>
+              <Link href={s.href} className="stat-card stat-link">
+                <div className="stat-label">{s.label}</div>
+                <div className="stat-value">{Number(s.value).toLocaleString("zh-CN")}</div>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
-      <ul className="stat-grid">
-        {stats.map((s) => (
-          <li key={s.label}>
-            <Link href={s.href} className="stat-card stat-link">
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-value">
-                {Number(s.value).toLocaleString("zh-CN")}
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
+
+      <section id="owned" className="scroll-mt-24" aria-label="我的拥有">
+        <HomeOwnedCollection />
+      </section>
+
       <section className="section-panel text-sm text-[var(--muted)]">
-        <p className="section-title text-[var(--text)]">快速开始</p>
+        <p className="section-title text-[var(--text)]">数据入库</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
-            将 Rebrickable 导出的 gz CSV 放入{" "}
-            <code className="code-pill">assets/</code>
+            将 Rebrickable 导出的 gz CSV 放入 <code className="code-pill">assets/</code>
             （建议包含 <code className="code-pill">sets.csv.gz</code> 与{" "}
-            <code className="code-pill">themes.csv.gz</code>
-            ，以便套装列表显示盒图与主题名）
+            <code className="code-pill">themes.csv.gz</code>，以便套装列表显示盒图与主题名）
           </li>
           <li>
-            运行 <code className="code-pill">pnpm install</code> 与{" "}
-            <code className="code-pill">pnpm db:import</code>
+            运行 <code className="code-pill">pnpm install</code> 与 <code className="code-pill">pnpm db:import</code>
           </li>
           <li>
-            运行 <code className="code-pill">pnpm dev</code> 打开本页
+            运行 <code className="code-pill">pnpm dev</code> 打开本应用
           </li>
         </ol>
       </section>
