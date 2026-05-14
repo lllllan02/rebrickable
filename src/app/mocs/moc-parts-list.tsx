@@ -83,194 +83,226 @@ function MocPartDetailBody({
     };
   }, [item.partNum, detailSubstituteSuggestions]);
 
+  const heroTitle =
+    item.partFound && item.partName
+      ? item.partName
+      : item.partFound
+        ? "（无名称）"
+        : item.partNum.trim() || "—";
+  const showNameRowInDl = !(item.partFound && item.partName);
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-3">
-        <div className="min-w-0">
-          <p id={titleId} className="font-mono text-sm font-semibold text-[var(--text)]">
-            {item.partNum}
-          </p>
-          <p className="mt-0.5 text-xs text-[var(--muted)]">第 {item.lineNumber} 行 · 数量 {item.quantity}</p>
-        </div>
+    <div className="flex flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]">
+          零件摘要
+        </span>
         <button
           type="button"
-          className="shrink-0 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+          className="grid size-9 shrink-0 place-items-center rounded-full border border-transparent text-2xl leading-none text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+          aria-label="关闭"
           onClick={onClose}
         >
-          关闭
+          ×
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="mx-auto flex aspect-square w-full max-w-[14rem] items-center justify-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-          {item.imgUrl ? (
-            <RemoteCoverImage
-              src={item.imgUrl}
-              width={224}
-              height={224}
-              className="h-full w-full object-contain p-2"
-              sizes="(max-width:640px)70vw,14rem"
-              fallbackLabel="无图"
-            />
-          ) : (
-            <span className="text-xs text-[var(--muted)]">{item.partFound ? "无图" : "未收录"}</span>
-          )}
+      <div className="px-5 py-5 sm:px-8 sm:py-7">
+        <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:gap-10 lg:gap-12">
+          <div className="mx-auto aspect-square w-full max-w-[min(16rem,72vw)] shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)] sm:mx-0 sm:max-w-[18rem] lg:max-w-[20rem]">
+            <div className="flex h-full min-h-[12rem] w-full items-center justify-center sm:min-h-0">
+              {item.imgUrl ? (
+                <RemoteCoverImage
+                  src={item.imgUrl}
+                  width={320}
+                  height={320}
+                  className="h-full max-h-[min(20rem,55vw)] w-full object-contain p-3 sm:max-h-none sm:p-4"
+                  sizes="(max-width:639px)72vw,(max-width:1023px)18rem,20rem"
+                  fallbackLabel="无图"
+                />
+              ) : (
+                <span className="text-sm text-neutral-500">{item.partFound ? "无图" : "未收录"}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="border-b border-[var(--border-soft)] pb-5 sm:pb-6">
+              <h2
+                id={titleId}
+                className="text-lg font-semibold leading-snug text-[var(--accent)] sm:text-xl sm:leading-snug"
+              >
+                {heroTitle}
+              </h2>
+              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-relaxed text-[var(--muted)]">
+                <span className="font-mono text-[13px] font-medium text-[var(--text)]">{item.partNum}</span>
+                {item.partCatName ? <span>· {item.partCatName}</span> : null}
+                <span className="text-[var(--muted-2)]">
+                  · 第 {item.lineNumber} 行 · 数量 {item.quantity}
+                </span>
+              </p>
+              {item.partFound ? (
+                <p className="mt-3">
+                  <Link
+                    href={`/parts/${encodeURIComponent(item.partNum)}`}
+                    className="text-sm font-medium text-[var(--accent)] no-underline hover:underline"
+                    onClick={onClose}
+                  >
+                    查看完整零件页 →
+                  </Link>
+                </p>
+              ) : null}
+            </div>
+
+            <dl className="mt-5 space-y-3.5 text-sm sm:mt-6 sm:text-[15px] sm:leading-relaxed">
+              {showNameRowInDl ? (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称</dt>
+                  <dd className="mt-0.5 text-[var(--text)]">
+                    {item.partFound && item.partName
+                      ? item.partName
+                      : item.partFound
+                        ? "（无名称）"
+                        : "本地库中无此 part_num"}
+                  </dd>
+                </div>
+              ) : null}
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">颜色</dt>
+                <dd className="mt-0.5 text-[var(--text)]">
+                  {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
+                </dd>
+              </div>
+              {item.imgSource === "part" ? (
+                <p className="text-xs text-[var(--muted)]">当前颜色无库存图，已使用该零件其他颜色的图片。</p>
+              ) : null}
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">元素</dt>
+                <dd className="mt-0.5 text-[var(--text)]">{item.elementKnown ? "已知" : "未知 / 未校验"}</dd>
+              </div>
+              {item.sheetTags.length > 0 ? (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">标签</dt>
+                  <dd className="mt-0.5 flex flex-wrap gap-1">
+                    {PARTS_SHEET_TAG_ORDER.filter((t) => item.sheetTags.includes(t)).map((t) => (
+                      <span
+                        key={t}
+                        className="rounded border border-amber-400/35 bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-100/95"
+                      >
+                        {PARTS_SHEET_TAG_LABELS[t]}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ) : null}
+              {reasonLines.length > 0 ? (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">缺件原因</dt>
+                  <dd className="mt-0.5 flex flex-wrap gap-1">
+                    {reasonLines.map((line) => (
+                      <span
+                        key={line}
+                        className="rounded border border-sky-400/30 bg-sky-500/10 px-1.5 py-px text-[11px] font-medium text-sky-100/95"
+                      >
+                        {line}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ) : null}
+              {item.rest ? (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
+                    {showShortageReasonSummary ? "备注原文" : "导入附加列"}
+                  </dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
+                    {item.rest}
+                  </dd>
+                </div>
+              ) : null}
+              {parentSubjectOwned ? (
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
+                  <dd className="mt-0.5 text-[var(--text)]">本 MOC / 套装已在「我的拥有」中标记。</dd>
+                </div>
+              ) : null}
+            </dl>
+          </div>
         </div>
 
-        <dl className="mt-4 space-y-2.5 text-sm">
-          <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称</dt>
-            <dd className="mt-0.5 text-[var(--text)]">
-              {item.partFound && item.partName ? item.partName : item.partFound ? "（无名称）" : "本地库中无此 part_num"}
-            </dd>
-          </div>
-          {item.partCatName ? (
-            <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">大类</dt>
-              <dd className="mt-0.5 text-[var(--text)]">{item.partCatName}</dd>
-            </div>
-          ) : null}
-          <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">颜色</dt>
-            <dd className="mt-0.5 text-[var(--text)]">
-              {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
-            </dd>
-          </div>
-          {item.imgSource === "part" ? (
-            <p className="text-xs text-[var(--muted)]">当前颜色无库存图，已使用该零件其他颜色的图片。</p>
-          ) : null}
-          <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">元素</dt>
-            <dd className="mt-0.5 text-[var(--text)]">{item.elementKnown ? "已知" : "未知 / 未校验"}</dd>
-          </div>
-          {item.sheetTags.length > 0 ? (
-            <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">标签</dt>
-              <dd className="mt-0.5 flex flex-wrap gap-1">
-                {PARTS_SHEET_TAG_ORDER.filter((t) => item.sheetTags.includes(t)).map((t) => (
-                  <span
-                    key={t}
-                    className="rounded border border-amber-400/35 bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-100/95"
-                  >
-                    {PARTS_SHEET_TAG_LABELS[t]}
-                  </span>
-                ))}
-              </dd>
-            </div>
-          ) : null}
-          {reasonLines.length > 0 ? (
-            <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">缺件原因</dt>
-              <dd className="mt-0.5 flex flex-wrap gap-1">
-                {reasonLines.map((line) => (
-                  <span
-                    key={line}
-                    className="rounded border border-sky-400/30 bg-sky-500/10 px-1.5 py-px text-[11px] font-medium text-sky-100/95"
-                  >
-                    {line}
-                  </span>
-                ))}
-              </dd>
-            </div>
-          ) : null}
-          {item.rest ? (
-            <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
-                {showShortageReasonSummary ? "备注原文" : "导入附加列"}
-              </dt>
-              <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
-                {item.rest}
-              </dd>
-            </div>
-          ) : null}
-          {parentSubjectOwned ? (
-            <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
-              <dd className="mt-0.5 text-[var(--text)]">本 MOC / 套装已在「我的拥有」中标记。</dd>
-            </div>
-          ) : null}
-        </dl>
-
         {detailSubstituteSuggestions ? (
-          <div className="mt-4 border-t border-[var(--border-soft)] pt-4">
-            <h3 className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
-              推荐替换（Rebrickable 目录）
-            </h3>
-            {substitutes === null ? (
-              <p className="mt-2 text-xs text-[var(--muted)]">加载中…</p>
-            ) : substitutesError ? (
-              <p className="mt-2 text-xs text-amber-200/90">{substitutesError}</p>
-            ) : substitutes.length === 0 ? (
-              <p className="mt-2 text-xs text-[var(--muted)]">无替代或模具变体记录。</p>
-            ) : (
-              <>
-                <ul className="mt-2 space-y-2.5 text-sm">
-                  {substitutes.map((s) => (
-                    <li
-                      key={s.otherPartNum}
-                      className="flex gap-2.5 rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)] px-2.5 py-2"
-                    >
-                      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-                        {s.imgUrl ? (
-                          <RemoteCoverImage
-                            src={s.imgUrl}
-                            width={56}
-                            height={56}
-                            className="h-full w-full object-contain p-0.5"
-                            sizes="56px"
-                            fallbackLabel="无图"
-                            fallbackClassName="!text-[9px]"
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
-                            无图
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <Link
-                            href={`/parts/${encodeURIComponent(s.otherPartNum)}`}
-                            className="font-mono text-xs font-semibold text-[var(--accent)] no-underline hover:underline"
-                            onClick={onClose}
-                          >
-                            {s.otherPartNum}
-                          </Link>
-                          {s.relTypes.map((t) => (
-                            <span
-                              key={t}
-                              className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-100/95"
-                            >
-                              {substituteRelBadgeLabel(t)}
+          <div className="mt-7 border-t border-[var(--border-soft)] pt-7 sm:mt-8 sm:pt-8">
+            <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)]/90 p-4 sm:p-5">
+              <p className="text-sm leading-relaxed text-[var(--muted)]">
+                若需替换或核对模具变体，可参考本地 Rebrickable 目录中的下列关联零件（类型 A/M）：
+              </p>
+              <h3 className="mt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+                推荐替换 · Rebrickable
+              </h3>
+              {substitutes === null ? (
+                <p className="mt-3 text-sm text-[var(--muted)]">加载中…</p>
+              ) : substitutesError ? (
+                <p className="mt-3 text-sm text-amber-200/90">{substitutesError}</p>
+              ) : substitutes.length === 0 ? (
+                <p className="mt-3 text-sm text-[var(--muted)]">无替代或模具变体记录。</p>
+              ) : (
+                <>
+                  <ul className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                    {substitutes.map((s) => (
+                      <li
+                        key={s.otherPartNum}
+                        className="flex min-h-0 gap-3 rounded-lg border border-[var(--border)]/80 bg-[var(--surface)] px-3 py-2.5 sm:gap-3.5 sm:px-3.5 sm:py-3"
+                      >
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-16 sm:w-16">
+                          {s.imgUrl ? (
+                            <RemoteCoverImage
+                              src={s.imgUrl}
+                              width={64}
+                              height={64}
+                              className="h-full w-full object-contain p-0.5 sm:p-1"
+                              sizes="(max-width:639px)56px,64px"
+                              fallbackLabel="无图"
+                              fallbackClassName="!text-[9px]"
+                            />
+                          ) : (
+                            <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
+                              无图
                             </span>
-                          ))}
+                          )}
                         </div>
-                        {s.partName ? (
-                          <p className="mt-1 text-xs leading-snug text-[var(--muted)]">{s.partName}</p>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[10px] leading-snug text-[var(--muted-2)]">
-                  数据来自本地 <span className="font-mono">part_relationships</span>（类型 A/M）；缩略图取自{" "}
-                  <span className="font-mono">inventory_parts</span> 中该零件任一角度的库存图。颜色与造型请自行核对。
-                </p>
-              </>
-            )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Link
+                              href={`/parts/${encodeURIComponent(s.otherPartNum)}`}
+                              className="font-mono text-xs font-semibold text-[var(--accent)] no-underline hover:underline"
+                              onClick={onClose}
+                            >
+                              {s.otherPartNum}
+                            </Link>
+                            {s.relTypes.map((t) => (
+                              <span
+                                key={t}
+                                className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-100/95"
+                              >
+                                {substituteRelBadgeLabel(t)}
+                              </span>
+                            ))}
+                          </div>
+                          {s.partName ? (
+                            <p className="mt-1 text-sm leading-snug text-[var(--muted)]">{s.partName}</p>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-4 border-t border-[var(--border-soft)] pt-3 text-[11px] leading-relaxed text-[var(--muted-2)]">
+                    数据来自本地 <span className="font-mono">part_relationships</span>；缩略图取自{" "}
+                    <span className="font-mono">inventory_parts</span> 中该零件任一角度的库存图。颜色与造型请自行核对。
+                  </p>
+                </>
+              )}
+            </div>
           </div>
-        ) : null}
-
-        {item.partFound ? (
-          <p className="mt-5 border-t border-[var(--border-soft)] pt-4 text-xs">
-            <a
-              href={`/parts/${encodeURIComponent(item.partNum)}`}
-              className="text-[var(--accent)] underline underline-offset-2"
-              onClick={onClose}
-            >
-              打开零件页
-            </a>
-          </p>
         ) : null}
       </div>
     </div>
@@ -296,11 +328,11 @@ type Props = {
   sourceMetaLine?: string | null;
   /** 各行列 quantity 之和；不传则由 items 现场累加 */
   totalPartQty?: number;
-  /** 缺件表视图：缺件原因筛选、网格备注与详情侧栏缺件原因摘要 */
+  /** 缺件表视图：缺件原因筛选、网格备注与详情弹层中的缺件原因摘要 */
   shortageListMode?: boolean;
   /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行使用拥有高亮样式 */
   parentSubjectOwned?: boolean;
-  /** 配货表 / 缺件表：侧栏展示目录库中的推荐替换零件（part_relationships A/M） */
+  /** 配货表 / 缺件表：详情弹层展示目录库中的推荐替换零件（part_relationships A/M） */
   detailSubstituteSuggestions?: boolean;
 };
 
@@ -533,8 +565,15 @@ export function MocPartsList({
         onClose={() => setDetailItem(null)}
       >
         {detailItem ? (
-          <div className="flex h-dvh w-screen flex-col sm:flex-row">
-            <div className="order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)] sm:order-2 sm:h-full sm:max-w-[min(22rem,100vw)] sm:flex-none sm:rounded-l-[var(--radius-md)] sm:border-l">
+          <div
+            className="flex h-dvh w-screen items-center justify-center bg-black/45 p-4 sm:p-6 lg:p-10"
+            role="presentation"
+            onClick={closeDetail}
+          >
+            <div
+              className="max-h-[min(92dvh,52rem)] w-full max-w-[min(56rem,calc(100vw-1.25rem))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <MocPartDetailBody
                 item={detailItem}
                 titleId={detailTitleId}
@@ -544,12 +583,6 @@ export function MocPartsList({
                 detailSubstituteSuggestions={detailSubstituteSuggestions}
               />
             </div>
-            <button
-              type="button"
-              className="order-2 min-h-[22dvh] shrink-0 cursor-default border-0 bg-black/40 p-0 sm:order-1 sm:min-h-0 sm:flex-1 sm:bg-black/35"
-              aria-label="关闭详情"
-              onClick={closeDetail}
-            />
           </div>
         ) : null}
       </dialog>
