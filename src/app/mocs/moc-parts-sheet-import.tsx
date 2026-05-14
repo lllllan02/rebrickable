@@ -96,6 +96,8 @@ type PartsSheetImportProps = {
   initialFullSheet?: InitialMocSheetFromServer | null;
   /** 详情页：已存缺件表 */
   initialShortageSheet?: InitialMocSheetFromServer | null;
+  /** 详情页：高砖 itemList 配货表 */
+  initialFulfillmentSheet?: InitialMocSheetFromServer | null;
   /** 详情页：服务端「标记为不缺」时间戳（ISO），无则 null */
   initialShortageClearedAt?: string | null;
   initialMocLoadError?: string | null;
@@ -108,6 +110,7 @@ export function PartsSheetImport({
   requestedLoadMocId,
   initialFullSheet,
   initialShortageSheet,
+  initialFulfillmentSheet = null,
   initialShortageClearedAt = null,
   initialMocLoadError,
   mocDetailEmbed = false,
@@ -525,6 +528,7 @@ export function PartsSheetImport({
     requestedLoadMocId,
     initialFullSheet,
     initialShortageSheet,
+    initialFulfillmentSheet,
     initialShortageClearedAt,
     initialMocLoadError,
     mocDetailEmbed,
@@ -836,7 +840,7 @@ export function PartsSheetImport({
                 }
                 onClick={() => void fetchShortageFromGobricks()}
               >
-                {gobricksBusy ? "查询中…" : "从高砖获取缺件表"}
+                {gobricksBusy ? "查询中…" : "从高砖同步缺件与配货"}
               </button>
             </span>
           </>
@@ -887,6 +891,11 @@ export function PartsSheetImport({
             ) : null}
             缺件表 {shortageItems ? `${shortageItems.length.toLocaleString("zh-CN")} 行` : "未上传"}
             {shortageFileName ? `（${shortageFileName}）` : ""}
+            {" · "}
+            配货表{" "}
+            {initialFulfillmentSheet
+              ? `${initialFulfillmentSheet.items.length.toLocaleString("zh-CN")} 行（高砖配货表）`
+              : "未同步"}
             。导出请使用下方列表旁的按钮。
             {shortageClearedAtLocal?.trim() && !(shortageItems?.length) ? (
               <>

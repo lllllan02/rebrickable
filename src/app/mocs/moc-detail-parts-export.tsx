@@ -24,9 +24,10 @@ function downloadText(filename: string, text: string) {
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
-  listTab: "full" | "shortage";
+  listTab: "full" | "shortage" | "fulfillment";
   initialFull: InitialMocSheetFromServer | null;
   initialShortage: InitialMocSheetFromServer | null;
+  initialFulfillment: InitialMocSheetFromServer | null;
 };
 
 export function MocDetailPartsListExportBar({
@@ -35,8 +36,10 @@ export function MocDetailPartsListExportBar({
   listTab,
   initialFull,
   initialShortage,
+  initialFulfillment,
 }: Props) {
-  const branch = listTab === "full" ? initialFull : initialShortage;
+  const branch =
+    listTab === "full" ? initialFull : listTab === "shortage" ? initialShortage : initialFulfillment;
   const canExport = Boolean(branch && branch.items.length > 0);
   const exportProgressTitleId = useId();
   const exportProgressDialogRef = useRef<HTMLDialogElement>(null);
@@ -113,7 +116,8 @@ export function MocDetailPartsListExportBar({
     }
   }, [branch, filenameStem]);
 
-  const tabLabel = listTab === "full" ? "完整零件表" : "缺件表";
+  const tabLabel =
+    listTab === "full" ? "完整零件表" : listTab === "fulfillment" ? "配货表" : "缺件表";
 
   return (
     <div className="flex w-full min-w-0 flex-col items-end gap-1 sm:w-auto">

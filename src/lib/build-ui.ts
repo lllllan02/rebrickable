@@ -18,7 +18,7 @@ export type BuildSubjectUi = {
   rbLinkLabel: (subjectId: string) => string;
   rebrickableUrl: (subjectId: string) => string;
   /** 导出文件名前缀 */
-  exportFilenameStem: (subjectId: string, branch: "full" | "shortage") => string;
+  exportFilenameStem: (subjectId: string, branch: "full" | "shortage" | "fulfillment") => string;
 };
 
 export function buildSubjectUi(kind: BuildSubjectKind): BuildSubjectUi {

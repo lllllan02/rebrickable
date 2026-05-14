@@ -191,6 +191,7 @@ export default async function SetDetailPage({ params }: Props) {
   );
 
   let initialShortage: InitialMocSheetFromServer | null = null;
+  let initialFulfillment: InitialMocSheetFromServer | null = null;
   let initialSheetLoadError: string | null = null;
   if (sheet.ok) {
     if (sheet.shortage) {
@@ -199,6 +200,14 @@ export default async function SetDetailPage({ params }: Props) {
         skippedHeader: sheet.shortage.skippedHeader,
         items: sheet.shortage.items,
         savedAt: sheet.shortage.savedAt,
+      };
+    }
+    if (sheet.fulfillment) {
+      initialFulfillment = {
+        subjectId: sheet.subjectId,
+        skippedHeader: sheet.fulfillment.skippedHeader,
+        items: sheet.fulfillment.items,
+        savedAt: sheet.fulfillment.savedAt,
       };
     }
   } else {
@@ -251,6 +260,7 @@ export default async function SetDetailPage({ params }: Props) {
         subjectId={setNum}
         initialFull={null}
         initialShortage={initialShortage}
+        initialFulfillment={initialFulfillment}
         initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
         initialMocLoadError={initialSheetLoadError}
         officialInventory={{

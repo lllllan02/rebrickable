@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   bomToGobricksTestList,
   fetchGobricksLego2MergedPayload,
+  fulfillmentCsvFromGobricksPayload,
   shortageCsvFromGobricksPayload,
 } from "@/lib/gobricks-lego2-item-list";
 
@@ -62,7 +63,13 @@ export async function POST(req: Request) {
       signal: controller.signal,
     });
     const csv = shortageCsvFromGobricksPayload(merged);
-    return NextResponse.json({ ok: true as const, csv, lineCount: testList.length });
+    const fulfillmentCsv = fulfillmentCsvFromGobricksPayload(merged);
+    return NextResponse.json({
+      ok: true as const,
+      csv,
+      fulfillmentCsv,
+      lineCount: testList.length,
+    });
   } catch (e) {
     const msg =
       controller.signal.aborted

@@ -14,13 +14,14 @@ import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/l
 import { buildSubjectUi } from "@/lib/build-ui";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
-type ListTab = "full" | "shortage" | "official";
+type ListTab = "full" | "fulfillment" | "shortage" | "official";
 
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
   initialFull: InitialMocSheetFromServer | null;
   initialShortage: InitialMocSheetFromServer | null;
+  initialFulfillment: InitialMocSheetFromServer | null;
   initialMocLoadError: string | null;
   /** 服务端「标记为不缺」写入的 ISO 时间；无则 null */
   initialShortageClearedAt?: string | null;
@@ -39,6 +40,7 @@ export function MocDetailPartsSection({
   subjectId,
   initialFull,
   initialShortage,
+  initialFulfillment,
   initialMocLoadError,
   initialShortageClearedAt = null,
   officialInventory = null,
@@ -54,6 +56,7 @@ export function MocDetailPartsSection({
   const [listTab, setListTab] = useState<ListTab>(() => {
     if (isSetSubject) return "official";
     if (initialFull) return "full";
+    if (initialFulfillment) return "fulfillment";
     if (initialShortage) return "shortage";
     if (hasOfficial) return "official";
     return "full";
@@ -63,19 +66,27 @@ export function MocDetailPartsSection({
     if (isSetSubject) {
       if (listTab === "full") setListTab("official");
       else if (listTab === "shortage" && !initialShortage) setListTab("official");
+      else if (listTab === "fulfillment" && !initialFulfillment) setListTab("official");
       return;
     }
     if (listTab === "full" && !initialFull) {
-      if (initialShortage) setListTab("shortage");
+      if (initialFulfillment) setListTab("fulfillment");
+      else if (initialShortage) setListTab("shortage");
+      else if (hasOfficial) setListTab("official");
+    } else if (listTab === "fulfillment" && !initialFulfillment) {
+      if (initialFull) setListTab("full");
+      else if (initialShortage) setListTab("shortage");
       else if (hasOfficial) setListTab("official");
     } else if (listTab === "shortage" && !initialShortage) {
       if (initialFull) setListTab("full");
+      else if (initialFulfillment) setListTab("fulfillment");
       else if (hasOfficial) setListTab("official");
     } else if (listTab === "official" && !hasOfficial) {
       if (initialFull) setListTab("full");
+      else if (initialFulfillment) setListTab("fulfillment");
       else if (initialShortage) setListTab("shortage");
     }
-  }, [hasOfficial, initialFull, initialShortage, isSetSubject, listTab]);
+  }, [hasOfficial, initialFull, initialFulfillment, initialShortage, isSetSubject, listTab]);
 
   const persistShortage = useCallback(
     async (items: ShortageResolveItem[], skippedHeader: boolean) => {
@@ -93,9 +104,9 @@ export function MocDetailPartsSection({
     [router, subjectId, subjectKind]
   );
 
-  const hasAnySheet = Boolean(initialFull || initialShortage);
+  const hasAnySheet = Boolean(initialFull || initialShortage || initialFulfillment);
   const hasListArea = isSetSubject
-    ? officialInventory != null || Boolean(initialShortage)
+    ? officialInventory != null || Boolean(initialShortage) || Boolean(initialFulfillment)
     : hasAnySheet || hasOfficial;
 
   const officialMetaLine =
@@ -111,11 +122,15 @@ export function MocDetailPartsSection({
           <p className="text-sm leading-relaxed text-[var(--muted)]">
             {isSetSubject ? (
               <>
-                完整清单来自本地已导入的 Rebrickable 官方库存（
+                「完整零件表」为本地已导入的 Rebrickable 官方库存（
                 <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
                   inventory_parts
                 </code>
-                ），不支持上传完整零件表 CSV。缺件由上方「从高砖获取缺件表」对照本地官方清单写入；可在「缺件表」Tab 查看。已保存的缺件会出现在{" "}
+                ）。「配货表」「缺件表」由上方「从高砖同步」对照官方清单写入（分别对应高砖接口的{" "}
+                <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[12px]">
+                  itemList
+                </code>{" "}
+                与缺件相关列表）。已保存数据会出现在{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   套装列表
                 </Link>{" "}
@@ -127,7 +142,7 @@ export function MocDetailPartsSection({
                 <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
                   rebrickable_parts_*_缺货表.csv
                 </code>{" "}
-                相同结构。可先上传完整零件表，保存后将自动对照高砖写入缺件表；亦可在上方手动「从高砖获取缺件表」。解析成功后写入本 {ui.noun}（两侧互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新记录也可从{" "}
+                相同结构。可先上传完整零件表，保存后将自动对照高砖写入配货表与缺件表；亦可在上方手动同步。解析成功后写入本 {ui.noun}（各表互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新记录也可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}
@@ -156,6 +171,7 @@ export function MocDetailPartsSection({
           requestedLoadMocId={subjectId}
           initialFullSheet={isSetSubject ? null : initialFull}
           initialShortageSheet={initialShortage}
+          initialFulfillmentSheet={initialFulfillment}
           initialShortageClearedAt={initialShortageClearedAt}
           initialMocLoadError={initialMocLoadError}
           mocDetailEmbed
@@ -176,12 +192,27 @@ export function MocDetailPartsSection({
                       }`}
                       onClick={() => setListTab("official")}
                     >
-                      官方清单
+                      完整零件表
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!initialFulfillment}
+                      title={!initialFulfillment ? "尚无配货表，请先用高砖同步" : undefined}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        listTab === "fulfillment"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                      } ${!initialFulfillment ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (initialFulfillment) setListTab("fulfillment");
+                      }}
+                    >
+                      配货表
                     </button>
                     <button
                       type="button"
                       disabled={!initialShortage}
-                      title={!initialShortage ? "尚无缺件表数据，请先用高砖检查" : undefined}
+                      title={!initialShortage ? "尚无缺件表，请先用高砖同步" : undefined}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                         listTab === "shortage"
                           ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
@@ -213,8 +244,23 @@ export function MocDetailPartsSection({
                     </button>
                     <button
                       type="button"
+                      disabled={!initialFulfillment}
+                      title={!initialFulfillment ? "尚无配货表，请先用高砖同步" : undefined}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                        listTab === "fulfillment"
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                          : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                      } ${!initialFulfillment ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (initialFulfillment) setListTab("fulfillment");
+                      }}
+                    >
+                      配货表
+                    </button>
+                    <button
+                      type="button"
                       disabled={!initialShortage}
-                      title={!initialShortage ? "尚无缺件表数据，请先用高砖检查" : undefined}
+                      title={!initialShortage ? "尚无缺件表，请先用高砖同步" : undefined}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                         listTab === "shortage"
                           ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
@@ -242,13 +288,14 @@ export function MocDetailPartsSection({
                   </>
                 )}
               </div>
-              {listTab === "full" || listTab === "shortage" ? (
+              {listTab === "full" || listTab === "shortage" || listTab === "fulfillment" ? (
                 <MocDetailPartsListExportBar
                   subjectKind={subjectKind}
                   subjectId={subjectId}
                   listTab={listTab}
                   initialFull={initialFull}
                   initialShortage={initialShortage}
+                  initialFulfillment={initialFulfillment}
                 />
               ) : null}
             </div>
@@ -258,6 +305,15 @@ export function MocDetailPartsSection({
                 items={initialFull.items}
                 skippedHeader={initialFull.skippedHeader}
                 savedAt={initialFull.savedAt}
+                totalPartQty={undefined}
+                parentSubjectOwned={parentSubjectOwned}
+              />
+            ) : null}
+            {listTab === "fulfillment" && initialFulfillment ? (
+              <MocPartsList
+                items={initialFulfillment.items}
+                skippedHeader={initialFulfillment.skippedHeader}
+                savedAt={initialFulfillment.savedAt}
                 totalPartQty={undefined}
                 parentSubjectOwned={parentSubjectOwned}
               />
@@ -292,9 +348,14 @@ export function MocDetailPartsSection({
                 尚未上传完整零件表，请使用上方「上传完整零件表 CSV」。
               </p>
             ) : null}
+            {listTab === "fulfillment" && !initialFulfillment ? (
+              <p className="text-sm text-[var(--muted)]">
+                尚无配货表，请使用上方「从高砖同步缺件与配货」。
+              </p>
+            ) : null}
             {listTab === "shortage" && !initialShortage ? (
               <p className="text-sm text-[var(--muted)]">
-                尚无缺件表，请使用上方「从高砖获取缺件表」。
+                尚无缺件表，请使用上方「从高砖同步缺件与配货」。
               </p>
             ) : null}
           </div>

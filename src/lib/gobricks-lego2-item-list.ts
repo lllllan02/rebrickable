@@ -172,7 +172,66 @@ function infoFromRow(row: Record<string, unknown>): GobricksInfo | null {
 }
 
 /**
+ * 将高砖 `lego2ItemList` 的 `itemList` 转为配货表 CSV 行（与 {@link parseShortageCsv} 兼容；含 `info.price` 单价列）。
+ * 表示上传完整 BOM 后高砖商城侧可配货（有对应商品）的行。
+ */
+export function fulfillmentSerializeRowsFromGobricksPayload(payload: unknown): {
+  rows: {
+    partNum: string;
+    colorId: number;
+    quantity: number;
+    rest: string;
+    gobricksUnitPrice: string | null;
+  }[];
+} {
+  if (typeof payload !== "object" || payload === null) {
+    return { rows: [] };
+  }
+  const p = payload as Record<string, unknown>;
+  const acc = new Map<string, AccRow>();
+
+  for (const row of asRecordArray(p.itemList)) {
+    const base = readDesignColorQty(row);
+    if (!base) continue;
+    const cid = parseColorId(base.colorid);
+    if (cid === null) continue;
+    bump(acc, base.designid, cid, base.quantity, "高砖商城有货", gobricksUnitPriceFromRow(row));
+  }
+
+  const rows = [...acc.entries()].map(([k, v]) => {
+    const tab = k.indexOf("\t");
+    const partNum = tab >= 0 ? k.slice(0, tab) : k;
+    const colorId = tab >= 0 ? Number(k.slice(tab + 1)) : 0;
+    const uniqRest = [...new Set(v.rests)];
+    const rest = uniqRest.join("·");
+    return {
+      partNum,
+      colorId,
+      quantity: v.quantity,
+      rest,
+      gobricksUnitPrice: v.unitPrice,
+    };
+  });
+
+  rows.sort((a, b) =>
+    a.partNum !== b.partNum
+      ? a.partNum.localeCompare(b.partNum)
+      : a.colorId !== b.colorId
+        ? a.colorId - b.colorId
+        : b.quantity - a.quantity
+  );
+
+  return { rows };
+}
+
+export function fulfillmentCsvFromGobricksPayload(payload: unknown): string {
+  const { rows } = fulfillmentSerializeRowsFromGobricksPayload(payload);
+  return serializeShortageCsv(rows, { includeHeader: true });
+}
+
+/**
  * 将高砖 `lego2ItemList` 的若干列表合并为缺件 CSV 行（与 {@link parseShortageCsv} 兼容；含 `info.price` 单价列）。
+ * `missList` 等为高砖无法按需求完全满足的部分；与 {@link fulfillmentSerializeRowsFromGobricksPayload} 的 `itemList` 分列存储。
  */
 export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
   rows: {
@@ -344,6 +403,7 @@ export async function fetchGobricksLego2MergedPayload(
   if (testList.length === 0) {
     return {
       missList: [],
+      itemList: [],
       inventoryDeficiency: [],
       colorDeficiency: [],
       buyLimitList: [],
@@ -354,6 +414,7 @@ export async function fetchGobricksLego2MergedPayload(
 
   const merged: Record<string, unknown[]> = {
     missList: [],
+    itemList: [],
     inventoryDeficiency: [],
     colorDeficiency: [],
     buyLimitList: [],
@@ -374,6 +435,7 @@ export async function fetchGobricksLego2MergedPayload(
 
   return {
     missList: merged.missList,
+    itemList: merged.itemList,
     inventoryDeficiency: merged.inventoryDeficiency,
     colorDeficiency: merged.colorDeficiency,
     buyLimitList: merged.buyLimitList,

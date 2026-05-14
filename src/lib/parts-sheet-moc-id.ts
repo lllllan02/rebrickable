@@ -27,12 +27,15 @@ export type MocPartsSheetPayloadV2 = {
   full: MocSheetBranchPayload | null;
   /** 未上传缺件表时为 null */
   shortage: MocSheetBranchPayload | null;
+  /** 高砖 `itemList` 对照得到的配货表；无则为 null */
+  fulfillment: MocSheetBranchPayload | null;
 };
 
 /** 内存中归一化结构（含从 v1 迁移）；至少一侧非空 */
 export type StoredMocDualSheets = {
   full: MocSheetBranchPayload | null;
   shortage: MocSheetBranchPayload | null;
+  fulfillment: MocSheetBranchPayload | null;
 };
 
 export function parseMocIdFromFilename(fileName: string): string | null {
@@ -213,8 +216,14 @@ export function parseStoredMocDualSheets(raw: unknown): StoredMocDualSheets | nu
         : isSheetBranchPayload(o.shortage)
           ? (o.shortage as MocSheetBranchPayload)
           : null;
-    if (!full && !shortage) return null;
-    return { full, shortage };
+    const fulfillment =
+      o.fulfillment === null
+        ? null
+        : isSheetBranchPayload(o.fulfillment)
+          ? (o.fulfillment as MocSheetBranchPayload)
+          : null;
+    if (!full && !shortage && !fulfillment) return null;
+    return { full, shortage, fulfillment };
   }
 
   if (o.version === 1) {
@@ -230,6 +239,7 @@ export function parseStoredMocDualSheets(raw: unknown): StoredMocDualSheets | nu
         savedAt: o.savedAt,
       },
       shortage: null,
+      fulfillment: null,
     };
   }
 
@@ -249,13 +259,14 @@ export function parseStoredMocPartsSheet(raw: unknown): MocPartsSheetPayloadV1 |
 }
 
 export function dualSheetsToPayloadV2(dual: StoredMocDualSheets): MocPartsSheetPayloadV2 {
-  if (!dual.full && !dual.shortage) {
+  if (!dual.full && !dual.shortage && !dual.fulfillment) {
     throw new Error("dualSheetsToPayloadV2: 至少一侧须有数据");
   }
   return {
     version: 2,
     full: dual.full,
     shortage: dual.shortage,
+    fulfillment: dual.fulfillment,
   };
 }
 

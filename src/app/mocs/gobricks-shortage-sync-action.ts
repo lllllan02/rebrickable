@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  clearFulfillmentBranchInDb,
   loadBuildPartsSheetFromDb,
   saveBuildPartsSheetToDb,
   setGobricksShortageSyncAtInDb,
@@ -9,6 +10,7 @@ import {
 import {
   bomToGobricksTestList,
   fetchGobricksLego2MergedPayload,
+  fulfillmentCsvFromGobricksPayload,
   readGdsPriceCnyFromMergedGobricksPayload,
   shortageCsvFromGobricksPayload,
 } from "@/lib/gobricks-lego2-item-list";
@@ -38,7 +40,15 @@ async function recordGobricksShortageSyncOk(
 export async function syncGobricksShortageForSubjectAction(input: {
   subjectKind: BuildSubjectKind;
   subjectId: string;
-}): Promise<{ ok: true; shortageLines: number; message: string } | { ok: false; error: string }> {
+}): Promise<
+  | {
+      ok: true;
+      shortageLines: number;
+      fulfillmentLines: number;
+      message: string;
+    }
+  | { ok: false; error: string }
+> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
     return { ok: false, error: "主体 ID 无效。" };
@@ -86,55 +96,105 @@ export async function syncGobricksShortageForSubjectAction(input: {
     clearTimeout(timer);
   }
 
-  const csv = shortageCsvFromGobricksPayload(merged);
-  const resolved = await resolveShortageCsvInDb(csv);
-  if (!resolved.ok) {
-    return { ok: false, error: resolved.error };
+  const shortageCsv = shortageCsvFromGobricksPayload(merged);
+  const fulfillmentCsv = fulfillmentCsvFromGobricksPayload(merged);
+
+  const shortageResolved = await resolveShortageCsvInDb(shortageCsv);
+  if (!shortageResolved.ok) {
+    return { ok: false, error: shortageResolved.error };
+  }
+
+  const fulfillmentResolved = await resolveShortageCsvInDb(fulfillmentCsv);
+  if (!fulfillmentResolved.ok) {
+    return { ok: false, error: fulfillmentResolved.error };
   }
 
   const gdsPriceCny = readGdsPriceCnyFromMergedGobricksPayload(merged);
+  const shortageLines = shortageResolved.items.length;
+  const fulfillmentLines = fulfillmentResolved.items.length;
 
-  if (resolved.items.length === 0) {
-    if (input.subjectKind === BUILD_SUBJECT_MOC) {
-      const strip = await stripShortageBranchKeepingFullInDb({
-        subjectKind: input.subjectKind,
-        subjectId,
-      });
-      await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
-      if (!strip.ok) {
-        return {
-          ok: true,
-          shortageLines: 0,
-          message: "高砖无缺件；缺件表未写入（无法自动清空已存缺件，请见详情页）。",
-        };
-      }
-      return { ok: true, shortageLines: 0, message: "高砖无缺件，已清空缺件表。" };
+  if (fulfillmentLines > 0) {
+    const fs = await saveBuildPartsSheetToDb({
+      subjectKind: input.subjectKind,
+      subjectId,
+      kind: "fulfillment",
+      skippedHeader: fulfillmentResolved.skippedHeader,
+      items: fulfillmentResolved.items,
+      sourceFileName: "高砖配货表.csv",
+    });
+    if (!fs.ok) {
+      return { ok: false, error: fs.error };
+    }
+  } else {
+    const clr = await clearFulfillmentBranchInDb({
+      subjectKind: input.subjectKind,
+      subjectId,
+    });
+    if (!clr.ok && clr.error !== "尚无已保存的零件表记录。") {
+      return { ok: false, error: clr.error };
+    }
+  }
+
+  if (shortageLines > 0) {
+    const save = await saveBuildPartsSheetToDb({
+      subjectKind: input.subjectKind,
+      subjectId,
+      kind: "shortage",
+      skippedHeader: shortageResolved.skippedHeader,
+      items: shortageResolved.items,
+      sourceFileName: "高砖缺件查询.csv",
+    });
+    if (!save.ok) {
+      return { ok: false, error: save.error };
     }
     await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
     return {
       ok: true,
-      shortageLines: 0,
-      message: "高砖无缺件；已存缺件表未更改（套装记录无完整表占位时无法自动清空）。",
+      shortageLines,
+      fulfillmentLines,
+      message:
+        `已写入 ${shortageLines.toLocaleString("zh-CN")} 条缺件` +
+        (fulfillmentLines > 0 ? `、${fulfillmentLines.toLocaleString("zh-CN")} 条配货。` : "；高砖未返回可配货行，配货表已清空。"),
     };
   }
 
-  const save = await saveBuildPartsSheetToDb({
-    subjectKind: input.subjectKind,
-    subjectId,
-    kind: "shortage",
-    skippedHeader: resolved.skippedHeader,
-    items: resolved.items,
-    sourceFileName: "高砖缺件查询.csv",
-  });
-  if (!save.ok) {
-    return { ok: false, error: save.error };
+  if (input.subjectKind === BUILD_SUBJECT_MOC) {
+    const strip = await stripShortageBranchKeepingFullInDb({
+      subjectKind: input.subjectKind,
+      subjectId,
+    });
+    await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
+    if (!strip.ok) {
+      return {
+        ok: true,
+        shortageLines: 0,
+        fulfillmentLines,
+        message:
+          "高砖无缺件；缺件表未写入（无法自动清空已存缺件，请见详情页）。\n\n" +
+          (fulfillmentLines > 0
+            ? `已写入 ${fulfillmentLines.toLocaleString("zh-CN")} 条配货。`
+            : "配货表已清空（高砖未返回可配货行）。"),
+      };
+    }
+    return {
+      ok: true,
+      shortageLines: 0,
+      fulfillmentLines,
+      message:
+        fulfillmentLines > 0
+          ? `高砖无缺件，已清空缺件表；已写入 ${fulfillmentLines.toLocaleString("zh-CN")} 条配货。`
+          : "高砖无缺件，已清空缺件表；未返回可配货行，配货表已清空。",
+    };
   }
 
   await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
-
   return {
     ok: true,
-    shortageLines: resolved.items.length,
-    message: `已写入 ${resolved.items.length.toLocaleString("zh-CN")} 条缺件。`,
+    shortageLines: 0,
+    fulfillmentLines,
+    message:
+      fulfillmentLines > 0
+        ? `高砖无缺件；已存缺件表未更改（套装记录无完整表占位时无法自动清空）。已写入 ${fulfillmentLines.toLocaleString("zh-CN")} 条配货。`
+        : "高砖无缺件；已存缺件表未更改。未返回可配货行，配货表已清空。",
   };
 }
