@@ -267,8 +267,9 @@ export function SheetRowReplacePanel({
     }
     setBusy(true);
     setActionError(null);
-    const pickedPicture =
-      gobricksVariants?.find((c) => c.colorId === colorId)?.picture?.trim() || null;
+    const hit = gobricksVariants?.find((c) => c.colorId === colorId);
+    const pickedPicture = hit?.picture?.trim() || null;
+    const labelLine = [pickedPartName.trim(), selectedColorLabel].filter(Boolean).join(" / ");
     const res = await replaceBuildPartsSheetRowAction({
       subjectKind: context.subjectKind,
       subjectId: context.subjectId,
@@ -277,6 +278,10 @@ export function SheetRowReplacePanel({
       partNum: pn,
       colorId,
       gdsPicture: pickedPicture,
+      gdsItemId: hit?.gdsItemId ?? null,
+      gdsColorId: hit?.gdsColorId ?? null,
+      gdsCaption: labelLine || null,
+      gdsLegoColorId: String(colorId),
     });
     setBusy(false);
     if (!res.ok) {
@@ -284,7 +289,18 @@ export function SheetRowReplacePanel({
       return;
     }
     onReplaced();
-  }, [colorId, context.branch, context.subjectId, context.subjectKind, gobricksVariants, item.lineNumber, onReplaced, pickedPart]);
+  }, [
+    colorId,
+    context.branch,
+    context.subjectId,
+    context.subjectKind,
+    gobricksVariants,
+    item.lineNumber,
+    onReplaced,
+    pickedPart,
+    pickedPartName,
+    selectedColorLabel,
+  ]);
 
   const backToParts = useCallback(() => {
     setCategoryPickerOpen(false);

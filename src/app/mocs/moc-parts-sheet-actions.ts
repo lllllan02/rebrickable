@@ -22,9 +22,17 @@ import {
   type StoredMocDualSheets,
 } from "@/lib/parts-sheet-moc-id";
 import { resolveGobricksSheetSerializedRowsInDb } from "@/lib/parts-sheet-resolve-csv-db";
-import { listGobricksStockColorsForSheetReplaceAction } from "@/app/mocs/sheet-row-replace-catalog-action";
+import {
+  listGobricksStockColorsForSheetReplaceAction,
+  type SheetReplaceGobricksStockColor,
+} from "@/app/mocs/sheet-row-replace-catalog-action";
+import {
+  parseGobricksProductIdFromGdsItemId,
+  parseGdsColorSegmentFromGdsItemId,
+} from "@/lib/gobricks-item-filter-inventory";
 import {
   appendSheetRowReplacedMarker,
+  mergeSheetRowReplaceSnapshotForPersist,
   parseSheetRowReplaceMeta,
   stripSheetRowReplacedMarker,
 } from "@/lib/sheet-row-replaced-marker";
@@ -973,6 +981,13 @@ export async function replaceBuildPartsSheetRowAction(input: {
   colorId: number;
   /** 选色步高砖有货 SKU 的 `picture` 字段（商品图 URL），须与 `colorId` 对应 */
   gdsPicture?: string | null;
+  /** 高砖商品 ID（如 GDS-656-072），与选色 SKU 一致 */
+  gdsItemId?: string | null;
+  gdsColorId?: string | null;
+  /** 展示用商品名（可与零件名 + 色名组合） */
+  gdsCaption?: string | null;
+  /** 高砖侧乐高色 ID（字符串），通常与 `colorId` 一致 */
+  gdsLegoColorId?: string | null;
 }): Promise<ReplaceBuildPartsSheetRowResult> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
@@ -1024,9 +1039,14 @@ export async function replaceBuildPartsSheetRowAction(input: {
     meta.originalPartNum != null && meta.originalColorId != null
       ? { partNum: meta.originalPartNum, colorId: meta.originalColorId }
       : { partNum: old.partNum, colorId: old.colorId };
+  const preservedSnapshot = mergeSheetRowReplaceSnapshotForPersist(meta, old);
 
   const preservedUnit = effectiveSheetRowUnitPriceForSerialize(old);
   const pickerGdsPicture = trimGdsPictureForSheetSerialize(input.gdsPicture);
+  const gdsItemIdIn = input.gdsItemId?.trim() || null;
+  const gdsColorIdIn = input.gdsColorId?.trim() || null;
+  const gdsCaptionIn = input.gdsCaption?.trim() || null;
+  const gdsLegoColorIdIn = input.gdsLegoColorId?.trim() || null;
 
   const serialized: GobricksSheetSerializedRow = {
     partNum,
@@ -1034,14 +1054,14 @@ export async function replaceBuildPartsSheetRowAction(input: {
     quantity: old.quantity,
     rest: stripSheetRowReplacedMarker(old.rest),
     gobricksUnitPrice: preservedUnit,
-    gdsItemId: null,
-    gdsColorId: null,
+    gdsItemId: gdsItemIdIn,
+    gdsColorId: gdsColorIdIn,
     gdsPicture: pickerGdsPicture,
     gdsUnitPrice: preservedUnit,
-    gdsCaption: null,
+    gdsCaption: gdsCaptionIn,
     gdsCaptionEn: null,
     gdsShelfState: null,
-    gdsLegoColorId: null,
+    gdsLegoColorId: gdsLegoColorIdIn ?? String(Math.trunc(input.colorId)),
   };
 
   const resolved = await resolveGobricksSheetSerializedRowsInDb([serialized]);
@@ -1059,7 +1079,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
     quantity: old.quantity,
     rest: appendSheetRowReplacedMarker(
       input.branch === "shortage" ? stripShortageReasonTextFromRest(old.rest) : old.rest,
-      preservedOriginal
+      preservedOriginal,
+      preservedSnapshot
     ),
   };
 
@@ -1103,8 +1124,35 @@ export async function replaceBuildPartsSheetRowAction(input: {
   return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
 }
 
+function normalizeSheetGdsItemIdForCompare(s: string): string {
+  return s.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+/** 优先有货 + 乐高色；否则按快照 GDS SKU；再否则仅乐高色（可与 includeZeroInventory 配合） */
+function pickGobricksStockForRestore(
+  variants: SheetReplaceGobricksStockColor[],
+  wantLegoColorId: number,
+  originalGdsItemId: string | null,
+): SheetReplaceGobricksStockColor | null {
+  const want = Math.trunc(Number(wantLegoColorId));
+  const strict = variants.find(
+    (v) => Math.trunc(Number(v.colorId)) === want && Number(v.inventory) > 0
+  );
+  if (strict) return strict;
+
+  const ogi = originalGdsItemId?.trim();
+  if (ogi) {
+    const n = normalizeSheetGdsItemIdForCompare(ogi);
+    const bySku = variants.find((v) => normalizeSheetGdsItemIdForCompare(v.gdsItemId) === n);
+    if (bySku) return bySku;
+  }
+
+  return variants.find((v) => Math.trunc(Number(v.colorId)) === want) ?? null;
+}
+
 /**
- * 将「更换零件」行还原为记录中的原零件号与颜色；先校验高砖该 SKU 对应乐高色是否有库存。
+ * 将「更换零件」行还原为记录中的原零件号与颜色。
+ * 优先用高砖有货列表；若无货则仍按原 GDS SKU / 快照解析还原（更换前能买到即可回写表内）。
  */
 export async function restoreBuildPartsSheetRowAction(input: {
   subjectKind: BuildSubjectKind;
@@ -1159,17 +1207,57 @@ export async function restoreBuildPartsSheetRowAction(input: {
     return { ok: false, error: "当前已是原零件，无需还原。" };
   }
 
-  const stock = await listGobricksStockColorsForSheetReplaceAction({
+  const wantColor = Math.trunc(Number(colorId));
+  const originalGds = meta.originalGobricksItemId?.trim() || null;
+
+  let stock = await listGobricksStockColorsForSheetReplaceAction({
     partNum,
     sheetRowPartNum: partNum,
-    sheetRowGdsItemId: null,
+    sheetRowGdsItemId: originalGds,
     probeLegoColorId: colorId,
   });
   if (!stock.ok) {
     return { ok: false, error: stock.error };
   }
-  const hit = stock.variants.find((v) => v.colorId === colorId && v.inventory > 0);
+
+  let hit = pickGobricksStockForRestore(stock.variants, wantColor, originalGds);
+
   if (!hit) {
+    stock = await listGobricksStockColorsForSheetReplaceAction({
+      partNum,
+      sheetRowPartNum: partNum,
+      sheetRowGdsItemId: originalGds,
+      probeLegoColorId: colorId,
+      includeZeroInventory: true,
+    });
+    if (!stock.ok) {
+      return { ok: false, error: stock.error };
+    }
+    hit = pickGobricksStockForRestore(stock.variants, wantColor, originalGds);
+  }
+
+  let restoreGdsItemId: string;
+  let restoreGdsColorId: string;
+  let restoreGdsPicture: string | null;
+
+  if (hit) {
+    restoreGdsItemId = hit.gdsItemId;
+    restoreGdsColorId = hit.gdsColorId;
+    restoreGdsPicture = hit.picture?.trim() || null;
+  } else if (originalGds && parseGobricksProductIdFromGdsItemId(originalGds)) {
+    const gcd =
+      parseGdsColorSegmentFromGdsItemId(originalGds) ?? meta.originalGobricksColorId?.trim() ?? null;
+    if (!gcd) {
+      return {
+        ok: false,
+        error:
+          "高砖库存接口未返回该原 SKU，且无法从快照解析高砖色 ID。可稍后重试或在「更换零件」中手动改回原行。",
+      };
+    }
+    restoreGdsItemId = originalGds;
+    restoreGdsColorId = gcd;
+    restoreGdsPicture = meta.originalGobricksPicture?.trim() || null;
+  } else {
     return {
       ok: false,
       error: "高砖当前无该原零件此乐高色的有效库存，无法还原。可稍后重试或手动更换。",
@@ -1185,14 +1273,14 @@ export async function restoreBuildPartsSheetRowAction(input: {
     quantity: old.quantity,
     rest: cleanRest,
     gobricksUnitPrice: preservedUnit,
-    gdsItemId: null,
-    gdsColorId: null,
-    gdsPicture: null,
+    gdsItemId: restoreGdsItemId,
+    gdsColorId: restoreGdsColorId,
+    gdsPicture: restoreGdsPicture,
     gdsUnitPrice: preservedUnit,
     gdsCaption: null,
     gdsCaptionEn: null,
     gdsShelfState: null,
-    gdsLegoColorId: null,
+    gdsLegoColorId: String(colorId),
   };
 
   const resolved = await resolveGobricksSheetSerializedRowsInDb([serialized]);

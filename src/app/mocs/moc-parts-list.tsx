@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import {
@@ -189,21 +189,39 @@ function CatalogImageFigure({
   label,
   imageUrl,
   sizes,
+  compact = false,
+  /** 为 false 时不显示顶部说明（用于「图旁摘要」横排，由栏目标题承担语义） */
+  showCaption = true,
 }: {
   label: string;
   imageUrl: string;
   sizes: string;
+  /** 详情弹层内缩小主图区域 */
+  compact?: boolean;
+  showCaption?: boolean;
 }) {
   return (
-    <figure className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)]">
-      <figcaption className="px-3 pb-0 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)]">
-        {label}
-      </figcaption>
-      <div className="relative mx-auto aspect-square w-full max-w-[18rem] min-h-[10rem]">
+    <figure className="overflow-hidden rounded-lg border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)]">
+      {showCaption ? (
+        <figcaption
+          className={`pb-0 font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)] ${
+            compact ? "px-2 pt-1.5 text-[9px]" : "px-3 pt-2.5 text-[10px]"
+          }`}
+        >
+          {label}
+        </figcaption>
+      ) : null}
+      <div
+        className={`relative mx-auto aspect-square w-full overflow-hidden ${
+          compact
+            ? "max-w-[min(10rem,42vw)] min-h-[7rem] sm:max-w-[11rem] sm:min-h-[7.5rem]"
+            : "max-w-[min(13rem,48vw)] min-h-[8rem] sm:max-w-[14rem] sm:min-h-[8.5rem]"
+        }`}
+      >
         <RemoteCoverImage
           src={imageUrl}
           fill
-          className="object-contain p-3 sm:p-4"
+          className={compact ? "object-contain p-2" : "object-contain p-2.5 sm:p-3"}
           sizes={sizes}
           fallbackLabel="无图"
         />
@@ -212,9 +230,361 @@ function CatalogImageFigure({
   );
 }
 
+function SheetReplaceQuadThumb({
+  imageUrl,
+  emptyLabel,
+}: {
+  imageUrl: string | null;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="relative h-[3.75rem] w-[3.75rem] shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-[4.25rem] sm:w-[4.25rem]">
+      {imageUrl ? (
+        <RemoteCoverImage
+          src={imageUrl}
+          width={128}
+          height={128}
+          className="h-full w-full object-contain p-1"
+          sizes="72px"
+          fallbackLabel="无图"
+          fallbackClassName="!text-[10px]"
+        />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] leading-tight text-[var(--muted)] sm:text-[11px]">
+          {emptyLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const SHEET_QUAD_CELL_SHELL =
+  "flex min-h-0 flex-col gap-1.5 rounded-md border border-[var(--border-soft)] bg-[rgba(7,10,18,0.28)] p-2 sm:gap-2 sm:p-2.5";
+const SHEET_QUAD_CELL_TITLE =
+  "text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)] sm:text-[11px]";
+const SHEET_QUAD_BODY_BASE =
+  "min-w-0 flex-1 space-y-1.5 text-xs leading-snug sm:space-y-2 sm:text-[13px] sm:leading-snug";
+const SHEET_QUAD_PART_LINK =
+  "break-all font-mono text-[13px] font-semibold sm:text-sm";
+
+function SheetReplaceQuadRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] font-medium text-[var(--muted-2)] sm:text-[11px]">{label}</div>
+      <div className="mt-0.5 text-[12px] text-[var(--text)] sm:text-[13px]">{children}</div>
+    </div>
+  );
+}
+
+function sheetRowCurrentGobricksColorLine(item: ShortageResolveItem): string {
+  return item.gdsColorId?.trim()
+    ? `高砖色 ${item.gdsColorId.trim()}`
+    : item.gdsLegoColorId?.trim()
+      ? `接口乐高色 ${item.gdsLegoColorId.trim()}`
+      : item.colorName
+        ? `乐高色 ${item.colorName}（${item.colorId}）`
+        : `乐高色 ID ${item.colorId}`;
+}
+
+/** 与四宫格「现·乐高」同字段与样式，标题可传「乐高」或「现·乐高」 */
+function SheetReplaceCurrentLegoCell({
+  title,
+  item,
+  onClose,
+}: {
+  title: string;
+  item: ShortageResolveItem;
+  onClose: () => void;
+}) {
+  const curLegoImg = item.imgUrl?.trim() || null;
+  const curColorLine = item.colorName
+    ? `${item.colorName}（${item.colorId}）`
+    : `色 ID ${item.colorId}`;
+  const curLegoNameLine =
+    item.partFound && item.partName?.trim()
+      ? item.partName.trim()
+      : item.partFound
+        ? "（无名称）"
+        : "—";
+  const partLink = SHEET_QUAD_PART_LINK;
+  const curLegoIdBlock = item.partFound ? (
+    <Link
+      href={`/parts/${encodeURIComponent(item.partNum)}`}
+      className={`${partLink} text-[var(--accent)] no-underline hover:underline`}
+      onClick={onClose}
+    >
+      {item.partNum}
+    </Link>
+  ) : (
+    <span className={`${partLink} text-[var(--text)]`}>{item.partNum}</span>
+  );
+  return (
+    <div className={SHEET_QUAD_CELL_SHELL}>
+      <div className={SHEET_QUAD_CELL_TITLE}>{title}</div>
+      <div className="flex items-start gap-2 sm:gap-2.5">
+        <SheetReplaceQuadThumb
+          imageUrl={curLegoImg}
+          emptyLabel={item.partFound ? "无图" : "未收录"}
+        />
+        <div className={SHEET_QUAD_BODY_BASE}>
+          <SheetReplaceQuadRow label="ID">{curLegoIdBlock}</SheetReplaceQuadRow>
+          <SheetReplaceQuadRow label="名称">
+            <span className="line-clamp-2">{curLegoNameLine}</span>
+          </SheetReplaceQuadRow>
+          <SheetReplaceQuadRow label="颜色">{curColorLine}</SheetReplaceQuadRow>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 与四宫格「现·高砖」同字段与样式 */
+function SheetReplaceCurrentGobricksCell({ title, item }: { title: string; item: ShortageResolveItem }) {
+  const curGdsPic = item.gdsPicture?.trim() || null;
+  const unitText = sheetRowGobricksUnitPriceText(item);
+  const curGobricksColorLine = sheetRowCurrentGobricksColorLine(item);
+  return (
+    <div className={SHEET_QUAD_CELL_SHELL}>
+      <div className={SHEET_QUAD_CELL_TITLE}>{title}</div>
+      <div className="flex items-start gap-2 sm:gap-2.5">
+        <SheetReplaceQuadThumb imageUrl={curGdsPic} emptyLabel="无商品图" />
+        <div className={SHEET_QUAD_BODY_BASE}>
+          <SheetReplaceQuadRow label="ID">
+            <span className="break-all font-mono">{item.gdsItemId?.trim() ?? "—"}</span>
+          </SheetReplaceQuadRow>
+          <SheetReplaceQuadRow label="名称">
+            <span className="line-clamp-3">{item.gdsCaption?.trim() ?? "—"}</span>
+          </SheetReplaceQuadRow>
+          <SheetReplaceQuadRow label="颜色">{curGobricksColorLine}</SheetReplaceQuadRow>
+          <SheetReplaceQuadRow label="单价（元）">
+            <span className="font-mono">{unitText ?? "—"}</span>
+          </SheetReplaceQuadRow>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 未更换行：仅乐高 + 高砖两格，与四宫格现侧字段、样式一致 */
+function SheetLegoGobricksTwinCatalog({ item, onClose }: { item: ShortageResolveItem; onClose: () => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-3" aria-label="乐高与高砖">
+      <SheetReplaceCurrentLegoCell title="乐高" item={item} onClose={onClose} />
+      <SheetReplaceCurrentGobricksCell title="高砖" item={item} />
+    </div>
+  );
+}
+
+function SheetReplaceFourQuadrants({
+  replaceMeta,
+  item,
+  onClose,
+}: {
+  replaceMeta: ReturnType<typeof parseSheetRowReplaceMeta>;
+  item: ShortageResolveItem;
+  onClose: () => void;
+}) {
+  const opn = replaceMeta.originalPartNum;
+  const ocid = replaceMeta.originalColorId;
+  const hasOrigLego = opn != null && ocid != null;
+  const origLegoImg = replaceMeta.originalLegoImgUrl?.trim() || null;
+  const origGdsPic = replaceMeta.originalGobricksPicture?.trim() || null;
+  const origGdsId = replaceMeta.originalGobricksItemId?.trim() || null;
+  const hasOrigGobricksData = Boolean(
+    origGdsPic ||
+      origGdsId ||
+      replaceMeta.originalGobricksCaption?.trim() ||
+      replaceMeta.originalGobricksColorId?.trim() ||
+      replaceMeta.originalGobricksLegoColorId?.trim() ||
+      replaceMeta.originalGobricksUnitPrice?.trim()
+  );
+
+  const partLink = SHEET_QUAD_PART_LINK;
+
+  const origLegoName = replaceMeta.originalLegoPartName?.trim() || "—";
+  const origLegoColorLine =
+    hasOrigLego && replaceMeta.originalColorName?.trim()
+      ? `${replaceMeta.originalColorName.trim()}（${ocid}）`
+      : hasOrigLego
+        ? `色 ID ${ocid}`
+        : "—";
+
+  const origGobricksCaption = replaceMeta.originalGobricksCaption?.trim() || "—";
+  const ogc = replaceMeta.originalGobricksColorId?.trim();
+  const oglc = replaceMeta.originalGobricksLegoColorId?.trim();
+  const origGobricksColorLine = ogc
+    ? `高砖色 ${ogc}`
+    : oglc
+      ? `接口乐高色 ${oglc}`
+      : "—";
+  const origGobricksPrice = replaceMeta.originalGobricksUnitPrice?.trim() ?? "—";
+
+  return (
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-3" aria-label="更换前后·乐高与高砖">
+      <div className={SHEET_QUAD_CELL_SHELL}>
+        <div className={SHEET_QUAD_CELL_TITLE}>原·乐高</div>
+        <div className="flex items-start gap-2 sm:gap-2.5">
+          <SheetReplaceQuadThumb imageUrl={origLegoImg} emptyLabel={hasOrigLego ? "无图" : "—"} />
+          <div className={SHEET_QUAD_BODY_BASE}>
+            {hasOrigLego ? (
+              <>
+                <SheetReplaceQuadRow label="ID">
+                  <Link
+                    href={`/parts/${encodeURIComponent(opn)}`}
+                    className={`${partLink} text-[var(--accent)] no-underline hover:underline`}
+                    onClick={onClose}
+                  >
+                    {opn}
+                  </Link>
+                </SheetReplaceQuadRow>
+                <SheetReplaceQuadRow label="名称">
+                  <span className="line-clamp-2">{origLegoName}</span>
+                </SheetReplaceQuadRow>
+                <SheetReplaceQuadRow label="颜色">{origLegoColorLine}</SheetReplaceQuadRow>
+              </>
+            ) : (
+              <p className="text-[12px] leading-relaxed text-[var(--muted)] sm:text-[13px]">原乐高未存档</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className={SHEET_QUAD_CELL_SHELL}>
+        <div className={SHEET_QUAD_CELL_TITLE}>原·高砖</div>
+        <div className="flex items-start gap-2 sm:gap-2.5">
+          <SheetReplaceQuadThumb
+            imageUrl={origGdsPic}
+            emptyLabel={hasOrigGobricksData ? "无图" : "未存档"}
+          />
+          <div className={SHEET_QUAD_BODY_BASE}>
+            {!hasOrigGobricksData ? (
+              <p className="text-[12px] leading-relaxed text-[var(--muted)] sm:text-[13px]">更换前未写入快照</p>
+            ) : (
+              <>
+                <SheetReplaceQuadRow label="ID">
+                  <span className="break-all font-mono">{origGdsId ?? "—"}</span>
+                </SheetReplaceQuadRow>
+                <SheetReplaceQuadRow label="名称">
+                  <span className="line-clamp-3">{origGobricksCaption}</span>
+                </SheetReplaceQuadRow>
+                <SheetReplaceQuadRow label="颜色">{origGobricksColorLine}</SheetReplaceQuadRow>
+                <SheetReplaceQuadRow label="单价（元）">
+                  <span className="font-mono">{origGobricksPrice}</span>
+                </SheetReplaceQuadRow>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <SheetReplaceCurrentLegoCell title="现·乐高" item={item} onClose={onClose} />
+      <SheetReplaceCurrentGobricksCell title="现·高砖" item={item} />
+    </div>
+  );
+}
+
 function sheetRowGobricksUnitPriceText(r: ShortageResolveItem): string | null {
   const u = (r.gdsUnitPrice ?? r.gobricksUnitPrice ?? "").trim();
   return u || null;
+}
+
+function LegoCatalogAsideFacts({
+  item,
+  heroTitle,
+  titleId,
+  onClose,
+  compact,
+}: {
+  item: ShortageResolveItem;
+  heroTitle: string;
+  titleId: string;
+  onClose: () => void;
+  compact: boolean;
+}) {
+  const tit = compact
+    ? "text-base font-semibold leading-snug text-[var(--accent)] sm:text-lg"
+    : "text-lg font-semibold leading-snug text-[var(--accent)] sm:text-xl sm:leading-snug";
+  return (
+    <div className="min-w-0 flex-1">
+      <h2 id={titleId} className={tit}>
+        {heroTitle}
+      </h2>
+      <p
+        className={`mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 leading-relaxed text-[var(--muted)] ${
+          compact ? "text-xs sm:text-[13px]" : "text-sm"
+        }`}
+      >
+        <span className={`font-mono font-medium text-[var(--text)] ${compact ? "text-[12px]" : "text-[13px]"}`}>
+          {item.partNum}
+        </span>
+        {item.partCatName ? <span>· {item.partCatName}</span> : null}
+        <span className="text-[var(--muted-2)]">· 第 {item.lineNumber} 行</span>
+      </p>
+      <p className="mt-1 text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]">
+        {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
+      </p>
+      {item.imgSource === "part" ? (
+        <p className="mt-1 text-[10px] leading-snug text-[var(--muted)]">当前颜色无库存图，目录图为其它颜色。</p>
+      ) : null}
+      {item.partFound ? (
+        <p className="mt-1.5">
+          <Link
+            href={`/parts/${encodeURIComponent(item.partNum)}`}
+            className="text-xs font-medium text-[var(--accent)] no-underline hover:underline sm:text-sm"
+            onClick={onClose}
+          >
+            查看完整零件页 →
+          </Link>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function GobricksCatalogAsideFacts({
+  item,
+  forceShowUnitPrice,
+  compact,
+}: {
+  item: ShortageResolveItem;
+  forceShowUnitPrice: boolean;
+  compact: boolean;
+}) {
+  const unit = item.gdsUnitPrice?.trim() || item.gobricksUnitPrice?.trim() || null;
+  const cap = item.gdsCaption?.trim();
+  const gid = item.gdsItemId?.trim() ?? "";
+
+  const rowLabel = "text-[10px] font-medium text-[var(--muted-2)] sm:text-[11px]";
+  const rowVal = "mt-0.5 text-[12px] text-[var(--text)] sm:text-[13px]";
+
+  const colorLine = item.gdsColorId?.trim()
+    ? `高砖色 ${item.gdsColorId.trim()}`
+    : item.gdsLegoColorId?.trim()
+      ? `接口乐高色 ${item.gdsLegoColorId.trim()}`
+      : "—";
+
+  return (
+    <div className={`min-w-0 flex-1 ${compact ? "space-y-1.5" : "space-y-2"}`}>
+      <div>
+        <div className={rowLabel}>ID</div>
+        <div className={`${rowVal} break-all font-mono`}>{gid || "—"}</div>
+      </div>
+      <div>
+        <div className={rowLabel}>名称</div>
+        <div className={`${rowVal} line-clamp-3`}>{cap ?? "—"}</div>
+      </div>
+      <div>
+        <div className={rowLabel}>颜色</div>
+        <div className={rowVal}>{colorLine}</div>
+      </div>
+      {unit || forceShowUnitPrice ? (
+        <div>
+          <div className={rowLabel}>单价（元）</div>
+          <div className={`${rowVal} font-mono`}>{unit ?? "—"}</div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function GobricksDetailSection({
@@ -222,29 +592,47 @@ function GobricksDetailSection({
   showHeading = true,
   /** 配货表：无其它高砖字段时也展示单价行（无则「—」） */
   forceShowUnitPrice = false,
+  compact = false,
+  /** 与商品图并排展示时隐藏冗长 URL */
+  hidePictureUrlRow = false,
+  /** 图旁摘要已展示中文商品名时隐藏 dl 中重复一行 */
+  hideChineseCaptionRow = false,
 }: {
   item: ShortageResolveItem;
   /** 为 false 时由外层栏目标题代替 */
   showHeading?: boolean;
   forceShowUnitPrice?: boolean;
+  compact?: boolean;
+  hidePictureUrlRow?: boolean;
+  hideChineseCaptionRow?: boolean;
 }) {
   const unit =
     item.gdsUnitPrice?.trim() || item.gobricksUnitPrice?.trim() || null;
   return (
     <section>
       {showHeading ? (
-        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+        <h3
+          className={`text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)] ${
+            compact ? "mb-2" : "mb-3"
+          }`}
+        >
           高砖商城
         </h3>
       ) : null}
-      <dl className="space-y-3.5 text-sm sm:text-[15px] sm:leading-relaxed">
+      <dl
+        className={
+          compact
+            ? "space-y-2 text-xs sm:text-[13px] sm:leading-snug"
+            : "space-y-3.5 text-sm sm:text-[15px] sm:leading-relaxed"
+        }
+      >
         {item.gdsItemId?.trim() ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品 ID</dt>
             <dd className="mt-0.5 break-all font-mono text-[var(--text)]">{item.gdsItemId.trim()}</dd>
           </div>
         ) : null}
-        {item.gdsCaption?.trim() ? (
+        {item.gdsCaption?.trim() && !hideChineseCaptionRow ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品名（中文）</dt>
             <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaption.trim()}</dd>
@@ -280,7 +668,7 @@ function GobricksDetailSection({
             <dd className="mt-0.5 font-mono text-xs text-[var(--text)]">{item.gdsShelfState.trim()}</dd>
           </div>
         ) : null}
-        {item.gdsPicture?.trim() ? (
+        {item.gdsPicture?.trim() && !hidePictureUrlRow ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品图 URL</dt>
             <dd className="mt-0.5 break-all font-mono text-xs text-[var(--muted)]">{item.gdsPicture.trim()}</dd>
@@ -302,6 +690,11 @@ type LegoCatalogDetailBlockProps = {
   onClose: () => void;
   /** 配货表详情：在乐高侧摘要中附带高砖单价 */
   showGobricksUnitPrice?: boolean;
+  compact?: boolean;
+  /** 与图旁摘要同排时省略顶部大标题区 */
+  omitHeroBlock?: boolean;
+  /** 图旁已展示名称/颜色/单价/目录图说明时从 dl 省略对应行 */
+  omitDlBasicsBesideImage?: boolean;
 };
 
 function LegoCatalogDetailBlock({
@@ -314,40 +707,67 @@ function LegoCatalogDetailBlock({
   parentSubjectOwned,
   onClose,
   showGobricksUnitPrice = false,
+  compact = false,
+  omitHeroBlock = false,
+  omitDlBasicsBesideImage = false,
 }: LegoCatalogDetailBlockProps) {
   const restShown = stripSheetRowReplacedMarker(item.rest).trim();
   const unitPriceText = sheetRowGobricksUnitPriceText(item);
   return (
     <>
-      <div className="border-b border-[var(--border-soft)] pb-5 sm:pb-6">
-        <h2
-          id={titleId}
-          className="text-lg font-semibold leading-snug text-[var(--accent)] sm:text-xl sm:leading-snug"
-        >
-          {heroTitle}
-        </h2>
-        <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-relaxed text-[var(--muted)]">
-          <span className="font-mono text-[13px] font-medium text-[var(--text)]">{item.partNum}</span>
-          {item.partCatName ? <span>· {item.partCatName}</span> : null}
-          <span className="text-[var(--muted-2)]">
-            · 第 {item.lineNumber} 行 · 数量 {item.quantity}
-          </span>
-        </p>
-        {item.partFound ? (
-          <p className="mt-3">
-            <Link
-              href={`/parts/${encodeURIComponent(item.partNum)}`}
-              className="text-sm font-medium text-[var(--accent)] no-underline hover:underline"
-              onClick={onClose}
-            >
-              查看完整零件页 →
-            </Link>
+      {!omitHeroBlock ? (
+        <div className={`border-b border-[var(--border-soft)] ${compact ? "pb-3 sm:pb-4" : "pb-5 sm:pb-6"}`}>
+          <h2
+            id={titleId}
+            className={
+              compact
+                ? "text-base font-semibold leading-snug text-[var(--accent)] sm:text-lg"
+                : "text-lg font-semibold leading-snug text-[var(--accent)] sm:text-xl sm:leading-snug"
+            }
+          >
+            {heroTitle}
+          </h2>
+          <p
+            className={`mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 leading-relaxed text-[var(--muted)] ${
+              compact ? "text-xs sm:text-[13px]" : "text-sm"
+            }`}
+          >
+            <span className={`font-mono font-medium text-[var(--text)] ${compact ? "text-[12px]" : "text-[13px]"}`}>
+              {item.partNum}
+            </span>
+            {item.partCatName ? <span>· {item.partCatName}</span> : null}
+            <span className="text-[var(--muted-2)]">
+              · 第 {item.lineNumber} 行 · 数量 {item.quantity}
+            </span>
           </p>
-        ) : null}
-      </div>
+          {item.partFound ? (
+            <p className={compact ? "mt-2" : "mt-3"}>
+              <Link
+                href={`/parts/${encodeURIComponent(item.partNum)}`}
+                className={`font-medium text-[var(--accent)] no-underline hover:underline ${
+                  compact ? "text-xs" : "text-sm"
+                }`}
+                onClick={onClose}
+              >
+                查看完整零件页 →
+              </Link>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
-      <dl className="mt-5 space-y-3.5 text-sm sm:mt-6 sm:text-[15px] sm:leading-relaxed">
-        {showNameRowInDl ? (
+      <dl
+        className={
+          omitHeroBlock
+            ? compact
+              ? "space-y-2 text-xs sm:text-[13px] sm:leading-snug"
+              : "space-y-3.5 text-sm sm:text-[15px] sm:leading-relaxed"
+            : compact
+              ? "mt-3 space-y-2 text-xs sm:mt-4 sm:text-[13px] sm:leading-snug"
+              : "mt-5 space-y-3.5 text-sm sm:mt-6 sm:text-[15px] sm:leading-relaxed"
+        }
+      >
+        {omitDlBasicsBesideImage ? null : showNameRowInDl ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称</dt>
             <dd className="mt-0.5 text-[var(--text)]">
@@ -359,19 +779,21 @@ function LegoCatalogDetailBlock({
             </dd>
           </div>
         ) : null}
-        <div>
-          <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">颜色</dt>
-          <dd className="mt-0.5 text-[var(--text)]">
-            {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
-          </dd>
-        </div>
-        {showGobricksUnitPrice ? (
+        {omitDlBasicsBesideImage ? null : (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">颜色</dt>
+            <dd className="mt-0.5 text-[var(--text)]">
+              {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
+            </dd>
+          </div>
+        )}
+        {omitDlBasicsBesideImage ? null : showGobricksUnitPrice ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">高砖单价（元）</dt>
             <dd className="mt-0.5 font-mono text-[var(--text)]">{unitPriceText ?? "—"}</dd>
           </div>
         ) : null}
-        {item.imgSource === "part" ? (
+        {omitDlBasicsBesideImage ? null : item.imgSource === "part" ? (
           <p className="text-xs text-[var(--muted)]">当前颜色无库存图，已使用该零件其他颜色的图片。</p>
         ) : null}
         <div>
@@ -484,9 +906,16 @@ function MocPartDetailBody({
 
   const gdsUrl = item.gdsPicture?.trim() || null;
   const legoUrl = item.imgUrl?.trim() || null;
+  const hideGdsPictureUrl = Boolean(gdsUrl);
   const catalogDual = detailSubstituteSuggestions;
-  const hasGobricksFacts = catalogDual && rowHasGobricksDetailFields(item);
-  const catalogImgSizes = "(max-width:639px)72vw,(max-width:1023px)18rem,20rem";
+  const hasGobricksRowData = rowHasGobricksDetailFields(item);
+  const hasGobricksFacts = catalogDual && hasGobricksRowData;
+  const showReplaceQuad = replaceMeta.hasMarker;
+  /** 未更换：仅乐高 + 高砖两格，字段与样式与四宫格现侧一致 */
+  const showTwinLegoGobricksCatalog = Boolean(
+    sheetRowReplaceContext && catalogDual && !showReplaceQuad
+  );
+  const catalogImgSizes = "(max-width:639px)42vw,(max-width:1023px)11rem,12rem";
 
   return (
     <div className="flex flex-col">
@@ -506,42 +935,24 @@ function MocPartDetailBody({
         </div>
       ) : null}
 
-      <div className="px-5 py-5 sm:px-8 sm:py-7">
+      <div className="px-5 py-4 sm:px-8 sm:py-5">
         {sheetRowReplaceContext && replaceMeta.hasMarker ? (
           <section
-            className="mb-5 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3.5 py-3 text-sm text-[var(--text)]"
+            className="mb-4 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-2.5 text-[var(--text)] sm:px-3.5"
             aria-label="手动更换说明"
           >
-            <p className="font-medium text-sky-100/95">本行已手动更换零件</p>
-            <dl className="mt-2 space-y-1.5 text-xs sm:text-[13px]">
-              {replaceMeta.originalPartNum != null && replaceMeta.originalColorId != null ? (
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <dt className="shrink-0 text-[var(--muted-2)]">原零件</dt>
-                  <dd className="min-w-0 font-mono text-[var(--text)]">
-                    {replaceMeta.originalPartNum} × 色 {replaceMeta.originalColorId}
-                  </dd>
-                </div>
-              ) : (
-                <p className="text-[var(--muted)] leading-relaxed">
-                  原零件未存档（旧数据）。可在「更换零件」中手动改回。
-                </p>
-              )}
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <dt className="shrink-0 text-[var(--muted-2)]">当前</dt>
-                <dd className="min-w-0 font-mono text-[var(--text)]">
-                  {item.partNum}
-                  {item.colorName
-                    ? ` × ${item.colorName}（${item.colorId}）`
-                    : ` × 色 ${item.colorId}`}
-                </dd>
-              </div>
-            </dl>
+            <p className="text-xs font-medium text-sky-100/95 sm:text-[13px]">本行已手动更换零件</p>
+            {replaceMeta.originalPartNum == null || replaceMeta.originalColorId == null ? (
+              <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--muted)]">
+                原零件号 / 色未存档（旧数据）。可在「更换零件」中手动改回。
+              </p>
+            ) : null}
             {canRestore ? (
-              <div className="mt-3 flex flex-col gap-2">
+              <div className="mt-2 flex flex-col gap-1.5">
                 <button
                   type="button"
                   disabled={restoreBusy}
-                  className="inline-flex max-w-full items-center justify-center rounded-lg border border-sky-400/45 bg-sky-500/20 px-3 py-2 text-xs font-medium text-sky-50 transition-colors hover:border-sky-300/55 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex max-w-full items-center justify-center rounded-md border border-sky-400/45 bg-sky-500/20 px-2 py-1 text-[10px] font-medium leading-snug text-sky-50 transition-colors hover:border-sky-300/55 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2.5 sm:py-1.5 sm:text-[11px]"
                   onClick={async () => {
                     if (!sheetRowReplaceContext) return;
                     setRestoreErr(null);
@@ -567,92 +978,171 @@ function MocPartDetailBody({
                 >
                   {restoreBusy ? "还原中…" : "还原为原零件（校验高砖库存）"}
                 </button>
-                {restoreErr ? <p className="text-xs text-red-200/90">{restoreErr}</p> : null}
+                {restoreErr ? <p className="text-[10px] text-red-200/90 sm:text-[11px]">{restoreErr}</p> : null}
               </div>
             ) : null}
           </section>
         ) : null}
-        {catalogDual ? (
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 sm:items-start sm:gap-x-6 lg:gap-x-8">
-            <div className="flex min-w-0 flex-col gap-5 sm:border-r sm:border-[var(--border-soft)] sm:pr-6">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
-                乐高 / 本地目录
-              </h3>
-              {legoUrl ? (
-                <CatalogImageFigure label="乐高目录图" imageUrl={legoUrl} sizes={catalogImgSizes} />
-              ) : (
-                <div className="flex min-h-[10rem] items-center justify-center rounded-xl border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-4 text-center text-sm text-[var(--muted)]">
-                  {item.partFound ? "无目录缩略图" : "未收录"}
-                </div>
-              )}
-              <LegoCatalogDetailBlock
-                item={item}
-                titleId={titleId}
-                heroTitle={heroTitle}
-                showNameRowInDl={showNameRowInDl}
-                reasonLines={reasonLines}
-                showShortageReasonSummary={showShortageReasonSummary}
-                parentSubjectOwned={parentSubjectOwned}
-                onClose={onClose}
-                showGobricksUnitPrice={fulfillmentListDetail}
-              />
+
+        {showReplaceQuad ? (
+          <div className="mb-4 sm:mb-5">
+            <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px] sm:text-[13px]">
+              <span className="text-[var(--muted-2)]">数量</span>
+              <span className="font-mono font-semibold text-[var(--text)]">{item.quantity}</span>
             </div>
-            <div className="flex min-w-0 flex-col gap-5">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
-                高砖商城
-              </h3>
-              {gdsUrl ? (
-                <CatalogImageFigure label="高砖商品图" imageUrl={gdsUrl} sizes={catalogImgSizes} />
-              ) : (
-                <div className="flex min-h-[10rem] items-center justify-center rounded-xl border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-4 text-center text-sm text-[var(--muted)]">
-                  无高砖商品图
-                </div>
-              )}
-              {hasGobricksFacts || fulfillmentListDetail ? (
-                <GobricksDetailSection
-                  item={item}
-                  showHeading={false}
-                  forceShowUnitPrice={fulfillmentListDetail}
-                />
-              ) : (
-                <p className="text-sm leading-relaxed text-[var(--muted)]">
-                  暂无高砖字段明细（例如未带 info 的旧同步数据）。
-                </p>
-              )}
-            </div>
+            <SheetReplaceFourQuadrants replaceMeta={replaceMeta} item={item} onClose={onClose} />
           </div>
-        ) : (
-          <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:gap-10 lg:gap-12">
-            <div className="mx-auto aspect-square w-full max-w-[min(16rem,72vw)] shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)] sm:mx-0 sm:max-w-[18rem] lg:max-w-[20rem]">
-              <div className="flex h-full min-h-[12rem] w-full items-center justify-center sm:min-h-0">
-                {item.imgUrl ? (
-                  <RemoteCoverImage
-                    src={item.imgUrl}
-                    width={320}
-                    height={320}
-                    className="h-full max-h-[min(20rem,55vw)] w-full object-contain p-3 sm:max-h-none sm:p-4"
-                    sizes="(max-width:639px)72vw,(max-width:1023px)18rem,20rem"
-                    fallbackLabel="无图"
+        ) : null}
+
+        {showTwinLegoGobricksCatalog ? (
+          <div className="mb-4 sm:mb-5">
+            <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px] sm:text-[13px]">
+              <span className="text-[var(--muted-2)]">数量</span>
+              <span className="font-mono font-semibold text-[var(--text)]">{item.quantity}</span>
+            </div>
+            <SheetLegoGobricksTwinCatalog item={item} onClose={onClose} />
+          </div>
+        ) : null}
+
+        {catalogDual ? (
+          showReplaceQuad || showTwinLegoGobricksCatalog ? null : (
+            <>
+              <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px] sm:mb-4 sm:text-[13px]">
+                <span className="text-[var(--muted-2)]">数量</span>
+                <span className="font-mono font-semibold text-[var(--text)]">{item.quantity}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:items-start sm:gap-x-5 lg:gap-x-6">
+              <div className="flex min-w-0 flex-col gap-3 sm:border-r sm:border-[var(--border-soft)] sm:pr-5">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+                  乐高 / 本地目录
+                </h3>
+                <div className="flex gap-3 sm:gap-4">
+                  <div className="shrink-0">
+                    {legoUrl ? (
+                      <CatalogImageFigure
+                        label="乐高目录图"
+                        imageUrl={legoUrl}
+                        sizes={catalogImgSizes}
+                        compact
+                        showCaption={false}
+                      />
+                    ) : (
+                      <div className="flex aspect-square w-[min(10rem,42vw)] max-w-[11rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] leading-snug text-[var(--muted)]">
+                        {item.partFound ? "无目录缩略图" : "未收录"}
+                      </div>
+                    )}
+                  </div>
+                  <LegoCatalogAsideFacts
+                    item={item}
+                    heroTitle={heroTitle}
+                    titleId={titleId}
+                    onClose={onClose}
+                    compact
                   />
+                </div>
+                <LegoCatalogDetailBlock
+                  item={item}
+                  titleId={titleId}
+                  heroTitle={heroTitle}
+                  showNameRowInDl={showNameRowInDl}
+                  reasonLines={reasonLines}
+                  showShortageReasonSummary={showShortageReasonSummary}
+                  parentSubjectOwned={parentSubjectOwned}
+                  onClose={onClose}
+                  showGobricksUnitPrice={fulfillmentListDetail}
+                  compact
+                  omitHeroBlock
+                  omitDlBasicsBesideImage
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-3">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">高砖商城</h3>
+                {hasGobricksFacts || fulfillmentListDetail ? (
+                  <>
+                    <div className="flex gap-3 sm:gap-4">
+                      <div className="shrink-0">
+                        {gdsUrl ? (
+                          <CatalogImageFigure
+                            label="高砖商品图"
+                            imageUrl={gdsUrl}
+                            sizes={catalogImgSizes}
+                            compact
+                            showCaption={false}
+                          />
+                        ) : (
+                          <div className="flex aspect-square w-[min(10rem,42vw)] max-w-[11rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
+                            无高砖商品图
+                          </div>
+                        )}
+                      </div>
+                      <GobricksCatalogAsideFacts
+                        item={item}
+                        forceShowUnitPrice={fulfillmentListDetail}
+                        compact
+                      />
+                    </div>
+                    <GobricksDetailSection
+                      item={item}
+                      showHeading={false}
+                      forceShowUnitPrice={fulfillmentListDetail}
+                      compact
+                      hidePictureUrlRow={hideGdsPictureUrl}
+                      hideChineseCaptionRow={Boolean(item.gdsCaption?.trim())}
+                    />
+                  </>
                 ) : (
-                  <span className="text-sm text-neutral-500">{item.partFound ? "无图" : "未收录"}</span>
+                  <p className="text-xs leading-relaxed text-[var(--muted)]">
+                    暂无高砖字段明细（例如未带 info 的旧同步数据）。
+                  </p>
                 )}
               </div>
             </div>
-
-            <div className="min-w-0 flex-1">
-              <LegoCatalogDetailBlock
+            </>
+          )
+        ) : showReplaceQuad || showTwinLegoGobricksCatalog ? null : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12px] sm:text-[13px]">
+              <span className="text-[var(--muted-2)]">数量</span>
+              <span className="font-mono font-semibold text-[var(--text)]">{item.quantity}</span>
+            </div>
+            <div className="flex gap-3 sm:gap-5">
+              <div className="shrink-0">
+                {legoUrl ? (
+                  <CatalogImageFigure
+                    label="乐高目录图"
+                    imageUrl={legoUrl}
+                    sizes={catalogImgSizes}
+                    compact
+                    showCaption={false}
+                  />
+                ) : (
+                  <div className="flex aspect-square w-[min(10rem,62vw)] max-w-[13rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
+                    {item.partFound ? "无图" : "未收录"}
+                  </div>
+                )}
+              </div>
+              <LegoCatalogAsideFacts
                 item={item}
-                titleId={titleId}
                 heroTitle={heroTitle}
-                showNameRowInDl={showNameRowInDl}
-                reasonLines={reasonLines}
-                showShortageReasonSummary={showShortageReasonSummary}
-                parentSubjectOwned={parentSubjectOwned}
+                titleId={titleId}
                 onClose={onClose}
-                showGobricksUnitPrice={fulfillmentListDetail}
+                compact
               />
             </div>
+            <LegoCatalogDetailBlock
+              item={item}
+              titleId={titleId}
+              heroTitle={heroTitle}
+              showNameRowInDl={showNameRowInDl}
+              reasonLines={reasonLines}
+              showShortageReasonSummary={showShortageReasonSummary}
+              parentSubjectOwned={parentSubjectOwned}
+              onClose={onClose}
+              showGobricksUnitPrice={fulfillmentListDetail}
+              compact
+              omitHeroBlock
+              omitDlBasicsBesideImage
+            />
           </div>
         )}
 

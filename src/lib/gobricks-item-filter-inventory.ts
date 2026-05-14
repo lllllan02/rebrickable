@@ -16,6 +16,15 @@ export function parseGobricksProductIdFromGdsItemId(raw: string | null | undefin
   return m?.[1] ?? null;
 }
 
+/** 从 `GDS-{productId}-{色段}` 解析高砖色 ID 段（保留前导零），如 `GDS-656-072` → `072` */
+export function parseGdsColorSegmentFromGdsItemId(raw: string | null | undefined): string | null {
+  const s = raw?.trim();
+  if (!s) return null;
+  const m = /^GDS-\d+-(.+)$/i.exec(s);
+  const tail = m?.[1]?.trim();
+  return tail || null;
+}
+
 function readGdsItemIdFromLego2Row(row: Record<string, unknown>): string | null {
   const itemId = typeof row.item_id === "string" && row.item_id.trim() ? row.item_id.trim() : null;
   const info = row.info;
@@ -238,7 +247,7 @@ function readColorDataExtra(cd: unknown): {
  */
 export async function fetchGobricksItemFilterInStockColors(
   productId: string,
-  init?: { signal?: AbortSignal }
+  init?: { signal?: AbortSignal; includeZeroInventory?: boolean }
 ): Promise<{ ok: true; rows: GobricksInStockColorRow[] } | { ok: false; error: string }> {
   const pid = productId.trim();
   if (!pid || !/^[\w.-]+$/.test(pid)) {
@@ -303,12 +312,14 @@ export async function fetchGobricksItemFilterInStockColors(
       return { ok: false, error: "高砖库存接口返回体异常。" };
     }
     const rowsRaw = (json as Record<string, unknown>).rows;
+    const includeZero = init?.includeZeroInventory === true;
     const out: GobricksInStockColorRow[] = [];
     for (const row of asRecordArray(rowsRaw)) {
       const legoColorId = normalizeLegoColorIdFromColorData(row.color_data);
       if (!legoColorId) continue;
       const inv = numField(row.inventory);
-      if (!Number.isFinite(inv) || inv <= 0) continue;
+      if (!Number.isFinite(inv) || inv < 0) continue;
+      if (!includeZero && inv <= 0) continue;
       const gdsColorId = readGdsColorId(row);
       if (!gdsColorId) continue;
       const { zh, en, hex } = readColorDataExtra(row.color_data);

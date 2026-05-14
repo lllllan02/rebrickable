@@ -69,6 +69,10 @@ export type SheetReplaceGobricksStockColor = {
   isTrans: boolean;
   picture: string | null;
   inventory: number;
+  /** 高砖 SKU（如 GDS-656-072） */
+  gdsItemId: string;
+  /** 高砖 color_id */
+  gdsColorId: string;
 };
 
 export async function listPartCategoriesForSheetReplaceAction(): Promise<
@@ -307,8 +311,10 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
   sheetRowPartNum: string;
   sheetRowGdsItemId?: string | null;
   probeLegoColorId: number;
+  /** 为 true 时包含库存为 0 的 SKU（还原时按原 GDS 匹配） */
+  includeZeroInventory?: boolean;
 }): Promise<
-  | { ok: true; variants: SheetReplaceGobricksStockColor[]; hint: string | null }
+  | { ok: true; variants: SheetReplaceGobricksStockColor[]; hint: string | null; productId: string }
   | { ok: false; error: string }
 > {
   const partNum = input.partNum.trim().slice(0, MAX_PART_NUM_LEN);
@@ -342,7 +348,9 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
       };
     }
 
-    const stockRes = await fetchGobricksItemFilterInStockColors(productId);
+    const stockRes = await fetchGobricksItemFilterInStockColors(productId, {
+      includeZeroInventory: input.includeZeroInventory === true,
+    });
     if (!stockRes.ok) {
       return { ok: false, error: stockRes.error };
     }
@@ -354,6 +362,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         picture: string | null;
         nameZh: string | null;
         nameEn: string | null;
+        gdsColorId: string;
       }
     >();
     for (const r of stockRes.rows) {
@@ -364,6 +373,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
           picture: r.picture,
           nameZh: r.colorNameZh,
           nameEn: r.colorNameEn,
+          gdsColorId: r.gdsColorId,
         });
       }
     }
@@ -408,6 +418,8 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         isTrans: meta.isTrans,
         picture: agg.picture,
         inventory: agg.inventory,
+        gdsColorId: agg.gdsColorId,
+        gdsItemId: `GDS-${productId}-${agg.gdsColorId}`,
       });
     }
 
@@ -429,7 +441,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         ? `有 ${skippedLocal} 个高砖有货色号未在本地颜色表收录，已隐藏。`
         : null;
 
-    return { ok: true, variants, hint };
+    return { ok: true, variants, hint, productId };
   } catch {
     return { ok: false, error: "读取高砖有货颜色失败。" };
   }
