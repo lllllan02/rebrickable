@@ -12,7 +12,7 @@ import {
   type InitialMocSheetFromServer,
   saveBuildPartsSheetToDb,
 } from "./moc-parts-sheet-actions";
-import { syncGobricksShortageForSubjectAction } from "./gobricks-shortage-sync-action";
+import { syncGobricksShortageForSubjectWithModifiedConfirm } from "./gobricks-shortage-sync-client";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
@@ -355,7 +355,7 @@ export function PartsSheetImport({
             if (okSave && kind === "full" && !noFullSheetForSet) {
               setGobricksBusy(true);
               try {
-                const sync = await syncGobricksShortageForSubjectAction({
+                const sync = await syncGobricksShortageForSubjectWithModifiedConfirm({
                   subjectKind: buildSubjectKind,
                   subjectId: mid,
                 });
@@ -364,7 +364,7 @@ export function PartsSheetImport({
                   setError(null);
                   setLineNumber(null);
                   router.refresh();
-                } else {
+                } else if (!sync.cancelled) {
                   setError(sync.error);
                 }
               } finally {
@@ -404,12 +404,12 @@ export function PartsSheetImport({
     setMocLocalMessage(null);
     setGobricksBusy(true);
     try {
-      const sync = await syncGobricksShortageForSubjectAction({
+      const sync = await syncGobricksShortageForSubjectWithModifiedConfirm({
         subjectKind: buildSubjectKind,
         subjectId: mid,
       });
       if (!sync.ok) {
-        setError(sync.error);
+        if (!sync.cancelled) setError(sync.error);
         return;
       }
       setMocLocalMessage(sync.message);

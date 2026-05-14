@@ -17,6 +17,8 @@ import {
 import { resolveGobricksSheetSerializedRowsInDb } from "@/lib/parts-sheet-resolve-csv-db";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
 import { loadSetOfficialInventoryBomLines } from "@/lib/set-official-inventory-bom";
+import { restHasSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
+import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 const MAX_SUBJECT_ID_LEN = 128;
 const GOBRICKS_TIMEOUT_MS = 45_000;
@@ -37,18 +39,28 @@ async function recordGobricksShortageSyncOk(
   }
 }
 
+function branchHasReplaceMarker(branch: { items: ShortageResolveItem[] } | null): boolean {
+  return Boolean(branch?.items.some((r) => restHasSheetRowReplacedMarker(r.rest)));
+}
+
+export type SyncGobricksShortageForSubjectOk = {
+  ok: true;
+  shortageLines: number;
+  fulfillmentLines: number;
+  message: string;
+};
+
+export type SyncGobricksShortageForSubjectResult =
+  | SyncGobricksShortageForSubjectOk
+  | { ok: false; error: string }
+  | { ok: false; needsConfirmOverwriteModified: true; message: string };
+
 export async function syncGobricksShortageForSubjectAction(input: {
   subjectKind: BuildSubjectKind;
   subjectId: string;
-}): Promise<
-  | {
-      ok: true;
-      shortageLines: number;
-      fulfillmentLines: number;
-      message: string;
-    }
-  | { ok: false; error: string }
-> {
+  /** 为 true 时表示用户已确认可覆盖缺件/配货表中含「更换零件」的行 */
+  confirmOverwriteModified?: boolean;
+}): Promise<SyncGobricksShortageForSubjectResult> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
     return { ok: false, error: "主体 ID 无效。" };
@@ -57,15 +69,28 @@ export async function syncGobricksShortageForSubjectAction(input: {
     return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
   }
 
+  const preloaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
+  if (!preloaded.ok) {
+    return { ok: false, error: preloaded.error };
+  }
+  const hasModifiedPersisted =
+    branchHasReplaceMarker(preloaded.shortage) || branchHasReplaceMarker(preloaded.fulfillment);
+  if (hasModifiedPersisted && !input.confirmOverwriteModified) {
+    return {
+      ok: false,
+      needsConfirmOverwriteModified: true,
+      message:
+        "当前缺件表或配货表中含有已手动更换的零件行，从高砖同步将覆盖这些修改。确定继续？",
+    };
+  }
+
   let bom: { partNum: string; colorId: number; quantity: number }[] = [];
 
   if (input.subjectKind === BUILD_SUBJECT_MOC) {
-    const sheet = await loadBuildPartsSheetFromDb(BUILD_SUBJECT_MOC, subjectId);
-    if (!sheet.ok) return { ok: false, error: sheet.error };
-    if (!sheet.full?.items.length) {
+    if (!preloaded.full?.items.length) {
       return { ok: false, error: "请先上传并保存完整零件表。" };
     }
-    bom = sheet.full.items.map((i) => ({
+    bom = preloaded.full.items.map((i) => ({
       partNum: i.partNum,
       colorId: i.colorId,
       quantity: i.quantity,

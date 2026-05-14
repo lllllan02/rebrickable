@@ -3,6 +3,8 @@
  * 列为：Part、Color、Quantity、高砖单价（可空）、备注。
  */
 
+import { stripSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
+
 export type ShortageCsvSerializeRow = {
   partNum: string;
   colorId: number;
@@ -16,7 +18,8 @@ export type ShortageCsvSerializeRow = {
 export function serializeShortageCsvLine(r: ShortageCsvSerializeRow): string {
   const colorField = `'${r.colorId}`;
   const priceRaw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim();
-  return `${r.partNum},${colorField},${r.quantity},${priceRaw},${r.rest}`;
+  const restOut = stripSheetRowReplacedMarker(r.rest);
+  return `${r.partNum},${colorField},${r.quantity},${priceRaw},${restOut}`;
 }
 
 export function serializeShortageCsv(

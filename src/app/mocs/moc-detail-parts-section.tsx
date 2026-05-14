@@ -298,6 +298,11 @@ export function MocDetailPartsSection({
                 totalPartQty={undefined}
                 parentSubjectOwned={parentSubjectOwned}
                 detailSubstituteSuggestions
+                sheetRowReplaceContext={{
+                  subjectKind,
+                  subjectId,
+                  branch: "fulfillment",
+                }}
               />
             ) : null}
             {listTab === "shortage" && initialShortage ? (
@@ -309,6 +314,11 @@ export function MocDetailPartsSection({
                 shortageListMode
                 parentSubjectOwned={parentSubjectOwned}
                 detailSubstituteSuggestions
+                sheetRowReplaceContext={{
+                  subjectKind,
+                  subjectId,
+                  branch: "shortage",
+                }}
               />
             ) : null}
             {listTab === "official" && officialInventory ? (

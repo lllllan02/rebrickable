@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
@@ -16,7 +17,12 @@ import {
   SHORTAGE_REASON_CATEGORY_DEFS,
   type ShortageReasonFilterId,
 } from "@/lib/shortage-reason-filter";
-import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
+import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT, PART_GRID_TILE_SHEET_ROW_MODIFIED } from "@/lib/part-grid-tile-classes";
+import {
+  parseSheetRowReplaceMeta,
+  restHasSheetRowReplacedMarker,
+  stripSheetRowReplacedMarker,
+} from "@/lib/sheet-row-replaced-marker";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 
@@ -24,9 +30,131 @@ import {
   getPartSubstituteSuggestionsAction,
   type PartSubstituteSuggestion,
 } from "@/app/mocs/part-substitute-suggestions-action";
+import { restoreBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-actions";
+import {
+  SheetRowReplacePanel,
+  type SheetRowReplaceContext,
+} from "@/app/mocs/sheet-row-replace-panel";
 
 function substituteRelBadgeLabel(t: "A" | "M"): string {
   return t === "A" ? "替代" : "模具";
+}
+
+function MocPartSubstituteSuggestionsSection({
+  partNum,
+  onClose,
+  withTopDivider = true,
+}: {
+  partNum: string;
+  onClose: () => void;
+  /** 为 false 时用于「更换零件」Tab 顶部，不再加顶部分隔线 */
+  withTopDivider?: boolean;
+}) {
+  const [substitutes, setSubstitutes] = useState<PartSubstituteSuggestion[] | null>(null);
+  const [substitutesError, setSubstitutesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSubstitutes(null);
+    setSubstitutesError(null);
+    const pn = partNum.trim();
+    if (!pn) {
+      setSubstitutes([]);
+      return;
+    }
+    void (async () => {
+      const res = await getPartSubstituteSuggestionsAction(pn);
+      if (cancelled) return;
+      if (res.ok) setSubstitutes(res.items);
+      else {
+        setSubstitutes([]);
+        setSubstitutesError(res.error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [partNum]);
+
+  const inner = (
+    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)]/90 p-4 sm:p-5">
+      <p className="text-sm leading-relaxed text-[var(--muted)]">
+        若需替换或核对模具变体，可参考本地 Rebrickable 目录中的下列关联零件（类型 A/M）：
+      </p>
+      <h3 className="mt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+        推荐替换 · Rebrickable
+      </h3>
+      {substitutes === null ? (
+        <p className="mt-3 text-sm text-[var(--muted)]">加载中…</p>
+      ) : substitutesError ? (
+        <p className="mt-3 text-sm text-amber-200/90">{substitutesError}</p>
+      ) : substitutes.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--muted)]">无替代或模具变体记录。</p>
+      ) : (
+        <>
+          <ul className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            {substitutes.map((s) => (
+              <li
+                key={s.otherPartNum}
+                className="flex min-h-0 gap-3 rounded-lg border border-[var(--border)]/80 bg-[var(--surface)] px-3 py-2.5 sm:gap-3.5 sm:px-3.5 sm:py-3"
+              >
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-16 sm:w-16">
+                  {s.imgUrl ? (
+                    <RemoteCoverImage
+                      src={s.imgUrl}
+                      width={64}
+                      height={64}
+                      className="h-full w-full object-contain p-0.5 sm:p-1"
+                      sizes="(max-width:639px)56px,64px"
+                      fallbackLabel="无图"
+                      fallbackClassName="!text-[9px]"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
+                      无图
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Link
+                      href={`/parts/${encodeURIComponent(s.otherPartNum)}`}
+                      className="font-mono text-xs font-semibold text-[var(--accent)] no-underline hover:underline"
+                      onClick={onClose}
+                    >
+                      {s.otherPartNum}
+                    </Link>
+                    {s.relTypes.map((t) => (
+                      <span
+                        key={t}
+                        className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-100/95"
+                      >
+                        {substituteRelBadgeLabel(t)}
+                      </span>
+                    ))}
+                  </div>
+                  {s.partName ? (
+                    <p className="mt-1 text-sm leading-snug text-[var(--muted)]">{s.partName}</p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 border-t border-[var(--border-soft)] pt-3 text-[11px] leading-relaxed text-[var(--muted-2)]">
+            数据来自本地 <span className="font-mono">part_relationships</span>；缩略图取自{" "}
+            <span className="font-mono">inventory_parts</span> 中该零件任一角度的库存图。颜色与造型请自行核对。
+          </p>
+        </>
+      )}
+    </div>
+  );
+
+  if (withTopDivider) {
+    return (
+      <div className="mt-7 border-t border-[var(--border-soft)] pt-7 sm:mt-8 sm:pt-8">{inner}</div>
+    );
+  }
+  return inner;
 }
 
 function shortageReasonSummaryLines(rest: string): string[] {
@@ -84,13 +212,21 @@ function CatalogImageFigure({
   );
 }
 
+function sheetRowGobricksUnitPriceText(r: ShortageResolveItem): string | null {
+  const u = (r.gdsUnitPrice ?? r.gobricksUnitPrice ?? "").trim();
+  return u || null;
+}
+
 function GobricksDetailSection({
   item,
   showHeading = true,
+  /** 配货表：无其它高砖字段时也展示单价行（无则「—」） */
+  forceShowUnitPrice = false,
 }: {
   item: ShortageResolveItem;
   /** 为 false 时由外层栏目标题代替 */
   showHeading?: boolean;
+  forceShowUnitPrice?: boolean;
 }) {
   const unit =
     item.gdsUnitPrice?.trim() || item.gobricksUnitPrice?.trim() || null;
@@ -132,10 +268,10 @@ function GobricksDetailSection({
             <dd className="mt-0.5 font-mono text-[var(--text)]">{item.gdsLegoColorId.trim()}</dd>
           </div>
         ) : null}
-        {unit ? (
+        {unit || forceShowUnitPrice ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">单价（元）</dt>
-            <dd className="mt-0.5 text-[var(--text)]">{unit}</dd>
+            <dd className="mt-0.5 text-[var(--text)]">{unit ?? "—"}</dd>
           </div>
         ) : null}
         {item.gdsShelfState?.trim() ? (
@@ -164,6 +300,8 @@ type LegoCatalogDetailBlockProps = {
   showShortageReasonSummary: boolean;
   parentSubjectOwned: boolean;
   onClose: () => void;
+  /** 配货表详情：在乐高侧摘要中附带高砖单价 */
+  showGobricksUnitPrice?: boolean;
 };
 
 function LegoCatalogDetailBlock({
@@ -175,7 +313,10 @@ function LegoCatalogDetailBlock({
   showShortageReasonSummary,
   parentSubjectOwned,
   onClose,
+  showGobricksUnitPrice = false,
 }: LegoCatalogDetailBlockProps) {
+  const restShown = stripSheetRowReplacedMarker(item.rest).trim();
+  const unitPriceText = sheetRowGobricksUnitPriceText(item);
   return (
     <>
       <div className="border-b border-[var(--border-soft)] pb-5 sm:pb-6">
@@ -224,6 +365,12 @@ function LegoCatalogDetailBlock({
             {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
           </dd>
         </div>
+        {showGobricksUnitPrice ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">高砖单价（元）</dt>
+            <dd className="mt-0.5 font-mono text-[var(--text)]">{unitPriceText ?? "—"}</dd>
+          </div>
+        ) : null}
         {item.imgSource === "part" ? (
           <p className="text-xs text-[var(--muted)]">当前颜色无库存图，已使用该零件其他颜色的图片。</p>
         ) : null}
@@ -261,13 +408,13 @@ function LegoCatalogDetailBlock({
             </dd>
           </div>
         ) : null}
-        {item.rest ? (
+        {restShown ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
               {showShortageReasonSummary ? "备注原文" : "导入附加列"}
             </dt>
             <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
-              {item.rest}
+              {restShown}
             </dd>
           </div>
         ) : null}
@@ -289,6 +436,10 @@ function MocPartDetailBody({
   parentSubjectOwned,
   showShortageReasonSummary,
   detailSubstituteSuggestions,
+  hideTopBar = false,
+  omitSubstituteBlock = false,
+  sheetRowReplaceContext = null,
+  onSheetRowRestored,
 }: {
   item: ShortageResolveItem;
   titleId: string;
@@ -296,38 +447,32 @@ function MocPartDetailBody({
   parentSubjectOwned: boolean;
   showShortageReasonSummary: boolean;
   detailSubstituteSuggestions: boolean;
+  /** 为 true 时不渲染本组件顶部条（由外层模态框统一提供标题 / Tab 与关闭） */
+  hideTopBar?: boolean;
+  /** 为 true 时不渲染「推荐替换」区块（改在「更换零件」Tab 顶部展示） */
+  omitSubstituteBlock?: boolean;
+  /** 配货/缺件详情：用于展示「更换」原/现对照与还原 */
+  sheetRowReplaceContext?: SheetRowReplaceContext | null;
+  onSheetRowRestored?: () => void;
 }) {
-  const reasonLines = showShortageReasonSummary ? shortageReasonSummaryLines(item.rest) : [];
-  const [substitutes, setSubstitutes] = useState<PartSubstituteSuggestion[] | null>(null);
-  const [substitutesError, setSubstitutesError] = useState<string | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreErr, setRestoreErr] = useState<string | null>(null);
+
+  const replaceMeta = useMemo(() => parseSheetRowReplaceMeta(item.rest), [item.rest]);
+  const canRestore =
+    Boolean(sheetRowReplaceContext) &&
+    replaceMeta.hasMarker &&
+    replaceMeta.originalPartNum != null &&
+    replaceMeta.originalColorId != null;
+
+  const fulfillmentListDetail = sheetRowReplaceContext?.branch === "fulfillment";
 
   useEffect(() => {
-    if (!detailSubstituteSuggestions) {
-      setSubstitutes(null);
-      setSubstitutesError(null);
-      return;
-    }
-    let cancelled = false;
-    setSubstitutes(null);
-    setSubstitutesError(null);
-    const pn = item.partNum.trim();
-    if (!pn) {
-      setSubstitutes([]);
-      return;
-    }
-    void (async () => {
-      const res = await getPartSubstituteSuggestionsAction(pn);
-      if (cancelled) return;
-      if (res.ok) setSubstitutes(res.items);
-      else {
-        setSubstitutes([]);
-        setSubstitutesError(res.error);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [item.partNum, detailSubstituteSuggestions]);
+    setRestoreErr(null);
+    setRestoreBusy(false);
+  }, [item.lineNumber, item.partNum, item.colorId, item.rest]);
+
+  const reasonLines = showShortageReasonSummary ? shortageReasonSummaryLines(item.rest) : [];
 
   const heroTitle =
     item.partFound && item.partName
@@ -345,21 +490,88 @@ function MocPartDetailBody({
 
   return (
     <div className="flex flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]">
-          {catalogDual ? "乐高与高砖" : "零件摘要"}
-        </span>
-        <button
-          type="button"
-          className="grid size-9 shrink-0 place-items-center rounded-full border border-transparent text-2xl leading-none text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
-          aria-label="关闭"
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </div>
+      {!hideTopBar ? (
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]">
+            {catalogDual ? "乐高与高砖" : "零件摘要"}
+          </span>
+          <button
+            type="button"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-transparent text-2xl leading-none text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+            aria-label="关闭"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <div className="px-5 py-5 sm:px-8 sm:py-7">
+        {sheetRowReplaceContext && replaceMeta.hasMarker ? (
+          <section
+            className="mb-5 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3.5 py-3 text-sm text-[var(--text)]"
+            aria-label="手动更换说明"
+          >
+            <p className="font-medium text-sky-100/95">本行已手动更换零件</p>
+            <dl className="mt-2 space-y-1.5 text-xs sm:text-[13px]">
+              {replaceMeta.originalPartNum != null && replaceMeta.originalColorId != null ? (
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <dt className="shrink-0 text-[var(--muted-2)]">原零件</dt>
+                  <dd className="min-w-0 font-mono text-[var(--text)]">
+                    {replaceMeta.originalPartNum} × 色 {replaceMeta.originalColorId}
+                  </dd>
+                </div>
+              ) : (
+                <p className="text-[var(--muted)] leading-relaxed">
+                  原零件未存档（旧数据）。可在「更换零件」中手动改回。
+                </p>
+              )}
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <dt className="shrink-0 text-[var(--muted-2)]">当前</dt>
+                <dd className="min-w-0 font-mono text-[var(--text)]">
+                  {item.partNum}
+                  {item.colorName
+                    ? ` × ${item.colorName}（${item.colorId}）`
+                    : ` × 色 ${item.colorId}`}
+                </dd>
+              </div>
+            </dl>
+            {canRestore ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={restoreBusy}
+                  className="inline-flex max-w-full items-center justify-center rounded-lg border border-sky-400/45 bg-sky-500/20 px-3 py-2 text-xs font-medium text-sky-50 transition-colors hover:border-sky-300/55 hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={async () => {
+                    if (!sheetRowReplaceContext) return;
+                    setRestoreErr(null);
+                    setRestoreBusy(true);
+                    try {
+                      const res = await restoreBuildPartsSheetRowAction({
+                        subjectKind: sheetRowReplaceContext.subjectKind,
+                        subjectId: sheetRowReplaceContext.subjectId,
+                        branch: sheetRowReplaceContext.branch,
+                        lineNumber: item.lineNumber,
+                      });
+                      if (!res.ok) {
+                        setRestoreErr(res.error);
+                        return;
+                      }
+                      onSheetRowRestored?.();
+                    } catch {
+                      setRestoreErr("还原失败，请重试。");
+                    } finally {
+                      setRestoreBusy(false);
+                    }
+                  }}
+                >
+                  {restoreBusy ? "还原中…" : "还原为原零件（校验高砖库存）"}
+                </button>
+                {restoreErr ? <p className="text-xs text-red-200/90">{restoreErr}</p> : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         {catalogDual ? (
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 sm:items-start sm:gap-x-6 lg:gap-x-8">
             <div className="flex min-w-0 flex-col gap-5 sm:border-r sm:border-[var(--border-soft)] sm:pr-6">
@@ -382,6 +594,7 @@ function MocPartDetailBody({
                 showShortageReasonSummary={showShortageReasonSummary}
                 parentSubjectOwned={parentSubjectOwned}
                 onClose={onClose}
+                showGobricksUnitPrice={fulfillmentListDetail}
               />
             </div>
             <div className="flex min-w-0 flex-col gap-5">
@@ -395,8 +608,12 @@ function MocPartDetailBody({
                   无高砖商品图
                 </div>
               )}
-              {hasGobricksFacts ? (
-                <GobricksDetailSection item={item} showHeading={false} />
+              {hasGobricksFacts || fulfillmentListDetail ? (
+                <GobricksDetailSection
+                  item={item}
+                  showHeading={false}
+                  forceShowUnitPrice={fulfillmentListDetail}
+                />
               ) : (
                 <p className="text-sm leading-relaxed text-[var(--muted)]">
                   暂无高砖字段明细（例如未带 info 的旧同步数据）。
@@ -433,98 +650,28 @@ function MocPartDetailBody({
                 showShortageReasonSummary={showShortageReasonSummary}
                 parentSubjectOwned={parentSubjectOwned}
                 onClose={onClose}
+                showGobricksUnitPrice={fulfillmentListDetail}
               />
             </div>
           </div>
         )}
 
-        {detailSubstituteSuggestions ? (
-          <div className="mt-7 border-t border-[var(--border-soft)] pt-7 sm:mt-8 sm:pt-8">
-            <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)]/90 p-4 sm:p-5">
-              <p className="text-sm leading-relaxed text-[var(--muted)]">
-                若需替换或核对模具变体，可参考本地 Rebrickable 目录中的下列关联零件（类型 A/M）：
-              </p>
-              <h3 className="mt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
-                推荐替换 · Rebrickable
-              </h3>
-              {substitutes === null ? (
-                <p className="mt-3 text-sm text-[var(--muted)]">加载中…</p>
-              ) : substitutesError ? (
-                <p className="mt-3 text-sm text-amber-200/90">{substitutesError}</p>
-              ) : substitutes.length === 0 ? (
-                <p className="mt-3 text-sm text-[var(--muted)]">无替代或模具变体记录。</p>
-              ) : (
-                <>
-                  <ul className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                    {substitutes.map((s) => (
-                      <li
-                        key={s.otherPartNum}
-                        className="flex min-h-0 gap-3 rounded-lg border border-[var(--border)]/80 bg-[var(--surface)] px-3 py-2.5 sm:gap-3.5 sm:px-3.5 sm:py-3"
-                      >
-                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-16 sm:w-16">
-                          {s.imgUrl ? (
-                            <RemoteCoverImage
-                              src={s.imgUrl}
-                              width={64}
-                              height={64}
-                              className="h-full w-full object-contain p-0.5 sm:p-1"
-                              sizes="(max-width:639px)56px,64px"
-                              fallbackLabel="无图"
-                              fallbackClassName="!text-[9px]"
-                            />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
-                              无图
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Link
-                              href={`/parts/${encodeURIComponent(s.otherPartNum)}`}
-                              className="font-mono text-xs font-semibold text-[var(--accent)] no-underline hover:underline"
-                              onClick={onClose}
-                            >
-                              {s.otherPartNum}
-                            </Link>
-                            {s.relTypes.map((t) => (
-                              <span
-                                key={t}
-                                className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-100/95"
-                              >
-                                {substituteRelBadgeLabel(t)}
-                              </span>
-                            ))}
-                          </div>
-                          {s.partName ? (
-                            <p className="mt-1 text-sm leading-snug text-[var(--muted)]">{s.partName}</p>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-4 border-t border-[var(--border-soft)] pt-3 text-[11px] leading-relaxed text-[var(--muted-2)]">
-                    数据来自本地 <span className="font-mono">part_relationships</span>；缩略图取自{" "}
-                    <span className="font-mono">inventory_parts</span> 中该零件任一角度的库存图。颜色与造型请自行核对。
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
+        {detailSubstituteSuggestions && !omitSubstituteBlock ? (
+          <MocPartSubstituteSuggestionsSection partNum={item.partNum} onClose={onClose} />
         ) : null}
       </div>
     </div>
   );
 }
 
-/** 方格列表中备注行（单价在标题旁展示，此处不再重复） */
+/** 方格列表中备注行（缺件表：单价在缺件原因等文案中处理；配货表单价单独一行） */
 function partsSheetGridReasonLine(r: ShortageResolveItem, shortageListMode: boolean): string | null {
-  const fromCsv = r.rest.trim();
+  const fromCsv = stripSheetRowReplacedMarker(r.rest).trim();
   if (fromCsv) return fromCsv;
   if (!shortageListMode) return null;
   if (!r.partFound) return "本地库未收录该零件号";
   if (!r.elementKnown) return "该零件颜色无官方元素记录";
-  if (r.imgSource === "part") return "无该色零件图（已用异色图）";
+  if (r.imgSource === "part") return "无该色零件图";
   return null;
 }
 
@@ -542,7 +689,11 @@ type Props = {
   parentSubjectOwned?: boolean;
   /** 配货表 / 缺件表：详情弹层展示目录库中的推荐替换零件（part_relationships A/M） */
   detailSubstituteSuggestions?: boolean;
+  /** 非空时与详情共用模态框，以 tab 切换「更换零件」 */
+  sheetRowReplaceContext?: SheetRowReplaceContext | null;
 };
+
+type DetailModalTab = "detail" | "replace";
 
 export function MocPartsList({
   items,
@@ -553,10 +704,13 @@ export function MocPartsList({
   shortageListMode = false,
   parentSubjectOwned = false,
   detailSubstituteSuggestions = false,
+  sheetRowReplaceContext = null,
 }: Props) {
+  const router = useRouter();
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [shortageReasonFilter, setShortageReasonFilter] = useState<ShortageReasonFilterId>("all");
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
+  const [detailModalTab, setDetailModalTab] = useState<DetailModalTab>("detail");
   const detailDialogRef = useRef<HTMLDialogElement>(null);
   const detailTitleId = useId();
 
@@ -608,7 +762,13 @@ export function MocPartsList({
   const closeDetail = useCallback(() => {
     detailDialogRef.current?.close();
     setDetailItem(null);
+    setDetailModalTab("detail");
   }, []);
+
+  const handleSheetRowReplaced = useCallback(() => {
+    closeDetail();
+    router.refresh();
+  }, [closeDetail, router]);
 
   useEffect(() => {
     const d = detailDialogRef.current;
@@ -703,27 +863,29 @@ export function MocPartsList({
           {listFiltered.map((r, idx) => {
             const reasonLine = partsSheetGridReasonLine(r, shortageListMode);
             const thumbSrc = sheetRowListThumbSrc(r, detailSubstituteSuggestions);
+            const showUnitInTile = sheetRowReplaceContext?.branch === "fulfillment";
+            const unitGrid = showUnitInTile ? sheetRowGobricksUnitPriceText(r) : undefined;
+            const sheetRowModified = restHasSheetRowReplacedMarker(r.rest);
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
-              parentSubjectOwned ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
+              sheetRowModified
+                ? PART_GRID_TILE_SHEET_ROW_MODIFIED
+                : parentSubjectOwned
+                  ? PART_GRID_TILE_OWNED_HIGHLIGHT
+                  : "",
             ]
               .filter(Boolean)
               .join(" ");
             const inner = (
               <>
+                {sheetRowModified ? (
+                  <span className="pointer-events-none absolute left-1 top-1 z-[1] max-w-[calc(100%-2.5rem)] truncate text-[9px] font-medium leading-none text-sky-200/95">
+                    有修改
+                  </span>
+                ) : null}
                 {detailSubstituteSuggestions && r.gdsPicture?.trim() ? (
                   <span className="pointer-events-none absolute right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-violet-200/95">
                     高砖
-                  </span>
-                ) : null}
-                {detailSubstituteSuggestions && !r.gdsPicture?.trim() && r.imgSource === "part" ? (
-                  <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-orange-300/95">
-                    异色图
-                  </span>
-                ) : null}
-                {!detailSubstituteSuggestions && r.imgSource === "part" ? (
-                  <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-orange-300/95">
-                    异色图
                   </span>
                 ) : null}
                 {!r.partFound ? (
@@ -750,6 +912,14 @@ export function MocPartsList({
                 <p className="mt-1 min-h-0 w-full shrink-0 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
                   {r.quantity} × {r.partNum}
                 </p>
+                {showUnitInTile ? (
+                  <p
+                    className="mt-0.5 line-clamp-1 w-full shrink-0 truncate px-0.5 text-center font-mono text-[9px] leading-tight text-emerald-200/90 sm:text-[10px]"
+                    title={unitGrid ? `单价 ${unitGrid} 元` : "暂无高砖单价"}
+                  >
+                    {unitGrid ? `单价 ${unitGrid} 元` : "单价 —"}
+                  </p>
+                ) : null}
                 {reasonLine ? (
                   <p
                     className="mt-0.5 line-clamp-2 w-full shrink-0 break-words px-0.5 text-center text-[9px] leading-snug text-[var(--muted)] sm:text-[10px]"
@@ -762,15 +932,18 @@ export function MocPartsList({
             );
             const key = `${r.lineNumber}-${r.partNum}-${r.colorId}-${idx}`;
             const title = `${r.quantity} × ${r.partNum}${r.colorName ? ` · ${r.colorName}` : ""}${
-              reasonLine ? ` · ${reasonLine}` : ""
-            }`;
+              showUnitInTile ? (unitGrid ? ` · 单价 ${unitGrid} 元` : " · 单价 —") : ""
+            }${reasonLine ? ` · ${reasonLine}` : ""}`;
             return (
               <button
                 key={key}
                 type="button"
                 title={title}
                 className={tileClass}
-                onClick={() => setDetailItem(r)}
+                onClick={() => {
+                  setDetailModalTab("detail");
+                  setDetailItem(r);
+                }}
               >
                 {inner}
               </button>
@@ -782,8 +955,11 @@ export function MocPartsList({
       <dialog
         ref={detailDialogRef}
         className="fixed left-0 top-0 z-[200] m-0 h-dvh max-h-dvh w-screen max-w-none border-0 bg-transparent p-0 text-[var(--text)] shadow-none outline-none backdrop:bg-transparent"
-        aria-labelledby={detailTitleId}
-        onClose={() => setDetailItem(null)}
+        aria-label={sheetRowReplaceContext ? "零件详情与更换" : "零件详情"}
+        onClose={() => {
+          setDetailItem(null);
+          setDetailModalTab("detail");
+        }}
       >
         {detailItem ? (
           <div
@@ -795,14 +971,77 @@ export function MocPartsList({
               className="max-h-[min(92dvh,52rem)] w-full max-w-[min(64rem,calc(100vw-1.25rem))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <MocPartDetailBody
-                item={detailItem}
-                titleId={detailTitleId}
-                onClose={closeDetail}
-                parentSubjectOwned={parentSubjectOwned}
-                showShortageReasonSummary={shortageListMode}
-                detailSubstituteSuggestions={detailSubstituteSuggestions}
-              />
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">
+                <div className="min-w-0 flex-1">
+                  {sheetRowReplaceContext ? (
+                    <div role="tablist" aria-label="视图切换" className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={detailModalTab === "detail"}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          detailModalTab === "detail"
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                            : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                        }`}
+                        onClick={() => setDetailModalTab("detail")}
+                      >
+                        详情
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={detailModalTab === "replace"}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          detailModalTab === "replace"
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                            : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
+                        }`}
+                        onClick={() => setDetailModalTab("replace")}
+                      >
+                        更换零件
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]">
+                      {detailSubstituteSuggestions ? "乐高与高砖" : "零件摘要"}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="grid size-9 shrink-0 place-items-center rounded-full border border-transparent text-2xl leading-none text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+                  aria-label="关闭"
+                  onClick={closeDetail}
+                >
+                  ×
+                </button>
+              </div>
+
+              {detailModalTab === "replace" && sheetRowReplaceContext ? (
+                <div className="px-5 py-5 sm:px-8 sm:py-7">
+                  <SheetRowReplacePanel
+                    key={`${detailItem.lineNumber}-${detailItem.partNum}-${detailItem.colorId}`}
+                    item={detailItem}
+                    context={sheetRowReplaceContext}
+                    onReplaced={handleSheetRowReplaced}
+                    showSubstituteSuggestions={Boolean(detailSubstituteSuggestions)}
+                  />
+                </div>
+              ) : (
+                <MocPartDetailBody
+                  item={detailItem}
+                  titleId={detailTitleId}
+                  onClose={closeDetail}
+                  parentSubjectOwned={parentSubjectOwned}
+                  showShortageReasonSummary={shortageListMode}
+                  detailSubstituteSuggestions={detailSubstituteSuggestions}
+                  hideTopBar
+                  omitSubstituteBlock={Boolean(sheetRowReplaceContext && detailSubstituteSuggestions)}
+                  sheetRowReplaceContext={sheetRowReplaceContext}
+                  onSheetRowRestored={sheetRowReplaceContext ? handleSheetRowReplaced : undefined}
+                />
+              )}
             </div>
           </div>
         ) : null}

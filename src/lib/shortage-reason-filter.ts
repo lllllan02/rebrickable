@@ -3,6 +3,8 @@
  * 多原因以 `·` 连接；筛选时一行可匹配多个原因类。
  */
 
+import { stripSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
+
 export type ShortageReasonCategoryId =
   | "no_match"
   | "off_shelf"
@@ -26,7 +28,7 @@ export const SHORTAGE_REASON_CATEGORY_DEFS: readonly {
 ] as const;
 
 export function shortageReasonCategoriesInRest(rest: string): ShortageReasonCategoryId[] {
-  const t = rest.trim();
+  const t = stripSheetRowReplacedMarker(rest).trim();
   if (!t) return [];
   const found: ShortageReasonCategoryId[] = [];
   for (const { id, needle } of SHORTAGE_REASON_CATEGORY_DEFS) {

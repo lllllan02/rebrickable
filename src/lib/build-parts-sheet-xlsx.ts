@@ -1,4 +1,5 @@
 import { sheetTagsDisplayZh, type PartsSheetTag } from "@/lib/parts-sheet-tags";
+import { stripSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
 
 type ExcelJSModule = typeof import("exceljs");
 
@@ -147,7 +148,7 @@ export async function buildPartsSheetXlsxBuffer(
       row.colorId,
       row.quantity,
       (row.gdsUnitPrice ?? row.gobricksUnitPrice ?? "").trim(),
-      row.rest,
+      stripSheetRowReplacedMarker(row.rest),
       row.partName ?? "",
       row.colorName ?? "",
       row.partFound ? "是" : "否",

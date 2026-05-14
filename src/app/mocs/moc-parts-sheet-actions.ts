@@ -12,13 +12,22 @@ import {
   type BuildSubjectKind,
 } from "@/lib/build-subject";
 import { MOC_PROFILE_MAX_DISPLAY_NAME, serializeTagsJson } from "@/lib/moc-profile-parse";
+import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
 import {
   parseBuildDisplayNameFromFilename,
   parseMocSheetItems,
   parseStoredMocDualSheets,
   dualSheetsToPayloadV2,
+  type MocSheetBranchPayload,
   type StoredMocDualSheets,
 } from "@/lib/parts-sheet-moc-id";
+import { resolveGobricksSheetSerializedRowsInDb } from "@/lib/parts-sheet-resolve-csv-db";
+import { listGobricksStockColorsForSheetReplaceAction } from "@/app/mocs/sheet-row-replace-catalog-action";
+import {
+  appendSheetRowReplacedMarker,
+  parseSheetRowReplaceMeta,
+  stripSheetRowReplacedMarker,
+} from "@/lib/sheet-row-replaced-marker";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 const MAX_SUBJECT_ID_LEN = 128;
@@ -147,6 +156,140 @@ function normalizeLegacyGdsOnShortageFulfillmentItems(items: ShortageResolveItem
     if ((it.gdsUnitPrice === undefined || it.gdsUnitPrice === null) && it.gobricksUnitPrice != null) {
       it.gdsUnitPrice = it.gobricksUnitPrice;
     }
+  }
+}
+
+/** 配货表行：高砖单价（元）× 数量之和，用于手动更换/还原后刷新 `gobricksGdsPriceCny`。 */
+function sumGobricksFulfillmentSheetTotalCny(items: readonly ShortageResolveItem[] | undefined): number {
+  if (!items?.length) return 0;
+  let s = 0;
+  for (const r of items) {
+    const raw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim().replace(/,/g, "");
+    const u = Number(raw);
+    if (!Number.isFinite(u) || u < 0) continue;
+    const q = Number.isFinite(r.quantity) ? r.quantity : 0;
+    if (!Number.isFinite(q) || q <= 0) continue;
+    s += u * q;
+  }
+  return Math.round(s * 1e4) / 1e4;
+}
+
+function branchPayloadFromLoaded(loaded: BuildSheetBranchLoaded | null): MocSheetBranchPayload | null {
+  if (!loaded) return null;
+  return { skippedHeader: loaded.skippedHeader, items: loaded.items, savedAt: loaded.savedAt };
+}
+
+/**
+ * 写入完整 dual payload，并按当前配货表行单价×数量更新 `gobricksGdsPriceCny`（不修改 `gobricksShortageSyncAt`）。
+ */
+async function persistStoredDualSheetsWithFulfillmentDerivedPrice(
+  subjectKind: BuildSubjectKind,
+  subjectId: string,
+  dualIn: StoredMocDualSheets
+): Promise<SaveBuildPartsSheetResult> {
+  const savedAt = new Date().toISOString();
+
+  const dualNorm: StoredMocDualSheets = { full: null, shortage: null, fulfillment: null };
+  if (dualIn.full) {
+    const items = parseMocSheetItems(dualIn.full.items);
+    if (!items?.length) return { ok: false, error: "完整表数据无效。" };
+    dualNorm.full = {
+      skippedHeader: dualIn.full.skippedHeader,
+      items,
+      savedAt: dualIn.full.savedAt,
+    };
+  }
+  if (dualIn.shortage) {
+    const items = parseMocSheetItems(dualIn.shortage.items);
+    if (!items?.length) dualNorm.shortage = null;
+    else {
+      normalizeLegacyGdsOnShortageFulfillmentItems(items);
+      dualNorm.shortage = {
+        skippedHeader: dualIn.shortage.skippedHeader,
+        items,
+        savedAt: dualIn.shortage.savedAt,
+      };
+    }
+  }
+  if (dualIn.fulfillment) {
+    const items = parseMocSheetItems(dualIn.fulfillment.items);
+    if (!items?.length) return { ok: false, error: "配货表须含至少一行有效数据。" };
+    normalizeLegacyGdsOnShortageFulfillmentItems(items);
+    dualNorm.fulfillment = {
+      skippedHeader: dualIn.fulfillment.skippedHeader,
+      items,
+      savedAt: dualIn.fulfillment.savedAt,
+    };
+  }
+
+  if (!dualNorm.full && !dualNorm.shortage && !dualNorm.fulfillment) {
+    return { ok: false, error: "至少须保留一种零件表数据。" };
+  }
+
+  const fulfillmentTotalCny = sumGobricksFulfillmentSheetTotalCny(dualNorm.fulfillment?.items);
+  const safePrice = Number.isFinite(fulfillmentTotalCny) && fulfillmentTotalCny >= 0 ? fulfillmentTotalCny : 0;
+
+  try {
+    const db = getUserDb();
+    db.transaction((tx) => {
+      const existingRows = tx
+        .select({
+          payloadJson: buildSavedPartsSheets.payloadJson,
+          shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
+        })
+        .from(buildSavedPartsSheets)
+        .where(buildSheetKey(subjectKind, subjectId))
+        .limit(1)
+        .all();
+      const existingJson = existingRows[0]?.payloadJson;
+      const rawCleared = existingRows[0]?.shortageClearedAt;
+      const existingClearedAt =
+        typeof rawCleared === "string" && rawCleared.trim().length > 0 ? rawCleared.trim() : null;
+
+      const dual = dualNorm;
+      const payload = dualSheetsToPayloadV2(dual);
+      const { skippedHeader, lineCount, totalPartQty } = aggregateRowFromDual(dual);
+      const shortageCols = shortageSummaryColumns(dual);
+      const nextShortageClearedAt: string | null = dual.shortage ? null : existingClearedAt;
+
+      tx.insert(buildSavedPartsSheets)
+        .values({
+          subjectKind,
+          subjectId,
+          skippedHeader,
+          payloadJson: JSON.stringify(payload),
+          lineCount,
+          totalPartQty,
+          updatedAt: savedAt,
+          firstSavedAt: savedAt,
+          shortageLineCount: shortageCols.shortageLineCount,
+          shortageTotalQty: shortageCols.shortageTotalQty,
+          shortageStatsOk: true,
+          shortageClearedAt: nextShortageClearedAt,
+          gobricksGdsPriceCny: safePrice,
+        })
+        .onConflictDoUpdate({
+          target: [buildSavedPartsSheets.subjectKind, buildSavedPartsSheets.subjectId],
+          set: {
+            skippedHeader,
+            payloadJson: JSON.stringify(payload),
+            lineCount,
+            totalPartQty,
+            updatedAt: savedAt,
+            shortageLineCount: shortageCols.shortageLineCount,
+            shortageTotalQty: shortageCols.shortageTotalQty,
+            shortageStatsOk: true,
+            shortageClearedAt: nextShortageClearedAt,
+            gobricksGdsPriceCny: safePrice,
+          },
+        })
+        .run();
+    });
+
+    revalidateBuildSubjectPaths(subjectKind, subjectId);
+    return { ok: true, savedAt };
+  } catch {
+    return { ok: false, error: "写入数据库失败。" };
   }
 }
 
@@ -790,4 +933,264 @@ export async function cancelBuildPartsSheetShortageMarkInDb(input: {
   } catch {
     return { ok: false, error: "写入数据库失败。" };
   }
+}
+
+export type ReplaceBuildPartsSheetRowResult = SaveBuildPartsSheetResult | { ok: false; error: string };
+
+/**
+ * 在已保存的配货表或缺件表中，将指定行更换为其他零件号与颜色（数量与 rest 沿用原行；高砖字段清空后写库）。
+ */
+export async function replaceBuildPartsSheetRowAction(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+  branch: "fulfillment" | "shortage";
+  lineNumber: number;
+  partNum: string;
+  colorId: number;
+}): Promise<ReplaceBuildPartsSheetRowResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
+  }
+  if (input.branch !== "fulfillment" && input.branch !== "shortage") {
+    return { ok: false, error: "branch 须为 fulfillment 或 shortage。" };
+  }
+  if (!Number.isFinite(input.lineNumber) || input.lineNumber < 1) {
+    return { ok: false, error: "行号无效。" };
+  }
+  if (!Number.isFinite(input.colorId)) {
+    return { ok: false, error: "颜色 ID 无效。" };
+  }
+
+  const partNum = input.partNum.trim();
+  if (!partNum) {
+    return { ok: false, error: "零件号不能为空。" };
+  }
+
+  const loaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
+  if (!loaded.ok) {
+    return { ok: false, error: loaded.error };
+  }
+  const branchData =
+    input.branch === "fulfillment" ? loaded.fulfillment : loaded.shortage;
+  if (!branchData) {
+    return {
+      ok: false,
+      error: input.branch === "fulfillment" ? "尚无配货表。" : "尚无缺件表。",
+    };
+  }
+
+  const idx = branchData.items.findIndex((r) => r.lineNumber === input.lineNumber);
+  if (idx < 0) {
+    return { ok: false, error: "找不到该行。" };
+  }
+
+  const old = branchData.items[idx];
+  if (old.partNum === partNum && old.colorId === input.colorId) {
+    return { ok: false, error: "与当前行相同，无需更换。" };
+  }
+
+  const meta = parseSheetRowReplaceMeta(old.rest);
+  const preservedOriginal =
+    meta.originalPartNum != null && meta.originalColorId != null
+      ? { partNum: meta.originalPartNum, colorId: meta.originalColorId }
+      : { partNum: old.partNum, colorId: old.colorId };
+
+  const serialized: GobricksSheetSerializedRow = {
+    partNum,
+    colorId: input.colorId,
+    quantity: old.quantity,
+    rest: stripSheetRowReplacedMarker(old.rest),
+    gobricksUnitPrice: null,
+    gdsItemId: null,
+    gdsColorId: null,
+    gdsPicture: null,
+    gdsUnitPrice: null,
+    gdsCaption: null,
+    gdsCaptionEn: null,
+    gdsShelfState: null,
+    gdsLegoColorId: null,
+  };
+
+  const resolved = await resolveGobricksSheetSerializedRowsInDb([serialized]);
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.error };
+  }
+  const newRow = resolved.items[0];
+  if (!newRow) {
+    return { ok: false, error: "目录对照失败。" };
+  }
+
+  const merged: ShortageResolveItem = {
+    ...newRow,
+    lineNumber: old.lineNumber,
+    quantity: old.quantity,
+    rest: appendSheetRowReplacedMarker(old.rest, preservedOriginal),
+  };
+
+  const savedAt = new Date().toISOString();
+
+  if (input.branch === "shortage") {
+    const nextShortage = branchData.items.filter((_, i) => i !== idx);
+    const ful = loaded.fulfillment;
+    const baseFulfillmentItems = ful?.items ?? [];
+    const nextLine =
+      baseFulfillmentItems.length > 0
+        ? Math.max(...baseFulfillmentItems.map((r) => r.lineNumber)) + 1
+        : 1;
+    const moved: ShortageResolveItem = { ...merged, lineNumber: nextLine };
+    const fulfillmentItems = [...baseFulfillmentItems, moved];
+    const dual: StoredMocDualSheets = {
+      full: branchPayloadFromLoaded(loaded.full),
+      shortage: nextShortage.length
+        ? { skippedHeader: branchData.skippedHeader, items: nextShortage, savedAt }
+        : null,
+      fulfillment: {
+        skippedHeader: ful?.skippedHeader ?? branchData.skippedHeader,
+        items: fulfillmentItems,
+        savedAt,
+      },
+    };
+    return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
+  }
+
+  const nextFulfillment = [...branchData.items];
+  nextFulfillment[idx] = merged;
+  const dual: StoredMocDualSheets = {
+    full: branchPayloadFromLoaded(loaded.full),
+    shortage: branchPayloadFromLoaded(loaded.shortage),
+    fulfillment: {
+      skippedHeader: branchData.skippedHeader,
+      items: nextFulfillment,
+      savedAt,
+    },
+  };
+  return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
+}
+
+/**
+ * 将「更换零件」行还原为记录中的原零件号与颜色；先校验高砖该 SKU 对应乐高色是否有库存。
+ */
+export async function restoreBuildPartsSheetRowAction(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+  branch: "fulfillment" | "shortage";
+  lineNumber: number;
+}): Promise<ReplaceBuildPartsSheetRowResult> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
+  }
+  if (input.branch !== "fulfillment" && input.branch !== "shortage") {
+    return { ok: false, error: "branch 须为 fulfillment 或 shortage。" };
+  }
+  if (!Number.isFinite(input.lineNumber) || input.lineNumber < 1) {
+    return { ok: false, error: "行号无效。" };
+  }
+
+  const loaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
+  if (!loaded.ok) {
+    return { ok: false, error: loaded.error };
+  }
+  const branchData =
+    input.branch === "fulfillment" ? loaded.fulfillment : loaded.shortage;
+  if (!branchData) {
+    return {
+      ok: false,
+      error: input.branch === "fulfillment" ? "尚无配货表。" : "尚无缺件表。",
+    };
+  }
+
+  const idx = branchData.items.findIndex((r) => r.lineNumber === input.lineNumber);
+  if (idx < 0) {
+    return { ok: false, error: "找不到该行。" };
+  }
+
+  const old = branchData.items[idx];
+  const meta = parseSheetRowReplaceMeta(old.rest);
+  if (!meta.hasMarker) {
+    return { ok: false, error: "本行无更换记录。" };
+  }
+  if (meta.originalPartNum == null || meta.originalColorId == null) {
+    return { ok: false, error: "本行缺少保存的原零件信息，无法一键还原。" };
+  }
+
+  const partNum = meta.originalPartNum;
+  const colorId = meta.originalColorId;
+  if (old.partNum === partNum && old.colorId === colorId) {
+    return { ok: false, error: "当前已是原零件，无需还原。" };
+  }
+
+  const stock = await listGobricksStockColorsForSheetReplaceAction({
+    partNum,
+    sheetRowPartNum: partNum,
+    sheetRowGdsItemId: null,
+    probeLegoColorId: colorId,
+  });
+  if (!stock.ok) {
+    return { ok: false, error: stock.error };
+  }
+  const hit = stock.variants.find((v) => v.colorId === colorId && v.inventory > 0);
+  if (!hit) {
+    return {
+      ok: false,
+      error: "高砖当前无该原零件此乐高色的有效库存，无法还原。可稍后重试或手动更换。",
+    };
+  }
+
+  const cleanRest = stripSheetRowReplacedMarker(old.rest);
+  const serialized: GobricksSheetSerializedRow = {
+    partNum,
+    colorId,
+    quantity: old.quantity,
+    rest: cleanRest,
+    gobricksUnitPrice: null,
+    gdsItemId: null,
+    gdsColorId: null,
+    gdsPicture: null,
+    gdsUnitPrice: null,
+    gdsCaption: null,
+    gdsCaptionEn: null,
+    gdsShelfState: null,
+    gdsLegoColorId: null,
+  };
+
+  const resolved = await resolveGobricksSheetSerializedRowsInDb([serialized]);
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.error };
+  }
+  const newRow = resolved.items[0];
+  if (!newRow) {
+    return { ok: false, error: "目录对照失败。" };
+  }
+
+  const merged: ShortageResolveItem = {
+    ...newRow,
+    lineNumber: old.lineNumber,
+    quantity: old.quantity,
+    rest: cleanRest,
+  };
+
+  const savedAt = new Date().toISOString();
+  const nextItems = [...branchData.items];
+  nextItems[idx] = merged;
+
+  const dual: StoredMocDualSheets = {
+    full: branchPayloadFromLoaded(loaded.full),
+    shortage:
+      input.branch === "shortage"
+        ? { skippedHeader: branchData.skippedHeader, items: nextItems, savedAt }
+        : branchPayloadFromLoaded(loaded.shortage),
+    fulfillment:
+      input.branch === "fulfillment"
+        ? { skippedHeader: branchData.skippedHeader, items: nextItems, savedAt }
+        : branchPayloadFromLoaded(loaded.fulfillment),
+  };
+  return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
 }

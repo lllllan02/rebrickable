@@ -7,7 +7,7 @@ import {
   buildHasSavedPartsSheet,
   saveBuildPartsSheetToDb,
 } from "@/app/mocs/moc-parts-sheet-actions";
-import { syncGobricksShortageForSubjectAction } from "@/app/mocs/gobricks-shortage-sync-action";
+import { syncGobricksShortageForSubjectWithModifiedConfirm } from "@/app/mocs/gobricks-shortage-sync-client";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
@@ -79,12 +79,14 @@ export function BuildPartsSheetUpload({ kind, variant = "panel" }: Props) {
         return;
       }
       if (kind === BUILD_SUBJECT_MOC) {
-        const sync = await syncGobricksShortageForSubjectAction({
+        const sync = await syncGobricksShortageForSubjectWithModifiedConfirm({
           subjectKind: kind,
           subjectId,
         });
         if (!sync.ok) {
-          setModalError(`已保存。高砖检查失败：${sync.error}`);
+          if (!sync.cancelled) {
+            setModalError(`已保存。高砖检查失败：${sync.error}`);
+          }
           return;
         }
       }

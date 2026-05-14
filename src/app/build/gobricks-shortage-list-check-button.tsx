@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 
-import { syncGobricksShortageForSubjectAction } from "@/app/mocs/gobricks-shortage-sync-action";
+import { syncGobricksShortageForSubjectWithModifiedConfirm } from "@/app/mocs/gobricks-shortage-sync-client";
 import type { BuildSubjectKind } from "@/lib/build-subject";
 
 const triggerClass =
@@ -44,12 +44,12 @@ export function GobricksShortageListInlineCheck({
   const runCheck = useCallback(() => {
     setErrorHint(null);
     startTransition(async () => {
-      const r = await syncGobricksShortageForSubjectAction({ subjectKind, subjectId });
+      const r = await syncGobricksShortageForSubjectWithModifiedConfirm({ subjectKind, subjectId });
       if (r.ok) {
         router.refresh();
         return;
       }
-      setErrorHint(r.error);
+      if (!r.cancelled) setErrorHint(r.error);
     });
   }, [router, subjectId, subjectKind]);
 
