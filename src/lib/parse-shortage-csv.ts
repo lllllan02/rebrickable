@@ -9,7 +9,9 @@ export type ShortageCsvRow = {
   partNum: string;
   colorId: number;
   quantity: number;
-  /** 第四列及之后的原始尾部（类型、渠道、说明等），便于展示 */
+  /** 高砖 `info.price` 等（元）；旧版 CSV 无此列时为 null */
+  gobricksUnitPrice: string | null;
+  /** 备注等；旧版为数量列后的全部尾部 */
   rest: string;
 };
 
@@ -54,6 +56,44 @@ function isHeaderLine(partField: string): boolean {
   return partField.trim().toLowerCase() === "part";
 }
 
+const PRICE_TOKEN_RE = /^\d+(\.\d+)?$/;
+
+/**
+ * 解析「数量」列之后：可选单列高砖单价（纯数字/小数），再接备注。
+ * 兼容旧版三列后整段为备注（无单价列）。
+ */
+export function splitShortagePriceAndRest(tailRaw: string): {
+  gobricksUnitPrice: string | null;
+  rest: string;
+} {
+  const tail = tailRaw.trimEnd();
+  const t = tail.trim();
+  if (t === "") return { gobricksUnitPrice: null, rest: "" };
+  if (PRICE_TOKEN_RE.test(t)) {
+    return { gobricksUnitPrice: t, rest: "" };
+  }
+
+  let sepIdx = -1;
+  for (let i = 0; i < tail.length; i++) {
+    if (COLUMN_SEPARATORS.has(tail[i]!)) {
+      sepIdx = i;
+      break;
+    }
+  }
+  if (sepIdx < 0) {
+    return { gobricksUnitPrice: null, rest: tail.trim() };
+  }
+  const first = tail.slice(0, sepIdx).trim();
+  const after = tail.slice(sepIdx + 1);
+  if (first === "") {
+    return { gobricksUnitPrice: null, rest: after.trim() };
+  }
+  if (PRICE_TOKEN_RE.test(first)) {
+    return { gobricksUnitPrice: first, rest: after.trim() };
+  }
+  return { gobricksUnitPrice: null, rest: tail.trim() };
+}
+
 export function parseShortageCsv(text: string): ParseShortageCsvResult {
   const rawLines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   const rows: ShortageCsvRow[] = [];
@@ -92,7 +132,7 @@ export function parseShortageCsv(text: string): ParseShortageCsvResult {
       return {
         ok: false,
         error:
-          "无法解析该行：第一列为零件号，之后应为「颜色ID」「数量」及后续列；颜色多为数字（可带 ' 或弯引号）；各列之间请用英文逗号、全角逗号、分号或 Tab 分隔。示例：6064,'2,1,类型,…",
+          "无法解析该行：第一列为零件号，之后应为「颜色ID」「数量」及可选「高砖单价」与备注列；颜色多为数字（可带 ' 或弯引号）；各列之间请用英文逗号、全角逗号、分号或 Tab 分隔。示例：6064,'2,1,0.35,类型,… 或 6064,'2,1,类型,…",
         lineNumber,
       };
     }
@@ -100,7 +140,8 @@ export function parseShortageCsv(text: string): ParseShortageCsvResult {
     const partNum = partField;
     const colorStr = m[1]!;
     const qtyStr = m[2]!;
-    const rest = m[3] ?? "";
+    const tailAfterQty = m[3] ?? "";
+    const { gobricksUnitPrice, rest } = splitShortagePriceAndRest(tailAfterQty);
     const colorId = Number.parseInt(colorStr, 10);
     const quantity = Number.parseInt(qtyStr, 10);
     if (!Number.isFinite(colorId) || colorId < 0) {
@@ -123,6 +164,7 @@ export function parseShortageCsv(text: string): ParseShortageCsvResult {
       partNum,
       colorId,
       quantity,
+      gobricksUnitPrice,
       rest,
     });
   }

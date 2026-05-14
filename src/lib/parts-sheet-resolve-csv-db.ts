@@ -143,6 +143,7 @@ export async function resolveShortageCsvInDb(csv: string): Promise<ResolveShorta
       partNum: r.partNum,
       colorId: r.colorId,
       quantity: r.quantity,
+      gobricksUnitPrice: r.gobricksUnitPrice,
       rest: r.rest,
       partFound,
       partName,

@@ -8,6 +8,8 @@ export type PartsSheetXlsxRow = {
   partNum: string;
   colorId: number;
   quantity: number;
+  /** 高砖单价（元）；无则空 */
+  gobricksUnitPrice?: string | null;
   rest: string;
   partFound: boolean;
   partName: string | null;
@@ -25,7 +27,7 @@ const THUMB_PX = 64;
 const DATA_ROW_HEIGHT_PT = 52;
 
 /** 缩略图所在列（0-based），置于「导入列 + 追加列」之后 */
-const IMAGE_COL_INDEX = 11;
+const IMAGE_COL_INDEX = 12;
 
 function isAllowedImgUrl(url: string): boolean {
   try {
@@ -80,7 +82,7 @@ export type BuildXlsxProgress =
   | { phase: "file" };
 
 /**
- * 生成 xlsx：前四列与 CSV 导入一致（Part, Color, Quantity, Rest），缩略图与本地解析信息追加在右侧。
+ * 生成 xlsx：前五列与缺件 CSV 一致（Part, Color, Quantity, 高砖单价, Rest），缩略图与本地解析信息追加在右侧。
  */
 export async function buildPartsSheetXlsxBuffer(
   rows: PartsSheetXlsxRow[],
@@ -97,6 +99,7 @@ export async function buildPartsSheetXlsxBuffer(
     { width: 14 },
     { width: 9 },
     { width: 8 },
+    { width: 10 },
     { width: 48 },
     { width: 36 },
     { width: 22 },
@@ -112,6 +115,7 @@ export async function buildPartsSheetXlsxBuffer(
     "Part",
     "Color",
     "Quantity",
+    "高砖单价",
     "Rest",
     "零件名称",
     "颜色名称",
@@ -134,6 +138,7 @@ export async function buildPartsSheetXlsxBuffer(
       row.partNum,
       row.colorId,
       row.quantity,
+      (row.gobricksUnitPrice ?? "").trim(),
       row.rest,
       row.partName ?? "",
       row.colorName ?? "",

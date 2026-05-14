@@ -64,6 +64,7 @@ export async function BuildSubjectListPage({
       shortageTotalQty: buildSavedPartsSheets.shortageTotalQty,
       shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
       gobricksShortageSyncAt: buildSavedPartsSheets.gobricksShortageSyncAt,
+      gobricksGdsPriceCny: buildSavedPartsSheets.gobricksGdsPriceCny,
     })
     .from(buildSavedPartsSheets)
     .where(eq(buildSavedPartsSheets.subjectKind, kind))
@@ -469,6 +470,7 @@ export async function BuildSubjectListPage({
                     shortageTotalQty={r.shortageTotalQty ?? null}
                     shortageClearedAt={r.shortageClearedAt ?? null}
                     gobricksShortageSyncAt={r.gobricksShortageSyncAt ?? null}
+                    gobricksGdsPriceCny={r.gobricksGdsPriceCny ?? null}
                     updatedAtIso={r.updatedAt}
                     owned={owned}
                     favorite={favorite}

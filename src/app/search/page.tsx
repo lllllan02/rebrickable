@@ -146,6 +146,7 @@ export default async function SearchPage({ searchParams }: Props) {
                       shortageTotalQty={sheet?.shortageTotalQty ?? null}
                       shortageClearedAt={sheet?.shortageClearedAt ?? null}
                       gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                      gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
                       updatedAtIso={updatedAtIso}
                       owned={owned}
                       favorite={favorite}
@@ -200,6 +201,7 @@ export default async function SearchPage({ searchParams }: Props) {
                       shortageTotalQty={sheet?.shortageTotalQty ?? null}
                       shortageClearedAt={sheet?.shortageClearedAt ?? null}
                       gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                      gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
                       updatedAtIso={updatedAtIso}
                       owned={owned}
                       favorite={favorite}

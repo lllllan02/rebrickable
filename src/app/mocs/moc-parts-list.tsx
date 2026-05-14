@@ -104,7 +104,9 @@ function MocPartDetailBody({
           {item.rest ? (
             <div>
               <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">导入附加列</dt>
-              <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">{item.rest}</dd>
+              <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
+                {item.rest}
+              </dd>
             </div>
           ) : null}
           {parentSubjectOwned ? (
@@ -162,11 +164,12 @@ function rowSame(a: ShortageResolveItem, b: ShortageResolveItem): boolean {
     a.lineNumber === b.lineNumber &&
     a.partNum === b.partNum &&
     a.colorId === b.colorId &&
-    a.quantity === b.quantity
+    a.quantity === b.quantity &&
+    (a.gobricksUnitPrice ?? "") === (b.gobricksUnitPrice ?? "")
   );
 }
 
-/** 方格列表中展示的「缺件/备注原因」：优先 CSV 尾部列，缺件表可编辑时再补系统说明 */
+/** 方格列表中备注行（单价在标题旁展示，此处不再重复） */
 function partsSheetGridReasonLine(r: ShortageResolveItem, shortageEditable: boolean): string | null {
   const fromCsv = r.rest.trim();
   if (fromCsv) return fromCsv;
@@ -309,6 +312,7 @@ export function MocPartsList({
             partNum: r.partNum,
             colorId: r.colorId,
             quantity: r.quantity,
+            gobricksUnitPrice: r.gobricksUnitPrice,
             rest: r.rest,
           })),
           { includeHeader: nextSkipped }

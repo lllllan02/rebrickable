@@ -9,6 +9,7 @@ import {
 import {
   bomToGobricksTestList,
   fetchGobricksLego2MergedPayload,
+  readGdsPriceCnyFromMergedGobricksPayload,
   shortageCsvFromGobricksPayload,
 } from "@/lib/gobricks-lego2-item-list";
 import { resolveShortageCsvInDb } from "@/lib/parts-sheet-resolve-csv-db";
@@ -22,9 +23,13 @@ function subjectKindLabel(kind: BuildSubjectKind): string {
   return kind === BUILD_SUBJECT_MOC ? "MOC" : "套装";
 }
 
-async function recordGobricksShortageSyncOk(subjectKind: BuildSubjectKind, subjectId: string) {
+async function recordGobricksShortageSyncOk(
+  subjectKind: BuildSubjectKind,
+  subjectId: string,
+  gdsPriceCny: number
+) {
   try {
-    await setGobricksShortageSyncAtInDb(subjectKind, subjectId, new Date().toISOString());
+    await setGobricksShortageSyncAtInDb(subjectKind, subjectId, new Date().toISOString(), gdsPriceCny);
   } catch {
     /* 戳记失败不阻塞主流程 */
   }
@@ -87,13 +92,15 @@ export async function syncGobricksShortageForSubjectAction(input: {
     return { ok: false, error: resolved.error };
   }
 
+  const gdsPriceCny = readGdsPriceCnyFromMergedGobricksPayload(merged);
+
   if (resolved.items.length === 0) {
     if (input.subjectKind === BUILD_SUBJECT_MOC) {
       const strip = await stripShortageBranchKeepingFullInDb({
         subjectKind: input.subjectKind,
         subjectId,
       });
-      await recordGobricksShortageSyncOk(input.subjectKind, subjectId);
+      await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
       if (!strip.ok) {
         return {
           ok: true,
@@ -103,7 +110,7 @@ export async function syncGobricksShortageForSubjectAction(input: {
       }
       return { ok: true, shortageLines: 0, message: "高砖无缺件，已清空缺件表。" };
     }
-    await recordGobricksShortageSyncOk(input.subjectKind, subjectId);
+    await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
     return {
       ok: true,
       shortageLines: 0,
@@ -123,7 +130,7 @@ export async function syncGobricksShortageForSubjectAction(input: {
     return { ok: false, error: save.error };
   }
 
-  await recordGobricksShortageSyncOk(input.subjectKind, subjectId);
+  await recordGobricksShortageSyncOk(input.subjectKind, subjectId, gdsPriceCny);
 
   return {
     ok: true,

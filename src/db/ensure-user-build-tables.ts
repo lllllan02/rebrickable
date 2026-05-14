@@ -57,6 +57,7 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       shortage_stats_ok INTEGER NOT NULL DEFAULT 0,
       shortage_cleared_at TEXT,
       gobricks_shortage_sync_at TEXT,
+      gobricks_gds_price_cny REAL,
       PRIMARY KEY (subject_kind, subject_id)
     );
     CREATE INDEX IF NOT EXISTS build_saved_parts_updated_idx ON build_saved_parts_sheets(updated_at);
@@ -167,6 +168,9 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     }
     if (!sheetCols.has("gobricks_shortage_sync_at")) {
       sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN gobricks_shortage_sync_at TEXT`);
+    }
+    if (!sheetCols.has("gobricks_gds_price_cny")) {
+      sqlite.exec(`ALTER TABLE build_saved_parts_sheets ADD COLUMN gobricks_gds_price_cny REAL`);
     }
     sqlite.exec(
       `UPDATE build_saved_parts_sheets SET first_saved_at = updated_at WHERE first_saved_at IS NULL OR trim(first_saved_at) = ''`

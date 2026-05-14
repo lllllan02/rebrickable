@@ -22,6 +22,8 @@ type Props = {
   variant?: "default" | "sidebar";
   /** 侧边栏：显示在标题与主体 ID 之下、标签之上（无已存零件表时为 null 则不显示） */
   partTotalQty?: number | null;
+  /** 侧边栏：高砖整单参考价（元），来自接口根字段 `gdsPrice`，显示在主标题旁；未对照时为 null */
+  gobricksGdsPriceCny?: number | null;
   /** 侧边栏：与主标题同一行右侧（如拥有 / 收藏按钮） */
   sidebarTitleAside?: ReactNode;
 };
@@ -35,6 +37,7 @@ export function MocProfileForm({
   initialTags,
   variant = "default",
   partTotalQty = null,
+  gobricksGdsPriceCny = null,
   sidebarTitleAside = null,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
@@ -126,6 +129,13 @@ export function MocProfileForm({
     });
   }, [displayName, router, subjectId, subjectKind, tags]);
 
+  const gobricksTotalLabel =
+    typeof gobricksGdsPriceCny === "number" &&
+    Number.isFinite(gobricksGdsPriceCny) &&
+    gobricksGdsPriceCny >= 0
+      ? new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gobricksGdsPriceCny)
+      : null;
+
   const readOnlyBlock = (
     <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
       <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-start gap-x-3 gap-y-2" : undefined}>
@@ -134,11 +144,19 @@ export function MocProfileForm({
             id={isSidebar ? formTitleId : undefined}
             className={
               isSidebar
-                ? "text-xl font-extrabold tracking-tight text-[var(--text)] sm:text-2xl"
+                ? "flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xl font-extrabold tracking-tight text-[var(--text)] sm:text-2xl"
                 : "text-lg font-semibold text-[var(--text)]"
             }
           >
-            {viewTitle}
+            <span className="min-w-0 break-words">{viewTitle}</span>
+            {isSidebar && gobricksTotalLabel ? (
+              <span
+                className="shrink-0 font-mono text-base font-semibold tabular-nums text-emerald-200/95 sm:text-xl"
+                title="高砖整单参考价：接口根字段 gdsPrice（按完整清单分片请求时求和），非缺件子集小计"
+              >
+                {gobricksTotalLabel}
+              </span>
+            ) : null}
           </p>
           <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
             <span>
@@ -227,6 +245,14 @@ export function MocProfileForm({
               }
             />
           </label>
+          {isSidebar && gobricksTotalLabel ? (
+            <p
+              className="mt-1 font-mono text-sm font-semibold tabular-nums text-emerald-200/95"
+              title="高砖整单参考价：接口根字段 gdsPrice（按完整清单分片请求时求和），非缺件子集小计"
+            >
+              高砖整单 {gobricksTotalLabel}
+            </p>
+          ) : null}
           <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
             <span>
               {ui.subjectIdLabel} · {subjectId}

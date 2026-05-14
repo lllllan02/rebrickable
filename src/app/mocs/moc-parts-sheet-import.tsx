@@ -44,6 +44,7 @@ function rowsToCsv(rows: ShortageRow[], includeHeader: boolean): string {
       partNum: r.partNum,
       colorId: r.colorId,
       quantity: r.quantity,
+      gobricksUnitPrice: r.gobricksUnitPrice,
       rest: r.rest,
     })),
     { includeHeader }

@@ -195,6 +195,7 @@ export async function HomeOwnedCollection() {
       shortageTotalQty: number | null;
       shortageClearedAt: string | null;
       gobricksShortageSyncAt: string | null;
+      gobricksGdsPriceCny: number | null;
     }
   >();
   const favoriteMocIds = new Set<string>();
@@ -293,6 +294,10 @@ export async function HomeOwnedCollection() {
         shortageTotalQty: row.shortageTotalQty ?? null,
         shortageClearedAt: row.shortageClearedAt ?? null,
         gobricksShortageSyncAt: row.gobricksShortageSyncAt ?? null,
+        gobricksGdsPriceCny:
+          typeof row.gobricksGdsPriceCny === "number" && Number.isFinite(row.gobricksGdsPriceCny)
+            ? row.gobricksGdsPriceCny
+            : null,
       });
     }
     for (const f of favRows as { subjectKind: string; subjectId: string }[]) {
@@ -372,6 +377,7 @@ export async function HomeOwnedCollection() {
                   shortageTotalQty={sheet?.shortageTotalQty ?? null}
                   shortageClearedAt={sheet?.shortageClearedAt ?? null}
                   gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                  gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
                   updatedAtIso={updatedAtIso}
                   owned={true}
                   favorite={favoriteMocIds.has(r.subjectId)}
@@ -418,6 +424,7 @@ export async function HomeOwnedCollection() {
                   shortageTotalQty={sheet?.shortageTotalQty ?? null}
                   shortageClearedAt={sheet?.shortageClearedAt ?? null}
                   gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                  gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
                   updatedAtIso={updatedAtIso}
                   owned={true}
                   favorite={favoriteSetNums.has(r.subjectId)}

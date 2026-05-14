@@ -28,6 +28,9 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       typeof o.colorId !== "number" ||
       typeof o.quantity !== "number" ||
       typeof o.rest !== "string" ||
+      (o.gobricksUnitPrice !== undefined &&
+        o.gobricksUnitPrice !== null &&
+        typeof o.gobricksUnitPrice !== "string") ||
       typeof o.partFound !== "boolean" ||
       (o.partName !== null && typeof o.partName !== "string") ||
       (o.partCatName !== null && typeof o.partCatName !== "string") ||
@@ -46,6 +49,12 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       partNum: o.partNum,
       colorId: o.colorId,
       quantity: o.quantity,
+      gobricksUnitPrice:
+        typeof o.gobricksUnitPrice === "string"
+          ? o.gobricksUnitPrice
+          : o.gobricksUnitPrice === null
+            ? null
+            : undefined,
       rest: o.rest,
       partFound: o.partFound,
       partName: o.partName as string | null,

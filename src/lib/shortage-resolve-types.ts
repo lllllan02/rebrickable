@@ -5,6 +5,8 @@ export type ShortageResolveItem = {
   partNum: string;
   colorId: number;
   quantity: number;
+  /** 高砖接口 `info.price` / `eshop_price`（元）；无或未存时省略 */
+  gobricksUnitPrice?: string | null;
   rest: string;
   partFound: boolean;
   partName: string | null;

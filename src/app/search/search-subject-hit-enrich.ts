@@ -36,6 +36,7 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
       shortageTotalQty: number | null;
       shortageClearedAt: string | null;
       gobricksShortageSyncAt: string | null;
+      gobricksGdsPriceCny: number | null;
     }
   >();
   const favoriteMocIds = new Set<string>();
@@ -160,6 +161,10 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
       shortageTotalQty: row.shortageTotalQty ?? null,
       shortageClearedAt: row.shortageClearedAt ?? null,
       gobricksShortageSyncAt: row.gobricksShortageSyncAt ?? null,
+      gobricksGdsPriceCny:
+        typeof row.gobricksGdsPriceCny === "number" && Number.isFinite(row.gobricksGdsPriceCny)
+          ? row.gobricksGdsPriceCny
+          : null,
     });
   }
   for (const f of favRows as { subjectKind: string; subjectId: string }[]) {

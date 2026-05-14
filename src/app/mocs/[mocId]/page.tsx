@@ -87,6 +87,7 @@ export default async function MocDetailPage({ params }: Props) {
   const partTotalQty = sheet.ok
     ? sheet.full?.totalPartQty ?? sheet.shortage?.totalPartQty ?? null
     : null;
+  const gobricksGdsPriceCny = sheet.ok ? sheet.gobricksGdsPriceCny : null;
 
   let initialFull: InitialMocSheetFromServer | null = null;
   let initialShortage: InitialMocSheetFromServer | null = null;
@@ -121,6 +122,7 @@ export default async function MocDetailPage({ params }: Props) {
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}
+        gobricksGdsPriceCny={gobricksGdsPriceCny}
         initialOwned={initialOwned}
         initialFavorite={initialFavorite}
       />

@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  real,
   sqliteTable,
   text,
   primaryKey,
@@ -180,6 +181,11 @@ export const buildSavedPartsSheets = sqliteTable(
     shortageClearedAt: text("shortage_cleared_at"),
     /** 最近一次高砖缺件对照成功完成的时间（ISO）；无缺件行时用于列表显示「全」 */
     gobricksShortageSyncAt: text("gobricks_shortage_sync_at"),
+    /**
+     * 高砖 `lego2ItemList` 根字段 `gdsPrice` 之和（元）：按完整 BOM 分片请求时各响应汇总；
+     * 表示整单参考价（非缺件子集）。上传新完整表时置 null。
+     */
+    gobricksGdsPriceCny: real("gobricks_gds_price_cny"),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),

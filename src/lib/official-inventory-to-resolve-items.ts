@@ -23,6 +23,7 @@ export function officialInventoryRowsToShortageResolveItems(
       partNum: l.partNum,
       colorId: l.colorId,
       quantity: l.quantity,
+      gobricksUnitPrice: null,
       rest: l.isSpare ? "备用件" : "",
       partFound: true,
       partName: l.name,

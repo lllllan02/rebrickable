@@ -32,18 +32,22 @@ function buildProfileKey(kind: BuildSubjectKind, subjectId: string) {
   return and(eq(buildProfiles.subjectKind, kind), eq(buildProfiles.subjectId, subjectId));
 }
 
-/** 高砖缺件对照成功后写入；上传新的完整表时会在 {@link saveBuildPartsSheetToDb} 中清空。 */
+/** 高砖缺件对照成功后写入时间戳与整单 `gdsPrice`；上传新的完整表时会在 {@link saveBuildPartsSheetToDb} 中清空。 */
 export async function setGobricksShortageSyncAtInDb(
   subjectKind: BuildSubjectKind,
   subjectIdRaw: string,
-  syncedAtIso: string
+  syncedAtIso: string,
+  gdsPriceCny: number
 ): Promise<void> {
   const subjectId = subjectIdRaw.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) return;
   if (!isSafeBuildSubjectId(subjectKind, subjectId)) return;
   const db = getUserDb();
   db.update(buildSavedPartsSheets)
-    .set({ gobricksShortageSyncAt: syncedAtIso })
+    .set({
+      gobricksShortageSyncAt: syncedAtIso,
+      gobricksGdsPriceCny: Number.isFinite(gdsPriceCny) && gdsPriceCny >= 0 ? gdsPriceCny : 0,
+    })
     .where(buildSheetKey(subjectKind, subjectId))
     .run();
 }
@@ -76,6 +80,8 @@ export type LoadBuildPartsSheetResult =
       shortage: BuildSheetBranchLoaded | null;
       /** 用户「标记为不缺」写入的 ISO 时间；无则 null */
       shortageClearedAt: string | null;
+      /** 高砖整单参考价（元），来自接口根字段 `gdsPrice` 分片之和；未对照时为 null */
+      gobricksGdsPriceCny: number | null;
     }
   | { ok: false; error: string };
 
@@ -153,6 +159,7 @@ export async function loadBuildPartsSheetFromDb(
       .select({
         payloadJson: buildSavedPartsSheets.payloadJson,
         shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
+        gobricksGdsPriceCny: buildSavedPartsSheets.gobricksGdsPriceCny,
       })
       .from(buildSavedPartsSheets)
       .where(buildSheetKey(subjectKind, subjectId))
@@ -167,12 +174,17 @@ export async function loadBuildPartsSheetFromDb(
         full: null,
         shortage: null,
         shortageClearedAt: null,
+        gobricksGdsPriceCny: null,
       };
     }
 
     const clearedRaw = row.shortageClearedAt;
     const shortageClearedAt =
       typeof clearedRaw === "string" && clearedRaw.trim().length > 0 ? clearedRaw.trim() : null;
+
+    const rawGds = row.gobricksGdsPriceCny;
+    const gobricksGdsPriceCny =
+      typeof rawGds === "number" && Number.isFinite(rawGds) ? rawGds : null;
 
     let parsed: unknown;
     try {
@@ -197,6 +209,7 @@ export async function loadBuildPartsSheetFromDb(
         ? toLoadedBranch(dual.shortage.skippedHeader, dual.shortage.items, dual.shortage.savedAt)
         : null,
       shortageClearedAt,
+      gobricksGdsPriceCny,
     };
   } catch {
     return { ok: false, error: "读取数据库失败。" };
@@ -349,7 +362,9 @@ export async function saveBuildPartsSheetToDb(input: {
             shortageTotalQty: shortageCols.shortageTotalQty,
             shortageStatsOk: true,
             shortageClearedAt: nextShortageClearedAt,
-            ...(input.kind === "full" ? { gobricksShortageSyncAt: null } : {}),
+            ...(input.kind === "full"
+              ? { gobricksShortageSyncAt: null, gobricksGdsPriceCny: null }
+              : {}),
           },
         })
         .run();

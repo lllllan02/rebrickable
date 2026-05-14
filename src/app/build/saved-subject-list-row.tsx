@@ -31,6 +31,7 @@ export function SavedSubjectListRow({
   shortageTotalQty,
   shortageClearedAt,
   gobricksShortageSyncAt,
+  gobricksGdsPriceCny = null,
 }: {
   kind: BuildSubjectKind;
   subjectId: string;
@@ -54,12 +55,21 @@ export function SavedSubjectListRow({
   shortageClearedAt: string | null;
   /** 最近一次高砖缺件对照成功的时间（ISO） */
   gobricksShortageSyncAt: string | null;
+  /** 高砖整单参考价（元），接口 `gdsPrice` 分片之和；未对照时为 null */
+  gobricksGdsPriceCny?: number | null;
 }) {
   const coverImageClassName = kind === BUILD_SUBJECT_SET ? "object-contain p-3" : "object-cover";
   const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
   const hasShortage = shortageLineCount != null && shortageLineCount > 0;
   const markedNoShortage =
     typeof shortageClearedAt === "string" && shortageClearedAt.trim().length > 0;
+
+  const gobricksGdsLabel =
+    typeof gobricksGdsPriceCny === "number" &&
+    Number.isFinite(gobricksGdsPriceCny) &&
+    gobricksGdsPriceCny >= 0
+      ? new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gobricksGdsPriceCny)
+      : null;
 
   return (
     <li
@@ -111,12 +121,22 @@ export function SavedSubjectListRow({
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
         <div className="min-w-0">
-          <Link
-            href={detailHref}
-            className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
-          >
-            {title}
-          </Link>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <Link
+              href={detailHref}
+              className="min-w-0 max-w-full line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
+            >
+              {title}
+            </Link>
+            {gobricksGdsLabel ? (
+              <span
+                className="shrink-0 font-mono text-sm font-semibold tabular-nums text-emerald-200/95"
+                title="高砖整单参考价（接口 gdsPrice，按完整清单分片求和）"
+              >
+                {gobricksGdsLabel}
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]" title={subjectId}>
             {subjectId}
           </p>

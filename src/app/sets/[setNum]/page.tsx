@@ -215,6 +215,8 @@ export default async function SetDetailPage({ params }: Props) {
   const spareQty = lines.reduce((a, l) => a + (l.isSpare ? l.quantity : 0), 0);
   const uniqueParts = new Set(lines.map((l) => l.partNum)).size;
 
+  const gobricksGdsPriceCny = sheet.ok ? sheet.gobricksGdsPriceCny : null;
+
   const setOfficial: SetDetailOfficialMeta = {
     setNum,
     catalogName: catalog?.name ?? null,
@@ -238,6 +240,7 @@ export default async function SetDetailPage({ params }: Props) {
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}
+        gobricksGdsPriceCny={gobricksGdsPriceCny}
         setOfficial={setOfficial}
         initialOwned={initialOwned}
         initialFavorite={initialFavorite}

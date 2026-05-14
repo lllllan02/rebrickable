@@ -34,6 +34,8 @@ type Props = {
   initialTags: string[];
   /** 已存零件表各行列 quantity 之和；无表时为 null */
   partTotalQty: number | null;
+  /** 高砖整单参考价（元），来自接口根字段 `gdsPrice`；未对照高砖时为 null */
+  gobricksGdsPriceCny?: number | null;
   /** 仅套装：官方盒图 / 占位与目录元数据，与 MOC 主面板同栅格展示 */
   setOfficial?: SetDetailOfficialMeta | null;
   /** 是否在「我的拥有」中标记（本地 SQLite） */
@@ -50,6 +52,7 @@ export function MocDetailEditorial({
   initialDisplayName,
   initialTags,
   partTotalQty,
+  gobricksGdsPriceCny = null,
   setOfficial = null,
   initialOwned,
   initialFavorite,
@@ -97,6 +100,7 @@ export function MocDetailEditorial({
             initialDisplayName={initialDisplayName}
             initialTags={initialTags}
             partTotalQty={partTotalQty}
+            gobricksGdsPriceCny={gobricksGdsPriceCny}
             sidebarTitleAside={
               <>
                 <span className="sr-only">拥有与收藏</span>

@@ -176,6 +176,9 @@ function isShortageResolveItem(v: unknown): v is ShortageResolveItem {
     isPartsSheetTags(o.sheetTags) &&
     (o.colorName === null || typeof o.colorName === "string") &&
     typeof o.elementKnown === "boolean" &&
+    (o.gobricksUnitPrice === undefined ||
+      o.gobricksUnitPrice === null ||
+      typeof o.gobricksUnitPrice === "string") &&
     (o.imgUrl === null || typeof o.imgUrl === "string") &&
     (o.imgSource === null || o.imgSource === "color" || o.imgSource === "part")
   );
