@@ -28,6 +28,7 @@ import {
   parseSheetRowReplaceMeta,
   stripSheetRowReplacedMarker,
 } from "@/lib/sheet-row-replaced-marker";
+import { stripShortageReasonTextFromRest } from "@/lib/shortage-reason-filter";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 const MAX_SUBJECT_ID_LEN = 128;
@@ -157,6 +158,29 @@ function normalizeLegacyGdsOnShortageFulfillmentItems(items: ShortageResolveItem
       it.gdsUnitPrice = it.gobricksUnitPrice;
     }
   }
+}
+
+function trimmedSheetUnitPriceText(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = String(v).trim();
+  return t.length > 0 ? t : null;
+}
+
+/** 与列表/导出一致：优先 gds 单价，否则旧字段 gobricksUnitPrice */
+function effectiveSheetRowUnitPriceForSerialize(
+  row: Pick<ShortageResolveItem, "gdsUnitPrice" | "gobricksUnitPrice">
+): string | null {
+  return trimmedSheetUnitPriceText(row.gdsUnitPrice) ?? trimmedSheetUnitPriceText(row.gobricksUnitPrice);
+}
+
+const MAX_GDS_PICTURE_URL_LEN = 2048;
+
+/** 选色步传入的高砖商品图 URL，写入 `gdsPicture` 前规范化 */
+function trimGdsPictureForSheetSerialize(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const t = String(raw).trim();
+  if (!t) return null;
+  return t.length > MAX_GDS_PICTURE_URL_LEN ? t.slice(0, MAX_GDS_PICTURE_URL_LEN) : t;
 }
 
 /** 配货表行：高砖单价（元）× 数量之和，用于手动更换/还原后刷新 `gobricksGdsPriceCny`。 */
@@ -938,7 +962,7 @@ export async function cancelBuildPartsSheetShortageMarkInDb(input: {
 export type ReplaceBuildPartsSheetRowResult = SaveBuildPartsSheetResult | { ok: false; error: string };
 
 /**
- * 在已保存的配货表或缺件表中，将指定行更换为其他零件号与颜色（数量与 rest 沿用原行；高砖字段清空后写库）。
+ * 在已保存的配货表或缺件表中，将指定行更换为其他零件号与颜色（数量、备注与单价沿用原行；高砖商品图由选色步传入；其余高砖 SKU 等目录字段清空后对照写库）。
  */
 export async function replaceBuildPartsSheetRowAction(input: {
   subjectKind: BuildSubjectKind;
@@ -947,6 +971,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
   lineNumber: number;
   partNum: string;
   colorId: number;
+  /** 选色步高砖有货 SKU 的 `picture` 字段（商品图 URL），须与 `colorId` 对应 */
+  gdsPicture?: string | null;
 }): Promise<ReplaceBuildPartsSheetRowResult> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
@@ -999,16 +1025,19 @@ export async function replaceBuildPartsSheetRowAction(input: {
       ? { partNum: meta.originalPartNum, colorId: meta.originalColorId }
       : { partNum: old.partNum, colorId: old.colorId };
 
+  const preservedUnit = effectiveSheetRowUnitPriceForSerialize(old);
+  const pickerGdsPicture = trimGdsPictureForSheetSerialize(input.gdsPicture);
+
   const serialized: GobricksSheetSerializedRow = {
     partNum,
     colorId: input.colorId,
     quantity: old.quantity,
     rest: stripSheetRowReplacedMarker(old.rest),
-    gobricksUnitPrice: null,
+    gobricksUnitPrice: preservedUnit,
     gdsItemId: null,
     gdsColorId: null,
-    gdsPicture: null,
-    gdsUnitPrice: null,
+    gdsPicture: pickerGdsPicture,
+    gdsUnitPrice: preservedUnit,
     gdsCaption: null,
     gdsCaptionEn: null,
     gdsShelfState: null,
@@ -1028,7 +1057,10 @@ export async function replaceBuildPartsSheetRowAction(input: {
     ...newRow,
     lineNumber: old.lineNumber,
     quantity: old.quantity,
-    rest: appendSheetRowReplacedMarker(old.rest, preservedOriginal),
+    rest: appendSheetRowReplacedMarker(
+      input.branch === "shortage" ? stripShortageReasonTextFromRest(old.rest) : old.rest,
+      preservedOriginal
+    ),
   };
 
   const savedAt = new Date().toISOString();
@@ -1145,16 +1177,18 @@ export async function restoreBuildPartsSheetRowAction(input: {
   }
 
   const cleanRest = stripSheetRowReplacedMarker(old.rest);
+  const preservedUnit = effectiveSheetRowUnitPriceForSerialize(old);
+
   const serialized: GobricksSheetSerializedRow = {
     partNum,
     colorId,
     quantity: old.quantity,
     rest: cleanRest,
-    gobricksUnitPrice: null,
+    gobricksUnitPrice: preservedUnit,
     gdsItemId: null,
     gdsColorId: null,
     gdsPicture: null,
-    gdsUnitPrice: null,
+    gdsUnitPrice: preservedUnit,
     gdsCaption: null,
     gdsCaptionEn: null,
     gdsShelfState: null,

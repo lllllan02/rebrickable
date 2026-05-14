@@ -283,7 +283,7 @@ function infoFromRow(row: Record<string, unknown>): GobricksInfo | null {
 
 /**
  * 将高砖 `lego2ItemList` 的 `itemList` 转为配货表行（含 `gds_*` 与兼容字段 `gobricksUnitPrice`）。
- * 表示上传完整 BOM 后高砖商城侧可配货（有对应商品）的行。
+ * 表示上传完整 BOM 后高砖商城侧可配货（有对应商品）的行；`rest` 留空（有货无需备注）。
  */
 export function fulfillmentSerializeRowsFromGobricksPayload(payload: unknown): {
   rows: GobricksSheetSerializedRow[];
@@ -299,7 +299,7 @@ export function fulfillmentSerializeRowsFromGobricksPayload(payload: unknown): {
     if (!base) continue;
     const cid = parseColorId(base.colorid);
     if (cid === null) continue;
-    bump(acc, base.designid, cid, base.quantity, "高砖商城有货", row, base);
+    bump(acc, base.designid, cid, base.quantity, "", row, base);
   }
 
   const rows = [...acc.entries()].map(([k, v]) => {

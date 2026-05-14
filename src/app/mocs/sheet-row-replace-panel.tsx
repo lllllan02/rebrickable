@@ -267,6 +267,8 @@ export function SheetRowReplacePanel({
     }
     setBusy(true);
     setActionError(null);
+    const pickedPicture =
+      gobricksVariants?.find((c) => c.colorId === colorId)?.picture?.trim() || null;
     const res = await replaceBuildPartsSheetRowAction({
       subjectKind: context.subjectKind,
       subjectId: context.subjectId,
@@ -274,6 +276,7 @@ export function SheetRowReplacePanel({
       lineNumber: item.lineNumber,
       partNum: pn,
       colorId,
+      gdsPicture: pickedPicture,
     });
     setBusy(false);
     if (!res.ok) {
@@ -281,7 +284,7 @@ export function SheetRowReplacePanel({
       return;
     }
     onReplaced();
-  }, [colorId, context.branch, context.subjectId, context.subjectKind, item.lineNumber, onReplaced, pickedPart]);
+  }, [colorId, context.branch, context.subjectId, context.subjectKind, gobricksVariants, item.lineNumber, onReplaced, pickedPart]);
 
   const backToParts = useCallback(() => {
     setCategoryPickerOpen(false);
@@ -298,7 +301,7 @@ export function SheetRowReplacePanel({
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-[var(--muted)]">
-        数量与附加列沿用当前行；保存后高砖字段会清空，可再「从高砖同步」。
+        数量与备注沿用当前行；单价沿用原行；高砖商品图来自下方所选有货颜色。其余高砖字段可再「从高砖同步」刷新。
       </p>
 
       {step === "pickPart" ? (

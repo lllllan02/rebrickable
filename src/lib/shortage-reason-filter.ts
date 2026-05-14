@@ -37,6 +37,28 @@ export function shortageReasonCategoriesInRest(rest: string): ShortageReasonCate
   return found;
 }
 
+function isGobricksShortageReasonSegment(segment: string): boolean {
+  const p = segment.trim();
+  if (!p) return true;
+  for (const { needle } of SHORTAGE_REASON_CATEGORY_DEFS) {
+    if (p === needle) return true;
+    if (needle === "超限购" && p.startsWith(needle)) return true;
+  }
+  return false;
+}
+
+/**
+ * 去掉高砖缺件对照写入的 `rest` 原因片段（`·` 分隔；`超限购·N` 等同理），保留用户其它备注。
+ * 用于缺件行更换为有货 SKU 并并入配货表后，列表/详情不再展示缺件原因。
+ */
+export function stripShortageReasonTextFromRest(rest: string): string {
+  const t = stripSheetRowReplacedMarker(rest).trim();
+  if (!t) return "";
+  const parts = t.split("·").map((s) => s.trim()).filter(Boolean);
+  const kept = parts.filter((p) => !isGobricksShortageReasonSegment(p));
+  return kept.join("·").trim();
+}
+
 export function rowMatchesShortageReasonFilter(
   rest: string,
   filter: ShortageReasonFilterId
