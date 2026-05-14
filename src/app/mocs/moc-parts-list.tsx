@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
-import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import {
   getSheetFilterOptionsFromItems,
@@ -279,57 +277,16 @@ function MocPartDetailBody({
   );
 }
 
-type ColorOption = {
-  id: number;
-  name: string;
-  rgb: string;
-  isTrans: boolean;
-};
-
-function isValidColorPayload(data: unknown): data is { colors: ColorOption[] } {
-  if (typeof data !== "object" || data === null || !("colors" in data)) return false;
-  const { colors: c } = data as { colors: unknown };
-  if (!Array.isArray(c)) return false;
-  return c.every(
-    (row) =>
-      typeof row === "object" &&
-      row !== null &&
-      "id" in row &&
-      typeof (row as { id: unknown }).id === "number" &&
-      "name" in row &&
-      typeof (row as { name: unknown }).name === "string" &&
-      "rgb" in row &&
-      typeof (row as { rgb: unknown }).rgb === "string" &&
-      "isTrans" in row &&
-      typeof (row as { isTrans: unknown }).isTrans === "boolean"
-  );
-}
-
-function rowSame(a: ShortageResolveItem, b: ShortageResolveItem): boolean {
-  return (
-    a.lineNumber === b.lineNumber &&
-    a.partNum === b.partNum &&
-    a.colorId === b.colorId &&
-    a.quantity === b.quantity &&
-    (a.gobricksUnitPrice ?? "") === (b.gobricksUnitPrice ?? "")
-  );
-}
-
 /** 方格列表中备注行（单价在标题旁展示，此处不再重复） */
-function partsSheetGridReasonLine(r: ShortageResolveItem, shortageEditable: boolean): string | null {
+function partsSheetGridReasonLine(r: ShortageResolveItem, shortageListMode: boolean): string | null {
   const fromCsv = r.rest.trim();
   if (fromCsv) return fromCsv;
-  if (!shortageEditable) return null;
+  if (!shortageListMode) return null;
   if (!r.partFound) return "本地库未收录该零件号";
   if (!r.elementKnown) return "该零件颜色无官方元素记录";
   if (r.imgSource === "part") return "无该色零件图（已用异色图）";
   return null;
 }
-
-type ShortagePersistFn = (
-  items: ShortageResolveItem[],
-  nextSkippedHeader: boolean
-) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 type Props = {
   items: ShortageResolveItem[];
@@ -339,8 +296,8 @@ type Props = {
   sourceMetaLine?: string | null;
   /** 各行列 quantity 之和；不传则由 items 现场累加 */
   totalPartQty?: number;
-  /** 缺件表：允许删除行、换色并持久化 */
-  shortageEditable?: { onPersist: ShortagePersistFn } | null;
+  /** 缺件表视图：缺件原因筛选、网格备注与详情侧栏缺件原因摘要 */
+  shortageListMode?: boolean;
   /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行使用拥有高亮样式 */
   parentSubjectOwned?: boolean;
   /** 配货表 / 缺件表：侧栏展示目录库中的推荐替换零件（part_relationships A/M） */
@@ -353,7 +310,7 @@ export function MocPartsList({
   savedAt,
   sourceMetaLine = null,
   totalPartQty: totalPartQtyProp,
-  shortageEditable = null,
+  shortageListMode = false,
   parentSubjectOwned = false,
   detailSubstituteSuggestions = false,
 }: Props) {
@@ -362,72 +319,20 @@ export function MocPartsList({
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
   const detailDialogRef = useRef<HTMLDialogElement>(null);
   const detailTitleId = useId();
-  const [draftItems, setDraftItems] = useState<ShortageResolveItem[]>(items);
-  const [draftSkippedHeader, setDraftSkippedHeader] = useState(skippedHeader);
-  const [editBusy, setEditBusy] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
-  const colorDialogRef = useRef<HTMLDialogElement>(null);
-  const colorLabelId = useId();
-  const [colorEditRow, setColorEditRow] = useState<ShortageResolveItem | null>(null);
-  const [selectedColorId, setSelectedColorId] = useState(0);
-  const [colorFilter, setColorFilter] = useState("");
-  const [colorsOptions, setColorsOptions] = useState<ColorOption[] | null>(null);
-  const [colorsLoading, setColorsLoading] = useState(false);
-  const [colorsLoadError, setColorsLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!shortageEditable) return;
-    setDraftItems(items);
-    setDraftSkippedHeader(skippedHeader);
-    setEditError(null);
-  }, [shortageEditable, items, skippedHeader, savedAt]);
-
-  useEffect(() => {
-    if (!colorEditRow) return;
-    const d = colorDialogRef.current;
-    if (d && !d.open) d.showModal();
-  }, [colorEditRow]);
-
-  useEffect(() => {
-    if (!colorEditRow) return;
-    if (colorsOptions !== null) return;
-    void (async () => {
-      setColorsLoading(true);
-      setColorsLoadError(null);
-      try {
-        const res = await fetch("/api/colors");
-        const data: unknown = await res.json().catch(() => null);
-        if (!res.ok || !isValidColorPayload(data)) {
-          setColorsLoadError("颜色列表加载失败。");
-          return;
-        }
-        setColorsOptions(data.colors);
-      } catch {
-        setColorsLoadError("颜色列表加载失败。");
-      } finally {
-        setColorsLoading(false);
-      }
-    })();
-  }, [colorEditRow, colorsOptions]);
-
-  const displayItems = shortageEditable ? draftItems : items;
 
   const shortageReasonOptions = useMemo(() => {
-    if (!shortageEditable) return [];
-    return getShortageReasonFilterOptionsFromRests(displayItems.map((r) => r.rest));
-  }, [shortageEditable, displayItems]);
+    if (!shortageListMode) return [];
+    return getShortageReasonFilterOptionsFromRests(items.map((r) => r.rest));
+  }, [shortageListMode, items]);
 
   useEffect(() => {
-    if (!shortageEditable) return;
+    if (!shortageListMode) return;
     if (shortageReasonFilter === "all") return;
     const ids = new Set(shortageReasonOptions.map((o) => o.id));
     if (!ids.has(shortageReasonFilter)) setShortageReasonFilter("all");
-  }, [shortageEditable, shortageReasonFilter, shortageReasonOptions]);
+  }, [shortageListMode, shortageReasonFilter, shortageReasonOptions]);
 
-  const sheetFilterOptions = useMemo(
-    () => getSheetFilterOptionsFromItems(displayItems),
-    [displayItems]
-  );
+  const sheetFilterOptions = useMemo(() => getSheetFilterOptionsFromItems(items), [items]);
 
   useEffect(() => {
     if (sheetListFilter === "all") return;
@@ -437,10 +342,10 @@ export function MocPartsList({
 
   const listAfterShortageReason = useMemo(
     () =>
-      shortageEditable
-        ? displayItems.filter((r) => rowMatchesShortageReasonFilter(r.rest, shortageReasonFilter))
-        : displayItems,
-    [shortageEditable, displayItems, shortageReasonFilter]
+      shortageListMode
+        ? items.filter((r) => rowMatchesShortageReasonFilter(r.rest, shortageReasonFilter))
+        : items,
+    [shortageListMode, items, shortageReasonFilter]
   );
 
   const listFiltered = useMemo(
@@ -449,115 +354,14 @@ export function MocPartsList({
   );
 
   const totalPartQty = useMemo(() => {
-    if (!shortageEditable && typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
+    if (!shortageListMode && typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
       return totalPartQtyProp;
     }
-    return displayItems.reduce((s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0), 0);
-  }, [displayItems, totalPartQtyProp, shortageEditable]);
+    return items.reduce((s, i) => s + (Number.isFinite(i.quantity) ? i.quantity : 0), 0);
+  }, [items, totalPartQtyProp, shortageListMode]);
 
-  const missingParts = displayItems.filter((i) => !i.partFound).length;
-  const noImage = displayItems.filter((i) => i.partFound && !i.imgUrl).length;
-
-  const filteredColors = useMemo(() => {
-    if (!colorsOptions) return [];
-    const raw = colorFilter.trim().toLowerCase();
-    if (!raw) return colorsOptions;
-    const forRgb = raw.replace(/^#/, "");
-    return colorsOptions.filter(
-      (c) =>
-        String(c.id).includes(forRgb) ||
-        c.name.toLowerCase().includes(raw) ||
-        c.rgb.toLowerCase().includes(forRgb)
-    );
-  }, [colorFilter, colorsOptions]);
-
-  const resolveAndPersist = useCallback(
-    async (nextItems: ShortageResolveItem[], nextSkipped: boolean) => {
-      if (!shortageEditable) return;
-      setEditBusy(true);
-      setEditError(null);
-      try {
-        const csv = serializeShortageCsv(
-          nextItems.map((r) => ({
-            partNum: r.partNum,
-            colorId: r.colorId,
-            quantity: r.quantity,
-            gobricksUnitPrice: r.gobricksUnitPrice,
-            rest: r.rest,
-          })),
-          { includeHeader: nextSkipped }
-        );
-        const result = await postResolvePartsSheetCsv(csv);
-        if ("error" in result && result.error) {
-          setEditError(result.error);
-          return;
-        }
-        const resolved = result.items;
-        setDraftItems(resolved);
-        setDraftSkippedHeader(result.skippedHeader);
-        const pr = await shortageEditable.onPersist(resolved, result.skippedHeader);
-        if (!pr.ok) {
-          setEditError(pr.error);
-        }
-      } catch {
-        setEditError("处理失败，请重试。");
-      } finally {
-        setEditBusy(false);
-      }
-    },
-    [shortageEditable]
-  );
-
-  const onDeleteRow = useCallback(
-    async (row: ShortageResolveItem) => {
-      if (!shortageEditable) return;
-      const next = draftItems.filter((x) => !rowSame(x, row));
-      if (next.length === 0) {
-        setEditError("缺件表至少保留一行，或清空后重新上传 CSV。");
-        return;
-      }
-      await resolveAndPersist(next, draftSkippedHeader);
-    },
-    [draftItems, draftSkippedHeader, resolveAndPersist, shortageEditable]
-  );
-
-  const openColorForRow = useCallback((row: ShortageResolveItem) => {
-    setColorFilter("");
-    setSelectedColorId(row.colorId);
-    setColorEditRow(row);
-  }, []);
-
-  const closeColorDialog = useCallback(() => {
-    setColorEditRow(null);
-    setSelectedColorId(0);
-    setColorFilter("");
-    colorDialogRef.current?.close();
-  }, []);
-
-  const applyColorChange = useCallback(async () => {
-    if (!shortageEditable || !colorEditRow) return;
-    if (!Number.isFinite(selectedColorId) || selectedColorId < 0) {
-      setEditError("请从列表中选择颜色。");
-      return;
-    }
-    if (selectedColorId === colorEditRow.colorId) {
-      closeColorDialog();
-      return;
-    }
-    const next = draftItems.map((r) =>
-      rowSame(r, colorEditRow) ? { ...r, colorId: selectedColorId } : r
-    );
-    closeColorDialog();
-    await resolveAndPersist(next, draftSkippedHeader);
-  }, [
-    closeColorDialog,
-    colorEditRow,
-    draftItems,
-    draftSkippedHeader,
-    resolveAndPersist,
-    selectedColorId,
-    shortageEditable,
-  ]);
+  const missingParts = items.filter((i) => !i.partFound).length;
+  const noImage = items.filter((i) => i.partFound && !i.imgUrl).length;
 
   const closeDetail = useCallback(() => {
     detailDialogRef.current?.close();
@@ -579,9 +383,9 @@ export function MocPartsList({
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-xs text-[var(--muted)]">
           共 {totalPartQty.toLocaleString("zh-CN")} 个零件
-          <span className="text-[var(--muted-2)]">（{displayItems.length.toLocaleString("zh-CN")} 行）</span>
+          <span className="text-[var(--muted-2)]">（{items.length.toLocaleString("zh-CN")} 行）</span>
           {(shortageReasonFilter !== "all" || sheetListFilter !== "all") &&
-          listFiltered.length !== displayItems.length
+          listFiltered.length !== items.length
             ? `，当前筛选 ${listFiltered.length} 条`
             : ""}
           {sourceMetaLine != null && sourceMetaLine !== "" ? (
@@ -593,26 +397,14 @@ export function MocPartsList({
             <>
               {" · "}
               保存于 {savedAt.slice(0, 19).replace("T", " ")}
-              {(shortageEditable ? draftSkippedHeader : skippedHeader) ? " · 导入时含表头" : ""}
+              {skippedHeader ? " · 导入时含表头" : ""}
             </>
           )}
         </p>
       </div>
 
-      {shortageEditable ? (
-        <p className="text-xs text-[var(--muted)]">
-          可删除指定行或更换颜色；修改将重新解析并写入缺件表。
-          {editBusy ? <span className="ml-2 text-[var(--accent)]">保存中…</span> : null}
-        </p>
-      ) : null}
-      {editError ? (
-        <p className="rounded-md border border-red-400/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-red-200/95">
-          {editError}
-        </p>
-      ) : null}
-
       <div className="meta-row flex flex-col gap-2 text-xs text-[var(--muted)]">
-        {shortageEditable && shortageReasonOptions.length > 1 ? (
+        {shortageListMode && shortageReasonOptions.length > 1 ? (
           <span className="inline-flex flex-wrap items-center gap-1.5">
             <span className="text-[var(--muted-2)]">缺件原因：</span>
             {shortageReasonOptions.map((opt) => (
@@ -660,12 +452,14 @@ export function MocPartsList({
 
       {listFiltered.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">
-          当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」或调整「缺件原因」查看完整列表。
+          {shortageListMode
+            ? "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」或调整「缺件原因」查看完整列表。"
+            : "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」查看完整列表。"}
         </p>
       ) : (
         <div className="tiles-grid">
           {listFiltered.map((r, idx) => {
-            const reasonLine = partsSheetGridReasonLine(r, Boolean(shortageEditable));
+            const reasonLine = partsSheetGridReasonLine(r, shortageListMode);
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
               parentSubjectOwned ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
@@ -711,56 +505,12 @@ export function MocPartsList({
                     {reasonLine}
                   </p>
                 ) : null}
-                {shortageEditable ? (
-                  <div
-                    className="mt-0.5 flex shrink-0 justify-center gap-0.5"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      disabled={editBusy}
-                      className="rounded border border-[var(--border)] bg-[rgba(7,10,18,0.88)] px-1 py-px text-[9px] text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-40"
-                      onClick={() => void onDeleteRow(r)}
-                    >
-                      删除
-                    </button>
-                    <button
-                      type="button"
-                      disabled={editBusy}
-                      className="rounded border border-[var(--border)] bg-[rgba(7,10,18,0.88)] px-1 py-px text-[9px] text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-40"
-                      onClick={() => openColorForRow(r)}
-                    >
-                      换色
-                    </button>
-                  </div>
-                ) : null}
               </>
             );
             const key = `${r.lineNumber}-${r.partNum}-${r.colorId}-${idx}`;
             const title = `${r.quantity} × ${r.partNum}${r.colorName ? ` · ${r.colorName}` : ""}${
               reasonLine ? ` · ${reasonLine}` : ""
             }`;
-            if (shortageEditable) {
-              return (
-                <div
-                  key={key}
-                  role="button"
-                  tabIndex={0}
-                  title={title}
-                  className={`${tileClass} cursor-pointer`}
-                  onClick={() => setDetailItem(r)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setDetailItem(r);
-                    }
-                  }}
-                >
-                  {inner}
-                </div>
-              );
-            }
             return (
               <button
                 key={key}
@@ -777,115 +527,6 @@ export function MocPartsList({
       )}
 
       <dialog
-        ref={colorDialogRef}
-        className="fixed left-1/2 top-1/2 z-[210] m-0 max-h-[min(92vh,40rem)] w-[min(100vw-1.5rem,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/55"
-        aria-labelledby={colorLabelId}
-        onClose={closeColorDialog}
-      >
-        {colorEditRow ? (
-          <form
-            className="flex max-h-[min(88vh,38rem)] flex-col gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void applyColorChange();
-            }}
-          >
-            <h2 id={colorLabelId} className="text-sm font-semibold">
-              更换颜色
-            </h2>
-            <p className="text-xs text-[var(--muted)]">
-              零件{" "}
-              <span className="font-mono text-[var(--text)]">{colorEditRow.partNum}</span>
-              ，请从库中选择颜色；也可打开{" "}
-              <Link href="/colors" className="underline">
-                颜色表
-              </Link>{" "}
-              对照色块。
-            </p>
-            {colorsLoadError ? (
-              <div className="rounded-md border border-red-400/25 bg-[var(--danger-soft)] px-3 py-2 text-xs text-red-200/95">
-                <p>{colorsLoadError}</p>
-              </div>
-            ) : null}
-            <label className="block shrink-0 text-xs text-[var(--muted)]">
-              筛选
-              <input
-                type="search"
-                value={colorFilter}
-                onChange={(e) => setColorFilter(e.target.value)}
-                placeholder="名称、ID 或 RGB…"
-                className="field mt-1 w-full text-sm"
-                disabled={colorsLoading || !colorsOptions}
-              />
-            </label>
-            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]">
-              {colorsLoading && !colorsOptions ? (
-                <p className="p-4 text-center text-sm text-[var(--muted)]">加载颜色中…</p>
-              ) : colorsOptions ? (
-                <ul
-                  className="max-h-[min(52vh,22rem)] overflow-y-auto overscroll-contain p-1.5"
-                  role="listbox"
-                  aria-label="颜色列表"
-                >
-                  {filteredColors.length === 0 ? (
-                    <li className="px-2 py-4 text-center text-sm text-[var(--muted)]">无匹配项</li>
-                  ) : (
-                    filteredColors.map((c) => {
-                      const active = c.id === selectedColorId;
-                      return (
-                        <li key={c.id} className="py-0.5">
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            className={`flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left text-sm transition-colors ${
-                              active
-                                ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                                : "border-transparent text-[var(--text)] hover:bg-[var(--surface-3)]"
-                            }`}
-                            onClick={() => setSelectedColorId(c.id)}
-                          >
-                            <span
-                              className="color-swatch h-6 w-9 shrink-0 rounded-sm border border-[var(--border)]"
-                              style={{ background: `#${c.rgb}` }}
-                            />
-                            <span className="shrink-0 font-mono text-xs text-[var(--muted)]">{c.id}</span>
-                            <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                          </button>
-                        </li>
-                      );
-                    })
-                  )}
-                </ul>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border-soft)] pt-3">
-              <button
-                type="button"
-                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
-                onClick={() => closeColorDialog()}
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="button-primary text-sm"
-                disabled={
-                  editBusy ||
-                  colorsLoading ||
-                  !colorsOptions ||
-                  Boolean(colorsLoadError) ||
-                  selectedColorId === colorEditRow.colorId
-                }
-              >
-                应用并保存
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </dialog>
-
-      <dialog
         ref={detailDialogRef}
         className="fixed left-0 top-0 z-[200] m-0 h-dvh max-h-dvh w-screen max-w-none border-0 bg-transparent p-0 text-[var(--text)] shadow-none outline-none backdrop:bg-transparent"
         aria-labelledby={detailTitleId}
@@ -899,7 +540,7 @@ export function MocPartsList({
                 titleId={detailTitleId}
                 onClose={closeDetail}
                 parentSubjectOwned={parentSubjectOwned}
-                showShortageReasonSummary={Boolean(shortageEditable)}
+                showShortageReasonSummary={shortageListMode}
                 detailSubstituteSuggestions={detailSubstituteSuggestions}
               />
             </div>

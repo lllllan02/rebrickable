@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
-import { saveBuildPartsSheetToDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { PartsSheetImport } from "@/app/mocs/moc-parts-sheet-import";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
@@ -48,7 +46,6 @@ export function MocDetailPartsSection({
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const listHref = buildSubjectListPath(subjectKind);
-  const router = useRouter();
   const isSetSubject = subjectKind === BUILD_SUBJECT_SET;
   const hasOfficialRows = Boolean(officialInventory && officialInventory.items.length > 0);
   const hasOfficial = hasOfficialRows;
@@ -88,22 +85,6 @@ export function MocDetailPartsSection({
     }
   }, [hasOfficial, initialFull, initialFulfillment, initialShortage, isSetSubject, listTab]);
 
-  const persistShortage = useCallback(
-    async (items: ShortageResolveItem[], skippedHeader: boolean) => {
-      const result = await saveBuildPartsSheetToDb({
-        subjectKind,
-        subjectId,
-        kind: "shortage",
-        skippedHeader,
-        items,
-        sourceFileName: null,
-      });
-      if (result.ok) router.refresh();
-      return result.ok ? { ok: true as const } : { ok: false as const, error: result.error };
-    },
-    [router, subjectId, subjectKind]
-  );
-
   const hasAnySheet = Boolean(initialFull || initialShortage || initialFulfillment);
   const hasListArea = isSetSubject
     ? officialInventory != null || Boolean(initialShortage) || Boolean(initialFulfillment)
@@ -142,7 +123,7 @@ export function MocDetailPartsSection({
                 <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
                   rebrickable_parts_*_缺货表.csv
                 </code>{" "}
-                相同结构。可先上传完整零件表，保存后将自动对照高砖写入配货表与缺件表；亦可在上方手动同步。解析成功后写入本 {ui.noun}（各表互不覆盖）。下方可切换查看；缺件表支持删除行或更换颜色。新记录也可从{" "}
+                相同结构。可先上传完整零件表，保存后将自动对照高砖写入配货表与缺件表；亦可在上方手动同步。解析成功后写入本 {ui.noun}（各表互不覆盖）。下方可切换查看。新记录也可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}
@@ -325,7 +306,7 @@ export function MocDetailPartsSection({
                 skippedHeader={initialShortage.skippedHeader}
                 savedAt={initialShortage.savedAt}
                 totalPartQty={undefined}
-                shortageEditable={{ onPersist: persistShortage }}
+                shortageListMode
                 parentSubjectOwned={parentSubjectOwned}
                 detailSubstituteSuggestions
               />
