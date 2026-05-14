@@ -11,21 +11,38 @@ import {
   rowMatchesSheetListFilter,
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
+import {
+  getShortageReasonFilterOptionsFromRests,
+  rowMatchesShortageReasonFilter,
+  shortageReasonCategoriesInRest,
+  SHORTAGE_REASON_CATEGORY_DEFS,
+  type ShortageReasonFilterId,
+} from "@/lib/shortage-reason-filter";
 import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
+
+function shortageReasonSummaryLines(rest: string): string[] {
+  const ids = shortageReasonCategoriesInRest(rest);
+  if (ids.length === 0) return [];
+  const labelById = new Map(SHORTAGE_REASON_CATEGORY_DEFS.map((d) => [d.id, d.label]));
+  return ids.map((id) => labelById.get(id) ?? id);
+}
 
 function MocPartDetailBody({
   item,
   titleId,
   onClose,
   parentSubjectOwned,
+  showShortageReasonSummary,
 }: {
   item: ShortageResolveItem;
   titleId: string;
   onClose: () => void;
   parentSubjectOwned: boolean;
+  showShortageReasonSummary: boolean;
 }) {
+  const reasonLines = showShortageReasonSummary ? shortageReasonSummaryLines(item.rest) : [];
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-3">
@@ -101,9 +118,26 @@ function MocPartDetailBody({
               </dd>
             </div>
           ) : null}
+          {reasonLines.length > 0 ? (
+            <div>
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">缺件原因</dt>
+              <dd className="mt-0.5 flex flex-wrap gap-1">
+                {reasonLines.map((line) => (
+                  <span
+                    key={line}
+                    className="rounded border border-sky-400/30 bg-sky-500/10 px-1.5 py-px text-[11px] font-medium text-sky-100/95"
+                  >
+                    {line}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          ) : null}
           {item.rest ? (
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">导入附加列</dt>
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
+                {showShortageReasonSummary ? "备注原文" : "导入附加列"}
+              </dt>
               <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
                 {item.rest}
               </dd>
@@ -209,6 +243,7 @@ export function MocPartsList({
   parentSubjectOwned = false,
 }: Props) {
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
+  const [shortageReasonFilter, setShortageReasonFilter] = useState<ShortageReasonFilterId>("all");
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
   const detailDialogRef = useRef<HTMLDialogElement>(null);
   const detailTitleId = useId();
@@ -262,6 +297,18 @@ export function MocPartsList({
 
   const displayItems = shortageEditable ? draftItems : items;
 
+  const shortageReasonOptions = useMemo(() => {
+    if (!shortageEditable) return [];
+    return getShortageReasonFilterOptionsFromRests(displayItems.map((r) => r.rest));
+  }, [shortageEditable, displayItems]);
+
+  useEffect(() => {
+    if (!shortageEditable) return;
+    if (shortageReasonFilter === "all") return;
+    const ids = new Set(shortageReasonOptions.map((o) => o.id));
+    if (!ids.has(shortageReasonFilter)) setShortageReasonFilter("all");
+  }, [shortageEditable, shortageReasonFilter, shortageReasonOptions]);
+
   const sheetFilterOptions = useMemo(
     () => getSheetFilterOptionsFromItems(displayItems),
     [displayItems]
@@ -273,9 +320,17 @@ export function MocPartsList({
     if (!ids.has(sheetListFilter)) setSheetListFilter("all");
   }, [sheetListFilter, sheetFilterOptions]);
 
+  const listAfterShortageReason = useMemo(
+    () =>
+      shortageEditable
+        ? displayItems.filter((r) => rowMatchesShortageReasonFilter(r.rest, shortageReasonFilter))
+        : displayItems,
+    [shortageEditable, displayItems, shortageReasonFilter]
+  );
+
   const listFiltered = useMemo(
-    () => displayItems.filter((r) => rowMatchesSheetListFilter(r, sheetListFilter)),
-    [displayItems, sheetListFilter]
+    () => listAfterShortageReason.filter((r) => rowMatchesSheetListFilter(r, sheetListFilter)),
+    [listAfterShortageReason, sheetListFilter]
   );
 
   const totalPartQty = useMemo(() => {
@@ -410,8 +465,9 @@ export function MocPartsList({
         <p className="text-xs text-[var(--muted)]">
           共 {totalPartQty.toLocaleString("zh-CN")} 个零件
           <span className="text-[var(--muted-2)]">（{displayItems.length.toLocaleString("zh-CN")} 行）</span>
-          {sheetListFilter !== "all" && listFiltered.length !== displayItems.length
-            ? `，当前分类 ${listFiltered.length} 条`
+          {(shortageReasonFilter !== "all" || sheetListFilter !== "all") &&
+          listFiltered.length !== displayItems.length
+            ? `，当前筛选 ${listFiltered.length} 条`
             : ""}
           {sourceMetaLine != null && sourceMetaLine !== "" ? (
             <>
@@ -440,10 +496,30 @@ export function MocPartsList({
         </p>
       ) : null}
 
-      <div className="meta-row flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)]">
+      <div className="meta-row flex flex-col gap-2 text-xs text-[var(--muted)]">
+        {shortageEditable && shortageReasonOptions.length > 1 ? (
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            <span className="text-[var(--muted-2)]">缺件原因：</span>
+            {shortageReasonOptions.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                  shortageReasonFilter === opt.id
+                    ? "border-sky-400/55 bg-sky-500/15 text-sky-100/95"
+                    : "border-[var(--border-soft)] text-[var(--muted)] hover:border-sky-400/35 hover:bg-[var(--surface-2)]"
+                }`}
+                onClick={() => setShortageReasonFilter(opt.id)}
+              >
+                {opt.id === "all" ? opt.label : `${opt.label}（${opt.count}）`}
+              </button>
+            ))}
+          </span>
+        ) : null}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {sheetFilterOptions.length > 1 ? (
           <span className="inline-flex flex-wrap items-center gap-1.5">
-            <span className="text-[var(--muted-2)]">分类：</span>
+            <span className="text-[var(--muted-2)]">零件类型：</span>
             {sheetFilterOptions.map((opt) => (
               <button
                 key={opt.id}
@@ -464,11 +540,12 @@ export function MocPartsList({
           <span className="text-amber-200/90">本地库未收录：{missingParts} 条</span>
         ) : null}
         {noImage > 0 ? <span>有收录但无库存图：{noImage} 条</span> : null}
+        </div>
       </div>
 
       {listFiltered.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">
-          当前分类下没有匹配条目。未收录零件不参与分类筛选；可点「全部」查看完整列表。
+          当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」或调整「缺件原因」查看完整列表。
         </p>
       ) : (
         <div className="tiles-grid">
@@ -707,6 +784,7 @@ export function MocPartsList({
                 titleId={detailTitleId}
                 onClose={closeDetail}
                 parentSubjectOwned={parentSubjectOwned}
+                showShortageReasonSummary={Boolean(shortageEditable)}
               />
             </div>
             <button
