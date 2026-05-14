@@ -4,7 +4,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import {
   buildFavoriteSubjects,
   buildImages,
@@ -47,7 +47,7 @@ export async function BuildSubjectListPage({
     return <div className="page-stack">{officialCatalogSection}</div>;
   }
 
-  const db = getDb();
+  const db = getUserDb();
   const listOrderBy =
     kind === BUILD_SUBJECT_MOC
       ? [

@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "tsx scripts/ensure-local-db.ts",
+    "postinstall": "tsx scripts/ensure-local-db.ts && tsx scripts/ensure-user-local-db.ts",
     "dev": "next dev -p 3100",
     "build": "next build",
     "start": "next start -p 3100",
     "lint": "eslint .",
     "db:import": "tsx scripts/import-assets.ts",
     "db:pack": "tsx scripts/pack-local-db.ts",
+    "db:pack-catalog": "tsx scripts/pack-local-db.ts --catalog",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

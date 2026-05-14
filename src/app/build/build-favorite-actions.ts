@@ -2,7 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildFavoriteSubjects } from "@/db/schema";
 import { revalidateFavoritePaths } from "@/lib/build-favorite-revalidate";
 import { isBuildSubjectKind, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
@@ -24,7 +24,7 @@ export async function setBuildFavoriteAction(input: {
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     if (input.favorite) {
       const markedAt = new Date().toISOString();
       await db

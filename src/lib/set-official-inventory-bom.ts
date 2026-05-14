@@ -1,6 +1,6 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { inventories, inventoryParts, parts, colors, partCategories } from "@/db/schema";
 
 /** 供高砖对照：最新版本官方清单的 part + color + qty */
@@ -10,7 +10,7 @@ export async function loadSetOfficialInventoryBomLines(
   const setNum = setNumRaw.trim();
   if (!setNum) return [];
 
-  const db = getDb();
+  const db = getCatalogDb();
   const [inv] = await db
     .select({ id: inventories.id })
     .from(inventories)

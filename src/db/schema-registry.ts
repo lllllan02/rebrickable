@@ -1,0 +1,26 @@
+import * as schema from "./schema";
+
+/** Drizzle：仅目录表（rebrickable.db） */
+export const catalogSchema = {
+  colors: schema.colors,
+  partCategories: schema.partCategories,
+  parts: schema.parts,
+  elements: schema.elements,
+  legoThemes: schema.legoThemes,
+  legoSets: schema.legoSets,
+  inventories: schema.inventories,
+  inventoryParts: schema.inventoryParts,
+  minifigs: schema.minifigs,
+  inventoryMinifigs: schema.inventoryMinifigs,
+  partRelationships: schema.partRelationships,
+};
+
+/** Drizzle：仅用户表（rebrickable-user.db） */
+export const userSchema = {
+  buildSavedPartsSheets: schema.buildSavedPartsSheets,
+  buildProfiles: schema.buildProfiles,
+  buildImages: schema.buildImages,
+  buildAttachments: schema.buildAttachments,
+  buildOwnedSubjects: schema.buildOwnedSubjects,
+  buildFavoriteSubjects: schema.buildFavoriteSubjects,
+};

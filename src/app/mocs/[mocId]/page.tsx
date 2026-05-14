@@ -3,7 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildAttachments, buildFavoriteSubjects, buildImages, buildOwnedSubjects, buildProfiles } from "@/db/schema";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
@@ -22,7 +22,7 @@ export default async function MocDetailPage({ params }: Props) {
   const { mocId: raw } = await params;
   const mocId = decodeURIComponent(raw);
 
-  const db = getDb();
+  const db = getUserDb();
   const mocKey = and(eq(buildImages.subjectKind, BUILD_SUBJECT_MOC), eq(buildImages.subjectId, mocId));
   const mocAttKey = and(
     eq(buildAttachments.subjectKind, BUILD_SUBJECT_MOC),

@@ -4,7 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { and, count, eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildImages } from "@/db/schema";
 import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
 import {
@@ -76,7 +76,7 @@ export async function uploadBuildImageAction(
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     const [cntRow] = await db
       .select({ n: count() })
       .from(buildImages)
@@ -139,7 +139,7 @@ export async function deleteBuildImageAction(
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     const [row] = await db
       .select({ id: buildImages.id, storedFile: buildImages.storedFile })
       .from(buildImages)

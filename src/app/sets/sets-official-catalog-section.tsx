@@ -4,7 +4,6 @@ import {
   asc,
   countDistinct,
   eq,
-  exists,
   inArray,
   isNotNull,
   like,
@@ -18,7 +17,7 @@ import {
 
 import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
-import { getDb } from "@/db/client";
+import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   inventories,
   inventoryMinifigs,
@@ -66,8 +65,8 @@ function usableImgUrl(u: string | null | undefined): u is string {
 
 export type SetsCatalogSearchParams = { q?: string; page?: string; theme?: string; mark?: string };
 
-function invLatestSubquery(db: ReturnType<typeof getDb>) {
-  return db
+function invLatestSubquery(catalogDb: ReturnType<typeof getCatalogDb>) {
+  return catalogDb
     .select({
       setNum: inventories.setNum,
       maxVersion: max(inventories.version).as("max_version"),
@@ -198,12 +197,12 @@ function computeRollupCounts(
 
 /** 与「按主题浏览」栅格相同的根主题列表，供套装列表筛选栏下拉使用 */
 async function loadThemeSelectRootRows(
-  db: ReturnType<typeof getDb>
+  catalogDb: ReturnType<typeof getCatalogDb>
 ): Promise<{ id: number; name: string }[]> {
-  const invLatest = invLatestSubquery(db);
+  const invLatest = invLatestSubquery(catalogDb);
   const [themeRows, directRows] = await Promise.all([
-    db.select({ id: legoThemes.id, name: legoThemes.name, parentId: legoThemes.parentId }).from(legoThemes),
-    db
+    catalogDb.select({ id: legoThemes.id, name: legoThemes.name, parentId: legoThemes.parentId }).from(legoThemes),
+    catalogDb
       .select({
         themeId: legoSets.themeId,
         c: countDistinct(inventories.setNum),
@@ -248,15 +247,16 @@ export async function SetsOfficialCatalogSection({
   const requestedPage = Math.max(1, Number.parseInt(searchParams.page ?? "1", 10) || 1);
   const markFilter = parseListMarkFilter(searchParams.mark);
 
-  const db = getDb();
+  const catalogDb = getCatalogDb();
+  const userDb = getUserDb();
 
   const showThemePicker = themeRaw.length === 0 && q.length === 0;
 
   if (showThemePicker) {
-    const invLatest = invLatestSubquery(db);
+    const invLatest = invLatestSubquery(catalogDb);
     const [themeRows, directRows, totalRow] = await Promise.all([
-      db.select({ id: legoThemes.id, name: legoThemes.name, parentId: legoThemes.parentId }).from(legoThemes),
-      db
+      catalogDb.select({ id: legoThemes.id, name: legoThemes.name, parentId: legoThemes.parentId }).from(legoThemes),
+      catalogDb
         .select({
           themeId: legoSets.themeId,
           c: countDistinct(inventories.setNum),
@@ -269,7 +269,7 @@ export async function SetsOfficialCatalogSection({
         .leftJoin(legoSets, eq(inventories.setNum, legoSets.setNum))
         .where(isNotNull(legoSets.themeId))
         .groupBy(legoSets.themeId),
-      db
+      catalogDb
         .select({ c: countDistinct(inventories.setNum) })
         .from(inventories)
         .innerJoin(
@@ -305,7 +305,7 @@ export async function SetsOfficialCatalogSection({
 
     const heroCand =
       themeIdsListed.length > 0
-        ? await db
+        ? await catalogDb
             .select({
               themeId: legoSets.themeId,
               imgUrl: legoSets.imgUrl,
@@ -404,7 +404,7 @@ export async function SetsOfficialCatalogSection({
       invalidThemeParam = themeRaw.length > 0;
       themeFilterIds = [];
     } else {
-      const themeMeta = await db
+      const themeMeta = await catalogDb
         .select({ id: legoThemes.id, name: legoThemes.name, parentId: legoThemes.parentId })
         .from(legoThemes);
       const themeIdSet = new Set(themeMeta.map((t) => t.id));
@@ -433,36 +433,29 @@ export async function SetsOfficialCatalogSection({
       ? and(searchWhere, themeWhere)
       : searchWhere ?? themeWhere;
 
-  const ownedMarkExists = exists(
-    db
-      .select({ k: buildOwnedSubjects.subjectId })
+  let markWhere: SQL | undefined = undefined;
+  if (markFilter === "owned") {
+    const marked = await userDb
+      .select({ subjectId: buildOwnedSubjects.subjectId })
       .from(buildOwnedSubjects)
-      .where(
-        and(
-          eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
-          eq(buildOwnedSubjects.subjectId, inventories.setNum)
-        )
-      )
-  );
-  const favoriteMarkExists = exists(
-    db
-      .select({ k: buildFavoriteSubjects.subjectId })
+      .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET));
+    const nums = [...new Set(marked.map((r) => r.subjectId))];
+    markWhere = nums.length > 0 ? inArray(inventories.setNum, nums) : sql`0=1`;
+  } else if (markFilter === "favorite") {
+    const marked = await userDb
+      .select({ subjectId: buildFavoriteSubjects.subjectId })
       .from(buildFavoriteSubjects)
-      .where(
-        and(
-          eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET),
-          eq(buildFavoriteSubjects.subjectId, inventories.setNum)
-        )
-      )
-  );
-  const markWhere =
-    markFilter === "owned" ? ownedMarkExists : markFilter === "favorite" ? favoriteMarkExists : undefined;
+      .where(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET));
+    const nums = [...new Set(marked.map((r) => r.subjectId))];
+    markWhere = nums.length > 0 ? inArray(inventories.setNum, nums) : sql`0=1`;
+  }
+
   const invWhereCombined =
     invWhere && markWhere ? and(invWhere, markWhere) : markWhere ?? invWhere;
 
-  const invLatest = invLatestSubquery(db);
+  const invLatest = invLatestSubquery(catalogDb);
 
-  const totalRow = await db
+  const totalRow = await catalogDb
     .select({ c: countDistinct(inventories.setNum) })
     .from(inventories)
     .innerJoin(
@@ -477,7 +470,7 @@ export async function SetsOfficialCatalogSection({
   const page = Math.min(totalPages, requestedPage);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const rows = await db
+  const rows = await catalogDb
     .select({
       setNum: inventories.setNum,
       inventoryId: inventories.id,
@@ -502,7 +495,7 @@ export async function SetsOfficialCatalogSection({
   const pageSetNums = [...new Set(rows.map((r) => r.setNum))];
   const minifigThumbBySetNum = new Map<string, string>();
   if (pageSetNums.length > 0) {
-    const figRows = await db
+    const figRows = await catalogDb
       .select({ figNum: minifigs.figNum, imgUrl: minifigs.imgUrl })
       .from(minifigs)
       .where(
@@ -521,7 +514,7 @@ export async function SetsOfficialCatalogSection({
   const favoritePageSetNums = new Set<string>();
   if (pageSetNums.length > 0) {
     const [ownedRows, favoriteRows] = await Promise.all([
-      db
+      userDb
         .select({ subjectId: buildOwnedSubjects.subjectId })
         .from(buildOwnedSubjects)
         .where(
@@ -530,7 +523,7 @@ export async function SetsOfficialCatalogSection({
             inArray(buildOwnedSubjects.subjectId, pageSetNums)
           )
         ),
-      db
+      userDb
         .select({ subjectId: buildFavoriteSubjects.subjectId })
         .from(buildFavoriteSubjects)
         .where(
@@ -554,7 +547,7 @@ export async function SetsOfficialCatalogSection({
   const spareQtyByInv = new Map<number, number>();
 
   if (invIds.length > 0) {
-    const statRows = await db
+    const statRows = await catalogDb
       .select({
         inventoryId: inventoryParts.inventoryId,
         mainQty: sql<number>`coalesce(sum(case when ${inventoryParts.isSpare} = 0 then ${inventoryParts.quantity} else 0 end), 0)`,
@@ -565,7 +558,7 @@ export async function SetsOfficialCatalogSection({
       .groupBy(inventoryParts.inventoryId);
 
     if (invIdsNeedInvMinifigThumb.length > 0) {
-      const miniRows = await db
+      const miniRows = await catalogDb
         .select({
           inventoryId: inventoryMinifigs.inventoryId,
           thumb: min(minifigs.imgUrl),
@@ -590,7 +583,7 @@ export async function SetsOfficialCatalogSection({
     }
   }
 
-  const themeSelectRoots = await loadThemeSelectRootRows(db);
+  const themeSelectRoots = await loadThemeSelectRootRows(catalogDb);
   const themeOptionsForSelect =
     !useFullCatalog &&
     themeNumericOk &&

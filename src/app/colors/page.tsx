@@ -1,13 +1,13 @@
 import { asc } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { colorDomId } from "@/lib/dom-anchors";
 import { colors } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
 export default async function ColorsPage() {
-  const db = getDb();
+  const db = getCatalogDb();
   const rows = await db
     .select()
     .from(colors)

@@ -2,7 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildOwnedSubjects } from "@/db/schema";
 import { isSafeOwnedSubjectId, OWNED_SUBJECT_PART, type OwnedSubjectKind } from "@/lib/build-owned-subject";
 import { revalidateOwnedPaths } from "@/lib/build-owned-revalidate";
@@ -36,7 +36,7 @@ export async function setBuildOwnedAction(input: {
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     if (input.owned) {
       const markedAt = new Date().toISOString();
       const quantity =

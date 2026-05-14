@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, eq, inArray, max } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import {
   buildOwnedSubjects,
   buildSavedPartsSheets,
@@ -44,7 +44,7 @@ export async function aggregateOwnedPartInventory(): Promise<{
   rows: OwnedPartInventoryRow[];
   truncated: boolean;
 }> {
-  const db = getDb();
+  const db = getUserDb();
   const owned = await db.select().from(buildOwnedSubjects);
 
   const setNums: string[] = [];

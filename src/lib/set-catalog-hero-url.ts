@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, max, min, ne } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { inventories, inventoryMinifigs, legoSets, minifigs } from "@/db/schema";
 
 function usableImgUrl(u: string | null | undefined): u is string {
@@ -16,7 +16,7 @@ export async function batchSetCatalogHeroUrls(setNums: string[]): Promise<Map<st
   for (const s of setNums) out.set(s, null);
   if (setNums.length === 0) return out;
 
-  const db = getDb();
+  const db = getCatalogDb();
   const cat = await db
     .select({ setNum: legoSets.setNum, imgUrl: legoSets.imgUrl })
     .from(legoSets)

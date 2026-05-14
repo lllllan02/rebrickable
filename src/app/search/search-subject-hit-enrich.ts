@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import {
   buildFavoriteSubjects,
   buildImages,
@@ -26,7 +26,7 @@ export function subjectIdFromListHref(href: string, segment: "mocs" | "sets"): s
 
 /** 为搜索结果中的 MOC/套装行补齐与 `/mocs` 列表相同的数据源（零件表、资料、封面、拥有/收藏） */
 export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[]) {
-  const db = getDb();
+  const db = getUserDb();
   const sheetByKindId = new Map<
     string,
     {

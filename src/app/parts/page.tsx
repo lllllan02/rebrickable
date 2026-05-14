@@ -20,7 +20,7 @@ import {
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import {
   buildOwnedSubjects,
   elements,
@@ -171,7 +171,7 @@ export default async function PartsPage({ searchParams }: Props) {
   const showCategoryPicker =
     catRaw === "" && q.length === 0 && pieceFilter === null;
 
-  const db = getDb();
+  const db = getCatalogDb();
 
   if (showCategoryPicker) {
     const [totalAllRow, categoryRows, countRows, heroRows] = await Promise.all([

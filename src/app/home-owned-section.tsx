@@ -3,7 +3,7 @@ import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, min, ne, 
 
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
-import { getDb } from "@/db/client";
+import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   buildImages,
   buildOwnedSubjects,
@@ -38,8 +38,9 @@ function formatMarkedAt(iso: string): string {
 
 /** 首页「我的拥有」区块：MOC / 套装 / 散装零件列表与库存汇总（原 `/owned` 页面逻辑）。 */
 export async function HomeOwnedCollection() {
-  const db = getDb();
-  const rows = await db
+  const catalogDb = getCatalogDb();
+  const userDb = getUserDb();
+  const rows = await userDb
     .select()
     .from(buildOwnedSubjects)
     .orderBy(desc(buildOwnedSubjects.markedAt));
@@ -62,7 +63,7 @@ export async function HomeOwnedCollection() {
       (async () => {
         const m = new Map<string, string>();
         if (setNums.length === 0) return m;
-        const cat = await db
+        const cat = await catalogDb
           .select({ setNum: legoSets.setNum, name: legoSets.name })
           .from(legoSets)
           .where(inArray(legoSets.setNum, setNums));
@@ -78,7 +79,7 @@ export async function HomeOwnedCollection() {
           { displayName: string; tags: string[]; hasInstructionsPdf: boolean; hasIoSource: boolean }
         >();
         if (mocIds.length === 0) return m;
-        const profRows = await db
+        const profRows = await userDb
           .select()
           .from(buildProfiles)
           .where(and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), inArray(buildProfiles.subjectId, mocIds)));
@@ -95,7 +96,7 @@ export async function HomeOwnedCollection() {
       (async () => {
         const m = new Map<string, string>();
         if (mocIds.length === 0) return m;
-        const imgs = await db
+        const imgs = await userDb
           .select({
             subjectId: buildImages.subjectId,
             storedFile: buildImages.storedFile,
@@ -112,7 +113,7 @@ export async function HomeOwnedCollection() {
       (async () => {
         const m = new Map<string, string>();
         if (partNums.length === 0) return m;
-        const pr = await db
+        const pr = await catalogDb
           .select({ partNum: parts.partNum, name: parts.name })
           .from(parts)
           .where(inArray(parts.partNum, partNums));
@@ -127,7 +128,7 @@ export async function HomeOwnedCollection() {
           isNotNull(inventoryParts.imgUrl),
           ne(inventoryParts.imgUrl, "")
         );
-        const thumbRows = await db
+        const thumbRows = await catalogDb
           .select({ partNum: inventoryParts.partNum, thumb: min(inventoryParts.imgUrl) })
           .from(inventoryParts)
           .where(imgClause)
@@ -146,7 +147,7 @@ export async function HomeOwnedCollection() {
           };
         }
         const [ecRows, ccRows, prRows] = await Promise.all([
-          db
+          catalogDb
             .select({
               partNum: elements.partNum,
               n: count(elements.elementId),
@@ -154,7 +155,7 @@ export async function HomeOwnedCollection() {
             .from(elements)
             .where(inArray(elements.partNum, partNums))
             .groupBy(elements.partNum),
-          db
+          catalogDb
             .select({
               partNum: elements.partNum,
               n: countDistinct(elements.colorId),
@@ -162,7 +163,7 @@ export async function HomeOwnedCollection() {
             .from(elements)
             .where(inArray(elements.partNum, partNums))
             .groupBy(elements.partNum),
-          db
+          catalogDb
             .select({ partNum: partRelationships.childPartNum })
             .from(partRelationships)
             .where(
@@ -228,19 +229,19 @@ export async function HomeOwnedCollection() {
 
     const [sheetRows, favRows, setProfRows, setImgRows, officialPartQtyBySet] = await Promise.all([
       sheetOrs.length > 0
-        ? db.select().from(buildSavedPartsSheets).where(or(...sheetOrs))
+        ? userDb.select().from(buildSavedPartsSheets).where(or(...sheetOrs))
         : Promise.resolve([]),
       favOrs.length > 0
-        ? db.select().from(buildFavoriteSubjects).where(or(...favOrs))
+        ? userDb.select().from(buildFavoriteSubjects).where(or(...favOrs))
         : Promise.resolve([]),
       setNums.length > 0
-        ? db
+        ? userDb
             .select()
             .from(buildProfiles)
             .where(and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_SET), inArray(buildProfiles.subjectId, setNums)))
         : Promise.resolve([]),
       setNums.length > 0
-        ? db
+        ? userDb
             .select({
               subjectId: buildImages.subjectId,
               storedFile: buildImages.storedFile,
@@ -252,7 +253,7 @@ export async function HomeOwnedCollection() {
         : Promise.resolve([]),
       setNums.length > 0
         ? (async () => {
-            const invRows = await db
+            const invRows = await catalogDb
               .select({ setNum: inventories.setNum, id: inventories.id })
               .from(inventories)
               .where(inArray(inventories.setNum, setNums))
@@ -263,7 +264,7 @@ export async function HomeOwnedCollection() {
             }
             const invIds = [...new Set(latestInvIdBySet.values())];
             if (invIds.length === 0) return new Map<string, number>();
-            const sumRows = await db
+            const sumRows = await catalogDb
               .select({
                 inventoryId: inventoryParts.inventoryId,
                 total: sql<number>`coalesce(sum(${inventoryParts.quantity}), 0)`,

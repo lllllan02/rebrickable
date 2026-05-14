@@ -1,13 +1,13 @@
 import { and, eq } from "drizzle-orm";
 
-import type { Db } from "@/db/client";
+import type { UserDb } from "@/db/client";
 import { buildAttachments, buildProfiles } from "@/db/schema";
 import type { BuildSubjectKind } from "@/lib/build-subject";
 import { serializeTagsJson } from "@/lib/moc-profile-parse";
 
 /** 根据 `build_attachments` 重算并写入 `build_profiles` 的冗余角标字段（列表不查附件表）。 */
 export async function refreshBuildProfileAttachmentFlags(
-  db: Db,
+  db: UserDb,
   subjectKind: BuildSubjectKind,
   subjectId: string
 ): Promise<void> {

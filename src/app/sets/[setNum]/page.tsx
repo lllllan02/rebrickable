@@ -7,7 +7,7 @@ import { MocDetailEditorial, type SetDetailOfficialMeta } from "@/app/mocs/moc-d
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import type { MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import type { MocGalleryImage } from "@/app/mocs/moc-image-carousel";
-import { getDb } from "@/db/client";
+import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   buildAttachments,
   buildFavoriteSubjects,
@@ -41,7 +41,8 @@ export default async function SetDetailPage({ params }: Props) {
   const { setNum: raw } = await params;
   const setNum = decodeURIComponent(raw);
 
-  const db = getDb();
+  const catalogDb = getCatalogDb();
+  const userDb = getUserDb();
   const setImgKey = and(eq(buildImages.subjectKind, BUILD_SUBJECT_SET), eq(buildImages.subjectId, setNum));
   const setAttKey = and(
     eq(buildAttachments.subjectKind, BUILD_SUBJECT_SET),
@@ -55,7 +56,7 @@ export default async function SetDetailPage({ params }: Props) {
   );
 
   const [[inv], [catalog], imgRows, attRows, sheet, profileRow, ownedRow, favoriteRow] = await Promise.all([
-    db
+    catalogDb
       .select({
         id: inventories.id,
         version: inventories.version,
@@ -64,7 +65,7 @@ export default async function SetDetailPage({ params }: Props) {
       .where(eq(inventories.setNum, setNum))
       .orderBy(desc(inventories.version), desc(inventories.id))
       .limit(1),
-    db
+    catalogDb
       .select({
         name: legoSets.name,
         year: legoSets.year,
@@ -73,7 +74,7 @@ export default async function SetDetailPage({ params }: Props) {
       .from(legoSets)
       .where(eq(legoSets.setNum, setNum))
       .limit(1),
-    db
+    userDb
       .select({
         id: buildImages.id,
         storedFile: buildImages.storedFile,
@@ -83,7 +84,7 @@ export default async function SetDetailPage({ params }: Props) {
       .from(buildImages)
       .where(setImgKey)
       .orderBy(asc(buildImages.createdAt), asc(buildImages.id)),
-    db
+    userDb
       .select({
         id: buildAttachments.id,
         storedFile: buildAttachments.storedFile,
@@ -95,9 +96,9 @@ export default async function SetDetailPage({ params }: Props) {
       .where(setAttKey)
       .orderBy(asc(buildAttachments.createdAt), asc(buildAttachments.id)),
     loadBuildPartsSheetFromDb(BUILD_SUBJECT_SET, setNum),
-    db.select().from(buildProfiles).where(setProfKey).limit(1),
-    db.select().from(buildOwnedSubjects).where(setOwnedKey).limit(1),
-    db.select().from(buildFavoriteSubjects).where(setFavoriteKey).limit(1),
+    userDb.select().from(buildProfiles).where(setProfKey).limit(1),
+    userDb.select().from(buildOwnedSubjects).where(setOwnedKey).limit(1),
+    userDb.select().from(buildFavoriteSubjects).where(setFavoriteKey).limit(1),
   ]);
 
   if (!inv) notFound();
@@ -106,7 +107,7 @@ export default async function SetDetailPage({ params }: Props) {
     catalog && usableImgUrl(catalog.imgUrl) ? catalog.imgUrl.trim() : null;
 
   const [lines, minifigDirectRow, minifigHeroRow] = await Promise.all([
-    db
+    catalogDb
       .select({
         partNum: inventoryParts.partNum,
         name: parts.name,
@@ -125,7 +126,7 @@ export default async function SetDetailPage({ params }: Props) {
       .orderBy(asc(inventoryParts.partNum), asc(inventoryParts.colorId)),
     setBoxImg
       ? Promise.resolve([{ thumb: null as string | null }])
-      : db
+      : catalogDb
           .select({ thumb: minifigs.imgUrl })
           .from(minifigs)
           .where(
@@ -138,7 +139,7 @@ export default async function SetDetailPage({ params }: Props) {
           .limit(1),
     setBoxImg
       ? Promise.resolve([{ thumb: null as string | null }])
-      : db
+      : catalogDb
           .select({ thumb: min(minifigs.imgUrl) })
           .from(inventoryMinifigs)
           .innerJoin(minifigs, eq(inventoryMinifigs.figNum, minifigs.figNum))

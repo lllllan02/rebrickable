@@ -1,7 +1,7 @@
 import { count, eq } from "drizzle-orm";
 import Link from "next/link";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { buildSavedPartsSheets, colors, legoSets, parts } from "@/db/schema";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
@@ -41,7 +41,7 @@ function CatalogStatTile({ item }: { item: CatalogStatItem }) {
 }
 
 export async function HomeCatalogStats() {
-  const db = getDb();
+  const db = getCatalogDb();
   const [mocsRow, setsRow, partsRow, colorsRow] = await Promise.all([
     db
       .select({ c: count() })

@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, min, ne } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { classifyPartsSheetRow } from "@/lib/parts-sheet-tags";
 import { parseShortageCsv } from "@/lib/parse-shortage-csv";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
@@ -33,7 +33,7 @@ export async function resolveShortageCsvInDb(csv: string): Promise<ResolveShorta
     return { ok: true, skippedHeader: parsed.skippedHeader, items: [] };
   }
 
-  const db = getDb();
+  const db = getCatalogDb();
   const partNums = [...new Set(parsed.rows.map((r) => r.partNum))];
   const colorIds = [...new Set(parsed.rows.map((r) => r.colorId))];
 

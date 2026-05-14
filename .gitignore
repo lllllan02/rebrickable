@@ -48,4 +48,7 @@ next-env.d.ts
 /data/rebrickable.db-wal
 # ensure-local-db 用：记录当前 .db 是否已与仓库内 .gz 一致 / db:import 产物勿被覆盖
 /data/.rebrickable-db-from-gz.json
-/data/.rebrickable-db-from-import
+/data/rebrickable-user.db
+/data/rebrickable-user.db-shm
+/data/rebrickable-user.db-wal
+/data/.rebrickable-user-db-from-gz.json

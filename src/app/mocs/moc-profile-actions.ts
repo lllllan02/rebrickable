@@ -1,6 +1,6 @@
 "use server";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildProfiles } from "@/db/schema";
 import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
@@ -41,7 +41,7 @@ export async function saveBuildProfileAction(input: {
   const profileUpdatedAt = new Date().toISOString();
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     await db
       .insert(buildProfiles)
       .values({

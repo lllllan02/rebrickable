@@ -9,7 +9,8 @@ import { createGunzip } from "zlib";
 import { parse } from "csv-parse";
 import Database from "better-sqlite3";
 
-import { ensureBuildTables } from "../src/db/ensure-build-tables";
+import { ensureCatalogLegacyCompatibility } from "../src/db/ensure-catalog-compat";
+import { ensureUserBuildTables } from "../src/db/ensure-user-build-tables";
 
 const ROOT = path.join(__dirname, "..");
 const ASSETS = path.join(ROOT, "assets");
@@ -171,7 +172,7 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX pr_parent_idx ON part_relationships(parent_part_num);
     CREATE INDEX pr_child_idx ON part_relationships(child_part_num);
   `);
-  ensureBuildTables(db, ROOT);
+  ensureCatalogLegacyCompatibility(db);
 }
 
 async function loadPartCategories(db: Database.Database) {
@@ -561,6 +562,12 @@ async function main() {
   db.pragma("foreign_keys = ON");
   db.exec("ANALYZE");
   db.close();
+
+  const USER_DB_PATH = path.join(ROOT, "data", "rebrickable-user.db");
+  const userDb = new Database(USER_DB_PATH);
+  userDb.pragma("journal_mode = WAL");
+  ensureUserBuildTables(userDb, ROOT);
+  userDb.close();
   try {
     await fs.promises.unlink(GZ_REF_PATH);
   } catch {

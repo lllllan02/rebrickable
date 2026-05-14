@@ -5,7 +5,7 @@ import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
 import { PartOwnedStockControl } from "@/app/parts/part-owned-stock-control";
 import { CopyableId } from "@/components/copyable-id";
-import { getDb } from "@/db/client";
+import { getCatalogDb, getUserDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
 import { OWNED_SUBJECT_PART } from "@/lib/build-owned-subject";
 import {
@@ -27,8 +27,9 @@ export default async function PartDetailPage({ params }: Props) {
   const { partNum: raw } = await params;
   const partNum = decodeURIComponent(raw);
 
-  const db = getDb();
-  const [row] = await db
+  const catalogDb = getCatalogDb();
+  const userDb = getUserDb();
+  const [row] = await catalogDb
     .select({
       partNum: parts.partNum,
       name: parts.name,
@@ -56,7 +57,7 @@ export default async function PartDetailPage({ params }: Props) {
 
   const [asParent, asChild, elemRows, setRows, heroThumbRow, colorThumbRows, ownedRow] =
     await Promise.all([
-      db
+      catalogDb
         .select({
           relType: partRelationships.relType,
           child: partRelationships.childPartNum,
@@ -68,7 +69,7 @@ export default async function PartDetailPage({ params }: Props) {
           asc(partRelationships.childPartNum)
         )
         .limit(200),
-      db
+      catalogDb
         .select({
           relType: partRelationships.relType,
           parent: partRelationships.parentPartNum,
@@ -80,7 +81,7 @@ export default async function PartDetailPage({ params }: Props) {
           asc(partRelationships.parentPartNum)
         )
         .limit(200),
-      db
+      catalogDb
         .select({
           elementId: elements.elementId,
           colorId: elements.colorId,
@@ -93,7 +94,7 @@ export default async function PartDetailPage({ params }: Props) {
         .where(eq(elements.partNum, partNum))
         .orderBy(asc(elements.colorId))
         .limit(120),
-      db
+      catalogDb
         .selectDistinct({ setNum: inventories.setNum })
         .from(inventoryParts)
         .innerJoin(
@@ -103,11 +104,11 @@ export default async function PartDetailPage({ params }: Props) {
         .where(eq(inventoryParts.partNum, partNum))
         .orderBy(asc(inventories.setNum))
         .limit(80),
-      db
+      catalogDb
         .select({ thumb: min(inventoryParts.imgUrl) })
         .from(inventoryParts)
         .where(imgClause),
-      db
+      catalogDb
         .select({
           colorId: inventoryParts.colorId,
           thumb: min(inventoryParts.imgUrl),
@@ -115,7 +116,7 @@ export default async function PartDetailPage({ params }: Props) {
         .from(inventoryParts)
         .where(imgClause)
         .groupBy(inventoryParts.colorId),
-      db.select().from(buildOwnedSubjects).where(partOwnedKey).limit(1),
+      userDb.select().from(buildOwnedSubjects).where(partOwnedKey).limit(1),
     ]);
 
   const owned = ownedRow[0];

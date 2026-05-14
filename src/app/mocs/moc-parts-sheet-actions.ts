@@ -2,7 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
 import {
@@ -41,7 +41,7 @@ export async function setGobricksShortageSyncAtInDb(
   const subjectId = subjectIdRaw.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) return;
   if (!isSafeBuildSubjectId(subjectKind, subjectId)) return;
-  const db = getDb();
+  const db = getUserDb();
   db.update(buildSavedPartsSheets)
     .set({ gobricksShortageSyncAt: syncedAtIso })
     .where(buildSheetKey(subjectKind, subjectId))
@@ -119,7 +119,7 @@ export async function buildHasSavedPartsSheet(
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) return false;
   if (!isSafeBuildSubjectId(subjectKind, subjectId)) return false;
   try {
-    const db = getDb();
+    const db = getUserDb();
     const rows = await db
       .select({ subjectId: buildSavedPartsSheets.subjectId })
       .from(buildSavedPartsSheets)
@@ -148,7 +148,7 @@ export async function loadBuildPartsSheetFromDb(
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     const rows = await db
       .select({
         payloadJson: buildSavedPartsSheets.payloadJson,
@@ -281,7 +281,7 @@ export async function saveBuildPartsSheetToDb(input: {
       : "";
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     db.transaction((tx) => {
       const existingRows = tx
         .select({
@@ -440,7 +440,7 @@ export async function stripShortageBranchKeepingFullInDb(input: {
   }
 
   const savedAt = new Date().toISOString();
-  const db = getDb();
+  const db = getUserDb();
   const existingRows = db
     .select({ payloadJson: buildSavedPartsSheets.payloadJson })
     .from(buildSavedPartsSheets)
@@ -529,7 +529,7 @@ export async function clearBuildPartsSheetShortageInDb(input: {
     return { ok: false, error: `${subjectKindLabel(input.subjectKind)} ID 含有非法字符。` };
   }
 
-  const db = getDb();
+  const db = getUserDb();
   const existingRows = db
     .select({ payloadJson: buildSavedPartsSheets.payloadJson })
     .from(buildSavedPartsSheets)
@@ -556,7 +556,7 @@ export async function clearBuildPartsSheetShortageInDb(input: {
   if (!dual.shortage) {
     const stamp = new Date().toISOString();
     try {
-      getDb()
+      db
         .update(buildSavedPartsSheets)
         .set({ shortageClearedAt: stamp })
         .where(buildSheetKey(input.subjectKind, subjectId))
@@ -637,7 +637,7 @@ export async function cancelBuildPartsSheetShortageMarkInDb(input: {
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     const exists = db
       .select({ subjectId: buildSavedPartsSheets.subjectId })
       .from(buildSavedPartsSheets)

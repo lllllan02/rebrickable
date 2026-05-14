@@ -24,8 +24,9 @@ dev:
 start: dev
 
 # 压缩 db → 若有变更则自动提交（带时间戳）→ push
+# 仅打包/提交用户库与上传文件（体积小）；全量目录库压缩见 pnpm db:pack-catalog
 pack:
 	$(PNPM) db:pack
-	git add data/
+	git add data/rebrickable-user.db.gz data/build-uploads/
 	git diff --cached --quiet || git commit -m "chore(db): $$(date +%Y-%m-%dT%H%M%S)"
 	git push

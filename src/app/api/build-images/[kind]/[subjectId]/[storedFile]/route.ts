@@ -3,7 +3,7 @@ import path from "path";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildImages } from "@/db/schema";
 import { isBuildSubjectKind, isSafeBuildSubjectId } from "@/lib/build-subject";
 import { buildUploadAbsoluteDir } from "@/lib/build-upload-storage";
@@ -22,7 +22,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const db = getDb();
+  const db = getUserDb();
   const [row] = await db
     .select({ mimeType: buildImages.mimeType })
     .from(buildImages)

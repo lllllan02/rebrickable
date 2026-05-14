@@ -14,7 +14,7 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   buildImages,
   buildProfiles,
@@ -33,8 +33,11 @@ import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import type { GlobalSearchPayload } from "@/lib/global-search-types";
 import { emptyGlobalSearchPayload } from "@/lib/global-search-types";
 
+import { likeFragment } from "@/lib/search";
+import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
+
 async function batchMinThumbByPartNum(
-  db: ReturnType<typeof getDb>,
+  db: ReturnType<typeof getCatalogDb>,
   partNums: string[]
 ): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
@@ -58,8 +61,6 @@ async function batchMinThumbByPartNum(
   }
   return out;
 }
-import { likeFragment } from "@/lib/search";
-import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 
 export const GLOBAL_SEARCH_LIMITS_DROPDOWN = {
   moc: 5,
@@ -112,10 +113,11 @@ export async function runGlobalSearch(options: {
     options.variant === "page" ? GLOBAL_SEARCH_LIMITS_PAGE : GLOBAL_SEARCH_LIMITS_DROPDOWN;
   const L = resolveLimits(options.limits, preset);
   const pattern = `%${q}%`;
-  const db = getDb();
+  const catalogDb = getCatalogDb();
+  const userDb = getUserDb();
 
   const [mocRows, partRows, setRows, colorRows, elementRows] = await Promise.all([
-    db
+    userDb
       .select({
         subjectId: buildSavedPartsSheets.subjectId,
         displayName: buildProfiles.displayName,
@@ -140,7 +142,7 @@ export async function runGlobalSearch(options: {
       )
       .orderBy(asc(buildSavedPartsSheets.subjectId))
       .limit(L.moc),
-    db
+    catalogDb
       .select({
         partNum: parts.partNum,
         name: parts.name,
@@ -150,7 +152,7 @@ export async function runGlobalSearch(options: {
       .orderBy(asc(parts.partNum))
       .limit(L.part),
     (async () => {
-      const fromLego = await db
+      const fromLego = await catalogDb
         .select({
           setNum: legoSets.setNum,
           name: legoSets.name,
@@ -163,7 +165,7 @@ export async function runGlobalSearch(options: {
       const seen = new Set(fromLego.map((r) => r.setNum));
       const need = L.set - fromLego.length;
       if (need <= 0) return fromLego;
-      const invOnly = await db
+      const invOnly = await catalogDb
         .select({ setNum: inventories.setNum })
         .from(inventories)
         .where(
@@ -186,7 +188,7 @@ export async function runGlobalSearch(options: {
         })),
       ];
     })(),
-    db
+    catalogDb
       .select({
         id: colors.id,
         name: colors.name,
@@ -198,7 +200,7 @@ export async function runGlobalSearch(options: {
       )
       .orderBy(asc(colors.id))
       .limit(L.color),
-    db
+    catalogDb
       .select({
         elementId: elements.elementId,
         partNum: elements.partNum,
@@ -223,7 +225,7 @@ export async function runGlobalSearch(options: {
   const mocSubjectIds = mocRows.map((r) => r.subjectId);
   const mocCoverById = new Map<string, string | null>();
   if (mocSubjectIds.length > 0) {
-    const imgRows = await db
+    const imgRows = await userDb
       .select({
         subjectId: buildImages.subjectId,
         storedFile: buildImages.storedFile,
@@ -290,7 +292,7 @@ export async function runGlobalSearch(options: {
   const thumbKeys = new Set<string>();
   for (const p of base.parts) thumbKeys.add(p.title);
   for (const e of base.elements) thumbKeys.add(e.partNum);
-  const thumbByPart = await batchMinThumbByPartNum(db, [...thumbKeys]);
+  const thumbByPart = await batchMinThumbByPartNum(catalogDb, [...thumbKeys]);
 
   return {
     ...base,

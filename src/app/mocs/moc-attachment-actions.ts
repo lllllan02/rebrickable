@@ -4,7 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { and, count, eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getUserDb } from "@/db/client";
 import { buildAttachments } from "@/db/schema";
 import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
 import {
@@ -61,7 +61,7 @@ export async function uploadBuildAttachmentAction(
   const storedFile = makeStoredAttachmentFileName(attKind);
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     const [cntRow] = await db
       .select({ n: count() })
       .from(buildAttachments)
@@ -126,7 +126,7 @@ export async function deleteBuildAttachmentAction(
   }
 
   try {
-    const db = getDb();
+    const db = getUserDb();
     const [row] = await db
       .select({ id: buildAttachments.id, storedFile: buildAttachments.storedFile })
       .from(buildAttachments)

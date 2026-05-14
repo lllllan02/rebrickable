@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asc } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { colors } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export type ColorsApiRow = {
 };
 
 export async function GET() {
-  const db = getDb();
+  const db = getCatalogDb();
   const rows = await db
     .select({
       id: colors.id,
