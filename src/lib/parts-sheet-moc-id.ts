@@ -163,6 +163,10 @@ function isPartsSheetTags(v: unknown): v is PartsSheetTag[] {
   );
 }
 
+function isOptionalStringOrNull(v: unknown): boolean {
+  return v === undefined || v === null || typeof v === "string";
+}
+
 function isShortageResolveItem(v: unknown): v is ShortageResolveItem {
   if (typeof v !== "object" || v === null) return false;
   const o = v as Record<string, unknown>;
@@ -182,6 +186,14 @@ function isShortageResolveItem(v: unknown): v is ShortageResolveItem {
     (o.gobricksUnitPrice === undefined ||
       o.gobricksUnitPrice === null ||
       typeof o.gobricksUnitPrice === "string") &&
+    isOptionalStringOrNull(o.gdsUnitPrice) &&
+    isOptionalStringOrNull(o.gdsItemId) &&
+    isOptionalStringOrNull(o.gdsColorId) &&
+    isOptionalStringOrNull(o.gdsPicture) &&
+    isOptionalStringOrNull(o.gdsCaption) &&
+    isOptionalStringOrNull(o.gdsCaptionEn) &&
+    isOptionalStringOrNull(o.gdsShelfState) &&
+    isOptionalStringOrNull(o.gdsLegoColorId) &&
     (o.imgUrl === null || typeof o.imgUrl === "string") &&
     (o.imgSource === null || o.imgSource === "color" || o.imgSource === "part")
   );

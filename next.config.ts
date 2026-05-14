@@ -21,6 +21,11 @@ const nextConfig: NextConfig = {
         hostname: "cdn.rebrickable.com",
         pathname: "/media/**",
       },
+      {
+        protocol: "https",
+        hostname: "image.gobricks.cn",
+        pathname: "/**",
+      },
     ],
   },
 };

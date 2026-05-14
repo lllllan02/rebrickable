@@ -81,6 +81,7 @@ export function MocDetailPartsListExportBar({
         colorId: r.colorId,
         quantity: r.quantity,
         gobricksUnitPrice: r.gobricksUnitPrice,
+        gdsUnitPrice: r.gdsUnitPrice ?? r.gobricksUnitPrice,
         rest: r.rest,
       })),
       { includeHeader: branch.skippedHeader }

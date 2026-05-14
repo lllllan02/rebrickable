@@ -142,6 +142,14 @@ export async function mocHasSavedPartsSheet(mocIdRaw: string): Promise<boolean> 
   return buildHasSavedPartsSheet(BUILD_SUBJECT_MOC, mocIdRaw);
 }
 
+function normalizeLegacyGdsOnShortageFulfillmentItems(items: ShortageResolveItem[]): void {
+  for (const it of items) {
+    if ((it.gdsUnitPrice === undefined || it.gdsUnitPrice === null) && it.gobricksUnitPrice != null) {
+      it.gdsUnitPrice = it.gobricksUnitPrice;
+    }
+  }
+}
+
 export async function loadBuildPartsSheetFromDb(
   subjectKind: BuildSubjectKind,
   subjectIdRaw: string
@@ -199,6 +207,9 @@ export async function loadBuildPartsSheetFromDb(
     if (!dual || (!dual.full && !dual.shortage && !dual.fulfillment)) {
       return { ok: false, error: "已存数据无效或为空。" };
     }
+
+    if (dual.shortage?.items) normalizeLegacyGdsOnShortageFulfillmentItems(dual.shortage.items);
+    if (dual.fulfillment?.items) normalizeLegacyGdsOnShortageFulfillmentItems(dual.fulfillment.items);
 
     return {
       ok: true,

@@ -5,8 +5,17 @@ export type ShortageResolveItem = {
   partNum: string;
   colorId: number;
   quantity: number;
-  /** 高砖接口 `info.price` / `eshop_price`（元）；无或未存时省略 */
+  /** @deprecated 请使用 {@link ShortageResolveItem.gdsUnitPrice}；旧 JSON 或未走 GDS 解析时可能仍有值 */
   gobricksUnitPrice?: string | null;
+  /** 高砖单价（元）；配货/缺件由高砖同步写入 */
+  gdsUnitPrice?: string | null;
+  gdsItemId?: string | null;
+  gdsColorId?: string | null;
+  gdsPicture?: string | null;
+  gdsCaption?: string | null;
+  gdsCaptionEn?: string | null;
+  gdsShelfState?: string | null;
+  gdsLegoColorId?: string | null;
   rest: string;
   partFound: boolean;
   partName: string | null;

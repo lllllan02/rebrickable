@@ -1,3 +1,4 @@
+import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
 export const GOBRICKS_LEGO2_ITEM_LIST_URL =
@@ -11,10 +12,17 @@ export type GobricksTestListItem = {
 };
 
 type GobricksInfo = {
+  id?: string | number;
   inventory?: string | number;
   buy_limit?: string | number;
   price?: string | number;
   eshop_price?: string | number;
+  picture?: string;
+  caption?: string;
+  caption_en?: string;
+  shelf_state?: string;
+  lego_color_id?: string | number;
+  color_id?: string | number;
 };
 
 function numField(v: unknown): number {
@@ -73,7 +81,78 @@ export function bomToGobricksTestList(
   }));
 }
 
-type AccRow = { quantity: number; rests: string[]; unitPrice: string | null };
+export type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
+
+type GdsSnapshot = {
+  gdsItemId: string | null;
+  gdsColorId: string | null;
+  gdsPicture: string | null;
+  gdsUnitPrice: string | null;
+  gdsCaption: string | null;
+  gdsCaptionEn: string | null;
+  gdsShelfState: string | null;
+  gdsLegoColorId: string | null;
+};
+
+function emptyGdsSnapshot(): GdsSnapshot {
+  return {
+    gdsItemId: null,
+    gdsColorId: null,
+    gdsPicture: null,
+    gdsUnitPrice: null,
+    gdsCaption: null,
+    gdsCaptionEn: null,
+    gdsShelfState: null,
+    gdsLegoColorId: null,
+  };
+}
+
+function gdsSnapshotFromApiRow(
+  row: Record<string, unknown>,
+  base: { designid: string; colorid: string }
+): GdsSnapshot {
+  const s = emptyGdsSnapshot();
+  const itemRow =
+    typeof row.item_id === "string" && row.item_id.trim() ? row.item_id.trim() : null;
+  const info = infoFromRow(row);
+  const ir = info as Record<string, unknown> | null;
+  const idRaw = ir?.id;
+  const itemInfo =
+    typeof idRaw === "string" && idRaw.trim()
+      ? idRaw.trim()
+      : typeof idRaw === "number" && Number.isFinite(idRaw)
+        ? String(Math.trunc(idRaw))
+        : null;
+  s.gdsItemId = itemRow ?? itemInfo;
+  const colorFromInfo = ir
+    ? typeof ir.color_id === "string" && ir.color_id.trim()
+      ? ir.color_id.trim()
+      : typeof ir.color_id === "number" && Number.isFinite(ir.color_id)
+        ? String(Math.trunc(ir.color_id))
+        : null
+    : null;
+  s.gdsColorId = base.colorid.trim() || colorFromInfo;
+  if (ir) {
+    if (typeof ir.picture === "string" && ir.picture.trim()) s.gdsPicture = ir.picture.trim();
+    if (typeof ir.caption === "string" && ir.caption.trim()) s.gdsCaption = ir.caption.trim();
+    if (typeof ir.caption_en === "string" && ir.caption_en.trim()) s.gdsCaptionEn = ir.caption_en.trim();
+    if (typeof ir.shelf_state === "string" && ir.shelf_state.trim()) s.gdsShelfState = ir.shelf_state.trim();
+    if (typeof ir.lego_color_id === "string" && ir.lego_color_id.trim()) s.gdsLegoColorId = ir.lego_color_id.trim();
+    else if (typeof ir.lego_color_id === "number" && Number.isFinite(ir.lego_color_id)) {
+      s.gdsLegoColorId = String(Math.trunc(ir.lego_color_id));
+    }
+  }
+  s.gdsUnitPrice = gobricksUnitPriceFromRow(row);
+  return s;
+}
+
+type AccRow = {
+  quantity: number;
+  rests: string[];
+  unitPrice: string | null;
+  /** 聚合首行的高砖展示字段；后续并入同键行不覆盖 */
+  gds: GdsSnapshot;
+};
 
 function gobricksUnitPriceFromRow(row: Record<string, unknown>): string | null {
   const info = infoFromRow(row);
@@ -90,9 +169,11 @@ function bump(
   colorId: number,
   qty: number,
   rest: string,
-  unitPrice: string | null
+  row: Record<string, unknown>,
+  base: { designid: string; colorid: string }
 ): void {
   if (!Number.isFinite(qty) || qty <= 0) return;
+  const unitPrice = gobricksUnitPriceFromRow(row);
   const k = `${partNum}\t${colorId}`;
   const prev = acc.get(k);
   if (prev) {
@@ -100,8 +181,37 @@ function bump(
     prev.rests.push(rest);
     if (!prev.unitPrice && unitPrice) prev.unitPrice = unitPrice;
   } else {
-    acc.set(k, { quantity: qty, rests: [rest], unitPrice: unitPrice ?? null });
+    acc.set(k, {
+      quantity: qty,
+      rests: [rest],
+      unitPrice: unitPrice ?? null,
+      gds: gdsSnapshotFromApiRow(row, base),
+    });
   }
+}
+
+function accRowToSerializedRow(
+  partNum: string,
+  colorId: number,
+  v: AccRow
+): GobricksSheetSerializedRow {
+  const g = v.gds;
+  const price = v.unitPrice ?? g.gdsUnitPrice;
+  return {
+    partNum,
+    colorId,
+    quantity: v.quantity,
+    rest: [...new Set(v.rests)].join("·"),
+    gobricksUnitPrice: price,
+    gdsItemId: g.gdsItemId,
+    gdsColorId: g.gdsColorId,
+    gdsPicture: g.gdsPicture,
+    gdsUnitPrice: g.gdsUnitPrice ?? price,
+    gdsCaption: g.gdsCaption,
+    gdsCaptionEn: g.gdsCaptionEn,
+    gdsShelfState: g.gdsShelfState,
+    gdsLegoColorId: g.gdsLegoColorId,
+  };
 }
 
 function asRecordArray(v: unknown): Record<string, unknown>[] {
@@ -172,17 +282,11 @@ function infoFromRow(row: Record<string, unknown>): GobricksInfo | null {
 }
 
 /**
- * 将高砖 `lego2ItemList` 的 `itemList` 转为配货表 CSV 行（与 {@link parseShortageCsv} 兼容；含 `info.price` 单价列）。
+ * 将高砖 `lego2ItemList` 的 `itemList` 转为配货表行（含 `gds_*` 与兼容字段 `gobricksUnitPrice`）。
  * 表示上传完整 BOM 后高砖商城侧可配货（有对应商品）的行。
  */
 export function fulfillmentSerializeRowsFromGobricksPayload(payload: unknown): {
-  rows: {
-    partNum: string;
-    colorId: number;
-    quantity: number;
-    rest: string;
-    gobricksUnitPrice: string | null;
-  }[];
+  rows: GobricksSheetSerializedRow[];
 } {
   if (typeof payload !== "object" || payload === null) {
     return { rows: [] };
@@ -195,22 +299,14 @@ export function fulfillmentSerializeRowsFromGobricksPayload(payload: unknown): {
     if (!base) continue;
     const cid = parseColorId(base.colorid);
     if (cid === null) continue;
-    bump(acc, base.designid, cid, base.quantity, "高砖商城有货", gobricksUnitPriceFromRow(row));
+    bump(acc, base.designid, cid, base.quantity, "高砖商城有货", row, base);
   }
 
   const rows = [...acc.entries()].map(([k, v]) => {
     const tab = k.indexOf("\t");
     const partNum = tab >= 0 ? k.slice(0, tab) : k;
     const colorId = tab >= 0 ? Number(k.slice(tab + 1)) : 0;
-    const uniqRest = [...new Set(v.rests)];
-    const rest = uniqRest.join("·");
-    return {
-      partNum,
-      colorId,
-      quantity: v.quantity,
-      rest,
-      gobricksUnitPrice: v.unitPrice,
-    };
+    return accRowToSerializedRow(partNum, colorId, v);
   });
 
   rows.sort((a, b) =>
@@ -230,17 +326,11 @@ export function fulfillmentCsvFromGobricksPayload(payload: unknown): string {
 }
 
 /**
- * 将高砖 `lego2ItemList` 的若干列表合并为缺件 CSV 行（与 {@link parseShortageCsv} 兼容；含 `info.price` 单价列）。
+ * 将高砖 `lego2ItemList` 的若干列表合并为缺件行（含 `gds_*`）。
  * `missList` 等为高砖无法按需求完全满足的部分；与 {@link fulfillmentSerializeRowsFromGobricksPayload} 的 `itemList` 分列存储。
  */
 export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
-  rows: {
-    partNum: string;
-    colorId: number;
-    quantity: number;
-    rest: string;
-    gobricksUnitPrice: string | null;
-  }[];
+  rows: GobricksSheetSerializedRow[];
 } {
   if (typeof payload !== "object" || payload === null) {
     return { rows: [] };
@@ -253,7 +343,7 @@ export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
     if (!base) continue;
     const cid = parseColorId(base.colorid);
     if (cid === null) continue;
-    bump(acc, base.designid, cid, base.quantity, "零件未匹配", null);
+    bump(acc, base.designid, cid, base.quantity, "零件未匹配", row, base);
   }
 
   for (const row of asRecordArray(p.noSellList)) {
@@ -261,7 +351,7 @@ export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
     if (!base) continue;
     const cid = parseColorId(base.colorid);
     if (cid === null) continue;
-    bump(acc, base.designid, cid, base.quantity, "下架", gobricksUnitPriceFromRow(row));
+    bump(acc, base.designid, cid, base.quantity, "下架", row, base);
   }
 
   for (const row of asRecordArray(p.colorDeficiency)) {
@@ -269,7 +359,7 @@ export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
     if (!base) continue;
     const cid = parseColorId(base.colorid);
     if (cid === null) continue;
-    bump(acc, base.designid, cid, base.quantity, "颜色未匹配", gobricksUnitPriceFromRow(row));
+    bump(acc, base.designid, cid, base.quantity, "颜色未匹配", row, base);
   }
 
   for (const row of asRecordArray(p.inventoryDeficiency)) {
@@ -281,7 +371,7 @@ export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
     const inv = numField(info?.inventory);
     const shortQty = Math.max(0, base.quantity - inv);
     if (shortQty <= 0) continue;
-    bump(acc, base.designid, cid, shortQty, "库存不足", gobricksUnitPriceFromRow(row));
+    bump(acc, base.designid, cid, shortQty, "库存不足", row, base);
   }
 
   for (const row of asRecordArray(p.buyLimitList)) {
@@ -291,29 +381,20 @@ export function shortageSerializeRowsFromGobricksPayload(payload: unknown): {
     if (cid === null) continue;
     const info = infoFromRow(row);
     const limit = numField(info?.buy_limit);
-    const price = gobricksUnitPriceFromRow(row);
     if (!Number.isFinite(limit) || limit <= 0) {
-      bump(acc, base.designid, cid, base.quantity, "超限购", price);
+      bump(acc, base.designid, cid, base.quantity, "超限购", row, base);
       continue;
     }
     const over = Math.max(0, base.quantity - limit);
     if (over <= 0) continue;
-    bump(acc, base.designid, cid, over, `超限购·${Math.trunc(limit)}`, price);
+    bump(acc, base.designid, cid, over, `超限购·${Math.trunc(limit)}`, row, base);
   }
 
   const rows = [...acc.entries()].map(([k, v]) => {
     const tab = k.indexOf("\t");
     const partNum = tab >= 0 ? k.slice(0, tab) : k;
     const colorId = tab >= 0 ? Number(k.slice(tab + 1)) : 0;
-    const uniqRest = [...new Set(v.rests)];
-    const rest = uniqRest.join("·");
-    return {
-      partNum,
-      colorId,
-      quantity: v.quantity,
-      rest,
-      gobricksUnitPrice: v.unitPrice,
-    };
+    return accRowToSerializedRow(partNum, colorId, v);
   });
 
   rows.sort((a, b) =>

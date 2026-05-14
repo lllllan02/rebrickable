@@ -8,8 +8,16 @@ export type PartsSheetXlsxRow = {
   partNum: string;
   colorId: number;
   quantity: number;
-  /** 高砖单价（元）；无则空 */
+  /** @deprecated 优先用 gdsUnitPrice */
   gobricksUnitPrice?: string | null;
+  gdsUnitPrice?: string | null;
+  gdsItemId?: string | null;
+  gdsColorId?: string | null;
+  gdsPicture?: string | null;
+  gdsCaption?: string | null;
+  gdsCaptionEn?: string | null;
+  gdsShelfState?: string | null;
+  gdsLegoColorId?: string | null;
   rest: string;
   partFound: boolean;
   partName: string | null;
@@ -138,7 +146,7 @@ export async function buildPartsSheetXlsxBuffer(
       row.partNum,
       row.colorId,
       row.quantity,
-      (row.gobricksUnitPrice ?? "").trim(),
+      (row.gdsUnitPrice ?? row.gobricksUnitPrice ?? "").trim(),
       row.rest,
       row.partName ?? "",
       row.colorName ?? "",

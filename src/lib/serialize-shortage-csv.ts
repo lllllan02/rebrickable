@@ -9,12 +9,13 @@ export type ShortageCsvSerializeRow = {
   quantity: number;
   /** 高砖网店单价（元）；无则省略或空第四列 */
   gobricksUnitPrice?: string | null;
+  gdsUnitPrice?: string | null;
   rest: string;
 };
 
 export function serializeShortageCsvLine(r: ShortageCsvSerializeRow): string {
   const colorField = `'${r.colorId}`;
-  const priceRaw = (r.gobricksUnitPrice ?? "").trim();
+  const priceRaw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim();
   return `${r.partNum},${colorField},${r.quantity},${priceRaw},${r.rest}`;
 }
 

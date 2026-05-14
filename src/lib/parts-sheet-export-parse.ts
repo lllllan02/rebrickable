@@ -14,6 +14,10 @@ function isSheetTag(v: unknown): v is PartsSheetTag {
   return typeof v === "string" && SHEET_TAG_SET.has(v as PartsSheetTag);
 }
 
+function isOptionalExportString(v: unknown): boolean {
+  return v === undefined || v === null || typeof v === "string";
+}
+
 export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
   if (typeof data !== "object" || data === null || !("items" in data)) return null;
   const items = (data as { items: unknown }).items;
@@ -31,6 +35,14 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       (o.gobricksUnitPrice !== undefined &&
         o.gobricksUnitPrice !== null &&
         typeof o.gobricksUnitPrice !== "string") ||
+      !isOptionalExportString(o.gdsUnitPrice) ||
+      !isOptionalExportString(o.gdsItemId) ||
+      !isOptionalExportString(o.gdsColorId) ||
+      !isOptionalExportString(o.gdsPicture) ||
+      !isOptionalExportString(o.gdsCaption) ||
+      !isOptionalExportString(o.gdsCaptionEn) ||
+      !isOptionalExportString(o.gdsShelfState) ||
+      !isOptionalExportString(o.gdsLegoColorId) ||
       typeof o.partFound !== "boolean" ||
       (o.partName !== null && typeof o.partName !== "string") ||
       (o.partCatName !== null && typeof o.partCatName !== "string") ||
@@ -55,6 +67,16 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
           : o.gobricksUnitPrice === null
             ? null
             : undefined,
+      gdsUnitPrice:
+        typeof o.gdsUnitPrice === "string" ? o.gdsUnitPrice : o.gdsUnitPrice === null ? null : undefined,
+      gdsItemId: typeof o.gdsItemId === "string" ? o.gdsItemId : o.gdsItemId === null ? null : undefined,
+      gdsColorId: typeof o.gdsColorId === "string" ? o.gdsColorId : o.gdsColorId === null ? null : undefined,
+      gdsPicture: typeof o.gdsPicture === "string" ? o.gdsPicture : o.gdsPicture === null ? null : undefined,
+      gdsCaption: typeof o.gdsCaption === "string" ? o.gdsCaption : o.gdsCaption === null ? null : undefined,
+      gdsCaptionEn: typeof o.gdsCaptionEn === "string" ? o.gdsCaptionEn : o.gdsCaptionEn === null ? null : undefined,
+      gdsShelfState: typeof o.gdsShelfState === "string" ? o.gdsShelfState : o.gdsShelfState === null ? null : undefined,
+      gdsLegoColorId:
+        typeof o.gdsLegoColorId === "string" ? o.gdsLegoColorId : o.gdsLegoColorId === null ? null : undefined,
       rest: o.rest,
       partFound: o.partFound,
       partName: o.partName as string | null,

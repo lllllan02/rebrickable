@@ -10,11 +10,11 @@ import {
 import {
   bomToGobricksTestList,
   fetchGobricksLego2MergedPayload,
-  fulfillmentCsvFromGobricksPayload,
+  fulfillmentSerializeRowsFromGobricksPayload,
   readGdsPriceCnyFromMergedGobricksPayload,
-  shortageCsvFromGobricksPayload,
+  shortageSerializeRowsFromGobricksPayload,
 } from "@/lib/gobricks-lego2-item-list";
-import { resolveShortageCsvInDb } from "@/lib/parts-sheet-resolve-csv-db";
+import { resolveGobricksSheetSerializedRowsInDb } from "@/lib/parts-sheet-resolve-csv-db";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
 import { loadSetOfficialInventoryBomLines } from "@/lib/set-official-inventory-bom";
 
@@ -96,15 +96,15 @@ export async function syncGobricksShortageForSubjectAction(input: {
     clearTimeout(timer);
   }
 
-  const shortageCsv = shortageCsvFromGobricksPayload(merged);
-  const fulfillmentCsv = fulfillmentCsvFromGobricksPayload(merged);
+  const shortageRows = shortageSerializeRowsFromGobricksPayload(merged);
+  const fulfillmentRows = fulfillmentSerializeRowsFromGobricksPayload(merged);
 
-  const shortageResolved = await resolveShortageCsvInDb(shortageCsv);
+  const shortageResolved = await resolveGobricksSheetSerializedRowsInDb(shortageRows.rows);
   if (!shortageResolved.ok) {
     return { ok: false, error: shortageResolved.error };
   }
 
-  const fulfillmentResolved = await resolveShortageCsvInDb(fulfillmentCsv);
+  const fulfillmentResolved = await resolveGobricksSheetSerializedRowsInDb(fulfillmentRows.rows);
   if (!fulfillmentResolved.ok) {
     return { ok: false, error: fulfillmentResolved.error };
   }

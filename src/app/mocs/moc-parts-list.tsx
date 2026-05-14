@@ -36,6 +36,252 @@ function shortageReasonSummaryLines(rest: string): string[] {
   return ids.map((id) => labelById.get(id) ?? id);
 }
 
+/** 配货 / 缺件列表：优先高砖商品图，否则乐高目录图 */
+function sheetRowListThumbSrc(r: ShortageResolveItem, preferGdsThumb: boolean): string | null {
+  const gds = r.gdsPicture?.trim() || null;
+  if (preferGdsThumb && gds) return gds;
+  return r.imgUrl?.trim() || null;
+}
+
+function rowHasGobricksDetailFields(item: ShortageResolveItem): boolean {
+  return Boolean(
+    item.gdsItemId?.trim() ||
+      item.gdsPicture?.trim() ||
+      item.gdsColorId?.trim() ||
+      item.gdsCaption?.trim() ||
+      item.gdsCaptionEn?.trim() ||
+      item.gdsUnitPrice?.trim() ||
+      item.gobricksUnitPrice?.trim() ||
+      item.gdsShelfState?.trim() ||
+      item.gdsLegoColorId?.trim()
+  );
+}
+
+function CatalogImageFigure({
+  label,
+  imageUrl,
+  sizes,
+}: {
+  label: string;
+  imageUrl: string;
+  sizes: string;
+}) {
+  return (
+    <figure className="overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)]">
+      <figcaption className="px-3 pb-0 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)]">
+        {label}
+      </figcaption>
+      <div className="relative mx-auto aspect-square w-full max-w-[18rem] min-h-[10rem]">
+        <RemoteCoverImage
+          src={imageUrl}
+          fill
+          className="object-contain p-3 sm:p-4"
+          sizes={sizes}
+          fallbackLabel="无图"
+        />
+      </div>
+    </figure>
+  );
+}
+
+function GobricksDetailSection({
+  item,
+  showHeading = true,
+}: {
+  item: ShortageResolveItem;
+  /** 为 false 时由外层栏目标题代替 */
+  showHeading?: boolean;
+}) {
+  const unit =
+    item.gdsUnitPrice?.trim() || item.gobricksUnitPrice?.trim() || null;
+  return (
+    <section>
+      {showHeading ? (
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+          高砖商城
+        </h3>
+      ) : null}
+      <dl className="space-y-3.5 text-sm sm:text-[15px] sm:leading-relaxed">
+        {item.gdsItemId?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品 ID</dt>
+            <dd className="mt-0.5 break-all font-mono text-[var(--text)]">{item.gdsItemId.trim()}</dd>
+          </div>
+        ) : null}
+        {item.gdsCaption?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品名（中文）</dt>
+            <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaption.trim()}</dd>
+          </div>
+        ) : null}
+        {item.gdsCaptionEn?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品名（英文）</dt>
+            <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaptionEn.trim()}</dd>
+          </div>
+        ) : null}
+        {item.gdsColorId?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">高砖颜色 ID</dt>
+            <dd className="mt-0.5 font-mono text-[var(--text)]">{item.gdsColorId.trim()}</dd>
+          </div>
+        ) : null}
+        {item.gdsLegoColorId?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">接口乐高色 ID</dt>
+            <dd className="mt-0.5 font-mono text-[var(--text)]">{item.gdsLegoColorId.trim()}</dd>
+          </div>
+        ) : null}
+        {unit ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">单价（元）</dt>
+            <dd className="mt-0.5 text-[var(--text)]">{unit}</dd>
+          </div>
+        ) : null}
+        {item.gdsShelfState?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">上架状态</dt>
+            <dd className="mt-0.5 font-mono text-xs text-[var(--text)]">{item.gdsShelfState.trim()}</dd>
+          </div>
+        ) : null}
+        {item.gdsPicture?.trim() ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品图 URL</dt>
+            <dd className="mt-0.5 break-all font-mono text-xs text-[var(--muted)]">{item.gdsPicture.trim()}</dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
+  );
+}
+
+type LegoCatalogDetailBlockProps = {
+  item: ShortageResolveItem;
+  titleId: string;
+  heroTitle: string;
+  showNameRowInDl: boolean;
+  reasonLines: string[];
+  showShortageReasonSummary: boolean;
+  parentSubjectOwned: boolean;
+  onClose: () => void;
+};
+
+function LegoCatalogDetailBlock({
+  item,
+  titleId,
+  heroTitle,
+  showNameRowInDl,
+  reasonLines,
+  showShortageReasonSummary,
+  parentSubjectOwned,
+  onClose,
+}: LegoCatalogDetailBlockProps) {
+  return (
+    <>
+      <div className="border-b border-[var(--border-soft)] pb-5 sm:pb-6">
+        <h2
+          id={titleId}
+          className="text-lg font-semibold leading-snug text-[var(--accent)] sm:text-xl sm:leading-snug"
+        >
+          {heroTitle}
+        </h2>
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-relaxed text-[var(--muted)]">
+          <span className="font-mono text-[13px] font-medium text-[var(--text)]">{item.partNum}</span>
+          {item.partCatName ? <span>· {item.partCatName}</span> : null}
+          <span className="text-[var(--muted-2)]">
+            · 第 {item.lineNumber} 行 · 数量 {item.quantity}
+          </span>
+        </p>
+        {item.partFound ? (
+          <p className="mt-3">
+            <Link
+              href={`/parts/${encodeURIComponent(item.partNum)}`}
+              className="text-sm font-medium text-[var(--accent)] no-underline hover:underline"
+              onClick={onClose}
+            >
+              查看完整零件页 →
+            </Link>
+          </p>
+        ) : null}
+      </div>
+
+      <dl className="mt-5 space-y-3.5 text-sm sm:mt-6 sm:text-[15px] sm:leading-relaxed">
+        {showNameRowInDl ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称</dt>
+            <dd className="mt-0.5 text-[var(--text)]">
+              {item.partFound && item.partName
+                ? item.partName
+                : item.partFound
+                  ? "（无名称）"
+                  : "本地库中无此 part_num"}
+            </dd>
+          </div>
+        ) : null}
+        <div>
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">颜色</dt>
+          <dd className="mt-0.5 text-[var(--text)]">
+            {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
+          </dd>
+        </div>
+        {item.imgSource === "part" ? (
+          <p className="text-xs text-[var(--muted)]">当前颜色无库存图，已使用该零件其他颜色的图片。</p>
+        ) : null}
+        <div>
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">元素</dt>
+          <dd className="mt-0.5 text-[var(--text)]">{item.elementKnown ? "已知" : "未知 / 未校验"}</dd>
+        </div>
+        {item.sheetTags.length > 0 ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">标签</dt>
+            <dd className="mt-0.5 flex flex-wrap gap-1">
+              {PARTS_SHEET_TAG_ORDER.filter((t) => item.sheetTags.includes(t)).map((t) => (
+                <span
+                  key={t}
+                  className="rounded border border-amber-400/35 bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-100/95"
+                >
+                  {PARTS_SHEET_TAG_LABELS[t]}
+                </span>
+              ))}
+            </dd>
+          </div>
+        ) : null}
+        {reasonLines.length > 0 ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">缺件原因</dt>
+            <dd className="mt-0.5 flex flex-wrap gap-1">
+              {reasonLines.map((line) => (
+                <span
+                  key={line}
+                  className="rounded border border-sky-400/30 bg-sky-500/10 px-1.5 py-px text-[11px] font-medium text-sky-100/95"
+                >
+                  {line}
+                </span>
+              ))}
+            </dd>
+          </div>
+        ) : null}
+        {item.rest ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
+              {showShortageReasonSummary ? "备注原文" : "导入附加列"}
+            </dt>
+            <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
+              {item.rest}
+            </dd>
+          </div>
+        ) : null}
+        {parentSubjectOwned ? (
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
+            <dd className="mt-0.5 text-[var(--text)]">本 MOC / 套装已在「我的拥有」中标记。</dd>
+          </div>
+        ) : null}
+      </dl>
+    </>
+  );
+}
+
 function MocPartDetailBody({
   item,
   titleId,
@@ -91,11 +337,17 @@ function MocPartDetailBody({
         : item.partNum.trim() || "—";
   const showNameRowInDl = !(item.partFound && item.partName);
 
+  const gdsUrl = item.gdsPicture?.trim() || null;
+  const legoUrl = item.imgUrl?.trim() || null;
+  const catalogDual = detailSubstituteSuggestions;
+  const hasGobricksFacts = catalogDual && rowHasGobricksDetailFields(item);
+  const catalogImgSizes = "(max-width:639px)72vw,(max-width:1023px)18rem,20rem";
+
   return (
     <div className="flex flex-col">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]">
-          零件摘要
+          {catalogDual ? "乐高与高砖" : "零件摘要"}
         </span>
         <button
           type="button"
@@ -108,127 +360,83 @@ function MocPartDetailBody({
       </div>
 
       <div className="px-5 py-5 sm:px-8 sm:py-7">
-        <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:gap-10 lg:gap-12">
-          <div className="mx-auto aspect-square w-full max-w-[min(16rem,72vw)] shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)] sm:mx-0 sm:max-w-[18rem] lg:max-w-[20rem]">
-            <div className="flex h-full min-h-[12rem] w-full items-center justify-center sm:min-h-0">
-              {item.imgUrl ? (
-                <RemoteCoverImage
-                  src={item.imgUrl}
-                  width={320}
-                  height={320}
-                  className="h-full max-h-[min(20rem,55vw)] w-full object-contain p-3 sm:max-h-none sm:p-4"
-                  sizes="(max-width:639px)72vw,(max-width:1023px)18rem,20rem"
-                  fallbackLabel="无图"
-                />
+        {catalogDual ? (
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 sm:items-start sm:gap-x-6 lg:gap-x-8">
+            <div className="flex min-w-0 flex-col gap-5 sm:border-r sm:border-[var(--border-soft)] sm:pr-6">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+                乐高 / 本地目录
+              </h3>
+              {legoUrl ? (
+                <CatalogImageFigure label="乐高目录图" imageUrl={legoUrl} sizes={catalogImgSizes} />
               ) : (
-                <span className="text-sm text-neutral-500">{item.partFound ? "无图" : "未收录"}</span>
+                <div className="flex min-h-[10rem] items-center justify-center rounded-xl border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-4 text-center text-sm text-[var(--muted)]">
+                  {item.partFound ? "无目录缩略图" : "未收录"}
+                </div>
+              )}
+              <LegoCatalogDetailBlock
+                item={item}
+                titleId={titleId}
+                heroTitle={heroTitle}
+                showNameRowInDl={showNameRowInDl}
+                reasonLines={reasonLines}
+                showShortageReasonSummary={showShortageReasonSummary}
+                parentSubjectOwned={parentSubjectOwned}
+                onClose={onClose}
+              />
+            </div>
+            <div className="flex min-w-0 flex-col gap-5">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
+                高砖商城
+              </h3>
+              {gdsUrl ? (
+                <CatalogImageFigure label="高砖商品图" imageUrl={gdsUrl} sizes={catalogImgSizes} />
+              ) : (
+                <div className="flex min-h-[10rem] items-center justify-center rounded-xl border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-4 text-center text-sm text-[var(--muted)]">
+                  无高砖商品图
+                </div>
+              )}
+              {hasGobricksFacts ? (
+                <GobricksDetailSection item={item} showHeading={false} />
+              ) : (
+                <p className="text-sm leading-relaxed text-[var(--muted)]">
+                  暂无高砖字段明细（例如未带 info 的旧同步数据）。
+                </p>
               )}
             </div>
           </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="border-b border-[var(--border-soft)] pb-5 sm:pb-6">
-              <h2
-                id={titleId}
-                className="text-lg font-semibold leading-snug text-[var(--accent)] sm:text-xl sm:leading-snug"
-              >
-                {heroTitle}
-              </h2>
-              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-relaxed text-[var(--muted)]">
-                <span className="font-mono text-[13px] font-medium text-[var(--text)]">{item.partNum}</span>
-                {item.partCatName ? <span>· {item.partCatName}</span> : null}
-                <span className="text-[var(--muted-2)]">
-                  · 第 {item.lineNumber} 行 · 数量 {item.quantity}
-                </span>
-              </p>
-              {item.partFound ? (
-                <p className="mt-3">
-                  <Link
-                    href={`/parts/${encodeURIComponent(item.partNum)}`}
-                    className="text-sm font-medium text-[var(--accent)] no-underline hover:underline"
-                    onClick={onClose}
-                  >
-                    查看完整零件页 →
-                  </Link>
-                </p>
-              ) : null}
+        ) : (
+          <div className="flex flex-col gap-7 sm:flex-row sm:items-start sm:gap-10 lg:gap-12">
+            <div className="mx-auto aspect-square w-full max-w-[min(16rem,72vw)] shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-[inset_0_1px_0_rgba(0,0,0,0.06)] sm:mx-0 sm:max-w-[18rem] lg:max-w-[20rem]">
+              <div className="flex h-full min-h-[12rem] w-full items-center justify-center sm:min-h-0">
+                {item.imgUrl ? (
+                  <RemoteCoverImage
+                    src={item.imgUrl}
+                    width={320}
+                    height={320}
+                    className="h-full max-h-[min(20rem,55vw)] w-full object-contain p-3 sm:max-h-none sm:p-4"
+                    sizes="(max-width:639px)72vw,(max-width:1023px)18rem,20rem"
+                    fallbackLabel="无图"
+                  />
+                ) : (
+                  <span className="text-sm text-neutral-500">{item.partFound ? "无图" : "未收录"}</span>
+                )}
+              </div>
             </div>
 
-            <dl className="mt-5 space-y-3.5 text-sm sm:mt-6 sm:text-[15px] sm:leading-relaxed">
-              {showNameRowInDl ? (
-                <div>
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称</dt>
-                  <dd className="mt-0.5 text-[var(--text)]">
-                    {item.partFound && item.partName
-                      ? item.partName
-                      : item.partFound
-                        ? "（无名称）"
-                        : "本地库中无此 part_num"}
-                  </dd>
-                </div>
-              ) : null}
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">颜色</dt>
-                <dd className="mt-0.5 text-[var(--text)]">
-                  {item.colorName ? `${item.colorName}（${item.colorId}）` : `色 ID ${item.colorId}`}
-                </dd>
-              </div>
-              {item.imgSource === "part" ? (
-                <p className="text-xs text-[var(--muted)]">当前颜色无库存图，已使用该零件其他颜色的图片。</p>
-              ) : null}
-              <div>
-                <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">元素</dt>
-                <dd className="mt-0.5 text-[var(--text)]">{item.elementKnown ? "已知" : "未知 / 未校验"}</dd>
-              </div>
-              {item.sheetTags.length > 0 ? (
-                <div>
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">标签</dt>
-                  <dd className="mt-0.5 flex flex-wrap gap-1">
-                    {PARTS_SHEET_TAG_ORDER.filter((t) => item.sheetTags.includes(t)).map((t) => (
-                      <span
-                        key={t}
-                        className="rounded border border-amber-400/35 bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-100/95"
-                      >
-                        {PARTS_SHEET_TAG_LABELS[t]}
-                      </span>
-                    ))}
-                  </dd>
-                </div>
-              ) : null}
-              {reasonLines.length > 0 ? (
-                <div>
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">缺件原因</dt>
-                  <dd className="mt-0.5 flex flex-wrap gap-1">
-                    {reasonLines.map((line) => (
-                      <span
-                        key={line}
-                        className="rounded border border-sky-400/30 bg-sky-500/10 px-1.5 py-px text-[11px] font-medium text-sky-100/95"
-                      >
-                        {line}
-                      </span>
-                    ))}
-                  </dd>
-                </div>
-              ) : null}
-              {item.rest ? (
-                <div>
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
-                    {showShortageReasonSummary ? "备注原文" : "导入附加列"}
-                  </dt>
-                  <dd className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[var(--muted)]">
-                    {item.rest}
-                  </dd>
-                </div>
-              ) : null}
-              {parentSubjectOwned ? (
-                <div>
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
-                  <dd className="mt-0.5 text-[var(--text)]">本 MOC / 套装已在「我的拥有」中标记。</dd>
-                </div>
-              ) : null}
-            </dl>
+            <div className="min-w-0 flex-1">
+              <LegoCatalogDetailBlock
+                item={item}
+                titleId={titleId}
+                heroTitle={heroTitle}
+                showNameRowInDl={showNameRowInDl}
+                reasonLines={reasonLines}
+                showShortageReasonSummary={showShortageReasonSummary}
+                parentSubjectOwned={parentSubjectOwned}
+                onClose={onClose}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {detailSubstituteSuggestions ? (
           <div className="mt-7 border-t border-[var(--border-soft)] pt-7 sm:mt-8 sm:pt-8">
@@ -393,7 +601,9 @@ export function MocPartsList({
   }, [items, totalPartQtyProp, shortageListMode]);
 
   const missingParts = items.filter((i) => !i.partFound).length;
-  const noImage = items.filter((i) => i.partFound && !i.imgUrl).length;
+  const noImage = items.filter(
+    (i) => i.partFound && !sheetRowListThumbSrc(i, detailSubstituteSuggestions)
+  ).length;
 
   const closeDetail = useCallback(() => {
     detailDialogRef.current?.close();
@@ -492,6 +702,7 @@ export function MocPartsList({
         <div className="tiles-grid">
           {listFiltered.map((r, idx) => {
             const reasonLine = partsSheetGridReasonLine(r, shortageListMode);
+            const thumbSrc = sheetRowListThumbSrc(r, detailSubstituteSuggestions);
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
               parentSubjectOwned ? PART_GRID_TILE_OWNED_HIGHLIGHT : "",
@@ -500,20 +711,30 @@ export function MocPartsList({
               .join(" ");
             const inner = (
               <>
-                {r.imgSource === "part" ? (
+                {detailSubstituteSuggestions && r.gdsPicture?.trim() ? (
+                  <span className="pointer-events-none absolute right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-violet-200/95">
+                    高砖
+                  </span>
+                ) : null}
+                {detailSubstituteSuggestions && !r.gdsPicture?.trim() && r.imgSource === "part" ? (
+                  <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-orange-300/95">
+                    异色图
+                  </span>
+                ) : null}
+                {!detailSubstituteSuggestions && r.imgSource === "part" ? (
                   <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-orange-300/95">
                     异色图
                   </span>
                 ) : null}
                 {!r.partFound ? (
-                  <span className="pointer-events-none absolute left-1 right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-amber-200/95">
+                  <span className="pointer-events-none absolute left-1 top-1 z-[1] max-w-[calc(100%-2.5rem)] truncate text-[9px] font-medium leading-none text-amber-200/95">
                     未收录
                   </span>
                 ) : null}
                 <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
-                  {r.imgUrl ? (
+                  {thumbSrc ? (
                     <RemoteCoverImage
-                      src={r.imgUrl}
+                      src={thumbSrc}
                       fill
                       className="object-contain p-0.5"
                       sizes="(max-width:640px)20vw,4.5rem"
@@ -571,7 +792,7 @@ export function MocPartsList({
             onClick={closeDetail}
           >
             <div
-              className="max-h-[min(92dvh,52rem)] w-full max-w-[min(56rem,calc(100vw-1.25rem))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
+              className="max-h-[min(92dvh,52rem)] w-full max-w-[min(64rem,calc(100vw-1.25rem))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <MocPartDetailBody
