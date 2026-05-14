@@ -316,6 +316,7 @@ export function MocDetailPartsSection({
                 savedAt={initialFulfillment.savedAt}
                 totalPartQty={undefined}
                 parentSubjectOwned={parentSubjectOwned}
+                detailSubstituteSuggestions
               />
             ) : null}
             {listTab === "shortage" && initialShortage ? (
@@ -326,6 +327,7 @@ export function MocDetailPartsSection({
                 totalPartQty={undefined}
                 shortageEditable={{ onPersist: persistShortage }}
                 parentSubjectOwned={parentSubjectOwned}
+                detailSubstituteSuggestions
               />
             ) : null}
             {listTab === "official" && officialInventory ? (

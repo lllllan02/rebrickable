@@ -22,6 +22,15 @@ import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 
+import {
+  getPartSubstituteSuggestionsAction,
+  type PartSubstituteSuggestion,
+} from "@/app/mocs/part-substitute-suggestions-action";
+
+function substituteRelBadgeLabel(t: "A" | "M"): string {
+  return t === "A" ? "替代" : "模具";
+}
+
 function shortageReasonSummaryLines(rest: string): string[] {
   const ids = shortageReasonCategoriesInRest(rest);
   if (ids.length === 0) return [];
@@ -35,14 +44,47 @@ function MocPartDetailBody({
   onClose,
   parentSubjectOwned,
   showShortageReasonSummary,
+  detailSubstituteSuggestions,
 }: {
   item: ShortageResolveItem;
   titleId: string;
   onClose: () => void;
   parentSubjectOwned: boolean;
   showShortageReasonSummary: boolean;
+  detailSubstituteSuggestions: boolean;
 }) {
   const reasonLines = showShortageReasonSummary ? shortageReasonSummaryLines(item.rest) : [];
+  const [substitutes, setSubstitutes] = useState<PartSubstituteSuggestion[] | null>(null);
+  const [substitutesError, setSubstitutesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!detailSubstituteSuggestions) {
+      setSubstitutes(null);
+      setSubstitutesError(null);
+      return;
+    }
+    let cancelled = false;
+    setSubstitutes(null);
+    setSubstitutesError(null);
+    const pn = item.partNum.trim();
+    if (!pn) {
+      setSubstitutes([]);
+      return;
+    }
+    void (async () => {
+      const res = await getPartSubstituteSuggestionsAction(pn);
+      if (cancelled) return;
+      if (res.ok) setSubstitutes(res.items);
+      else {
+        setSubstitutes([]);
+        setSubstitutesError(res.error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.partNum, detailSubstituteSuggestions]);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-3">
@@ -151,6 +193,76 @@ function MocPartDetailBody({
           ) : null}
         </dl>
 
+        {detailSubstituteSuggestions ? (
+          <div className="mt-4 border-t border-[var(--border-soft)] pt-4">
+            <h3 className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
+              推荐替换（Rebrickable 目录）
+            </h3>
+            {substitutes === null ? (
+              <p className="mt-2 text-xs text-[var(--muted)]">加载中…</p>
+            ) : substitutesError ? (
+              <p className="mt-2 text-xs text-amber-200/90">{substitutesError}</p>
+            ) : substitutes.length === 0 ? (
+              <p className="mt-2 text-xs text-[var(--muted)]">无替代或模具变体记录。</p>
+            ) : (
+              <>
+                <ul className="mt-2 space-y-2.5 text-sm">
+                  {substitutes.map((s) => (
+                    <li
+                      key={s.otherPartNum}
+                      className="flex gap-2.5 rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)] px-2.5 py-2"
+                    >
+                      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
+                        {s.imgUrl ? (
+                          <RemoteCoverImage
+                            src={s.imgUrl}
+                            width={56}
+                            height={56}
+                            className="h-full w-full object-contain p-0.5"
+                            sizes="56px"
+                            fallbackLabel="无图"
+                            fallbackClassName="!text-[9px]"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
+                            无图
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Link
+                            href={`/parts/${encodeURIComponent(s.otherPartNum)}`}
+                            className="font-mono text-xs font-semibold text-[var(--accent)] no-underline hover:underline"
+                            onClick={onClose}
+                          >
+                            {s.otherPartNum}
+                          </Link>
+                          {s.relTypes.map((t) => (
+                            <span
+                              key={t}
+                              className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-100/95"
+                            >
+                              {substituteRelBadgeLabel(t)}
+                            </span>
+                          ))}
+                        </div>
+                        {s.partName ? (
+                          <p className="mt-1 text-xs leading-snug text-[var(--muted)]">{s.partName}</p>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[10px] leading-snug text-[var(--muted-2)]">
+                  数据来自本地 <span className="font-mono">part_relationships</span>（类型 A/M）；缩略图取自{" "}
+                  <span className="font-mono">inventory_parts</span> 中该零件任一角度的库存图。颜色与造型请自行核对。
+                </p>
+              </>
+            )}
+          </div>
+        ) : null}
+
         {item.partFound ? (
           <p className="mt-5 border-t border-[var(--border-soft)] pt-4 text-xs">
             <a
@@ -231,6 +343,8 @@ type Props = {
   shortageEditable?: { onPersist: ShortagePersistFn } | null;
   /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行使用拥有高亮样式 */
   parentSubjectOwned?: boolean;
+  /** 配货表 / 缺件表：侧栏展示目录库中的推荐替换零件（part_relationships A/M） */
+  detailSubstituteSuggestions?: boolean;
 };
 
 export function MocPartsList({
@@ -241,6 +355,7 @@ export function MocPartsList({
   totalPartQty: totalPartQtyProp,
   shortageEditable = null,
   parentSubjectOwned = false,
+  detailSubstituteSuggestions = false,
 }: Props) {
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [shortageReasonFilter, setShortageReasonFilter] = useState<ShortageReasonFilterId>("all");
@@ -785,6 +900,7 @@ export function MocPartsList({
                 onClose={closeDetail}
                 parentSubjectOwned={parentSubjectOwned}
                 showShortageReasonSummary={Boolean(shortageEditable)}
+                detailSubstituteSuggestions={detailSubstituteSuggestions}
               />
             </div>
             <button
