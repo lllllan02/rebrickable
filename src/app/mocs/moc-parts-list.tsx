@@ -286,6 +286,9 @@ function sheetRowCurrentGobricksColorLine(item: ShortageResolveItem): string {
         : `乐高色 ID ${item.colorId}`;
 }
 
+const SHEET_QUAD_NO_MATCH =
+  "flex min-h-[5rem] flex-1 items-center justify-center px-2 text-center text-[12px] leading-relaxed text-[var(--muted)] sm:min-h-[5.5rem] sm:text-[13px]";
+
 /** 与四宫格「现·乐高」同字段与样式，标题可传「乐高」或「现·乐高」 */
 function SheetReplaceCurrentLegoCell({
   title,
@@ -296,6 +299,15 @@ function SheetReplaceCurrentLegoCell({
   item: ShortageResolveItem;
   onClose: () => void;
 }) {
+  if (!item.partFound) {
+    return (
+      <div className={SHEET_QUAD_CELL_SHELL}>
+        <div className={SHEET_QUAD_CELL_TITLE}>{title}</div>
+        <p className={SHEET_QUAD_NO_MATCH}>无匹配零件</p>
+      </div>
+    );
+  }
+
   const curLegoImg = item.imgUrl?.trim() || null;
   const curColorLine = item.colorName
     ? `${item.colorName}（${item.colorId}）`
@@ -390,14 +402,8 @@ function SheetReplaceFourQuadrants({
   const origLegoImg = replaceMeta.originalLegoImgUrl?.trim() || null;
   const origGdsPic = replaceMeta.originalGobricksPicture?.trim() || null;
   const origGdsId = replaceMeta.originalGobricksItemId?.trim() || null;
-  const hasOrigGobricksData = Boolean(
-    origGdsPic ||
-      origGdsId ||
-      replaceMeta.originalGobricksCaption?.trim() ||
-      replaceMeta.originalGobricksColorId?.trim() ||
-      replaceMeta.originalGobricksLegoColorId?.trim() ||
-      replaceMeta.originalGobricksUnitPrice?.trim()
-  );
+  /** 有高砖商品 SKU（如 GDS-812-091）时才展示原·高砖详情；仅有色 ID 等无商品时视为未匹配 */
+  const origHasGobricksSku = Boolean(origGdsId);
 
   const partLink = SHEET_QUAD_PART_LINK;
 
@@ -451,30 +457,25 @@ function SheetReplaceFourQuadrants({
 
       <div className={SHEET_QUAD_CELL_SHELL}>
         <div className={SHEET_QUAD_CELL_TITLE}>原·高砖</div>
-        <div className="flex items-start gap-2 sm:gap-2.5">
-          <SheetReplaceQuadThumb
-            imageUrl={origGdsPic}
-            emptyLabel={hasOrigGobricksData ? "无图" : "未存档"}
-          />
-          <div className={SHEET_QUAD_BODY_BASE}>
-            {!hasOrigGobricksData ? (
-              <p className="text-[12px] leading-relaxed text-[var(--muted)] sm:text-[13px]">更换前未写入快照</p>
-            ) : (
-              <>
-                <SheetReplaceQuadRow label="ID">
-                  <span className="break-all font-mono">{origGdsId ?? "—"}</span>
-                </SheetReplaceQuadRow>
-                <SheetReplaceQuadRow label="名称">
-                  <span className="line-clamp-3">{origGobricksCaption}</span>
-                </SheetReplaceQuadRow>
-                <SheetReplaceQuadRow label="颜色">{origGobricksColorLine}</SheetReplaceQuadRow>
-                <SheetReplaceQuadRow label="单价（元）">
-                  <span className="font-mono">{origGobricksPrice}</span>
-                </SheetReplaceQuadRow>
-              </>
-            )}
+        {!origHasGobricksSku ? (
+          <p className={SHEET_QUAD_NO_MATCH}>无匹配零件</p>
+        ) : (
+          <div className="flex items-start gap-2 sm:gap-2.5">
+            <SheetReplaceQuadThumb imageUrl={origGdsPic} emptyLabel="无图" />
+            <div className={SHEET_QUAD_BODY_BASE}>
+              <SheetReplaceQuadRow label="ID">
+                <span className="break-all font-mono">{origGdsId}</span>
+              </SheetReplaceQuadRow>
+              <SheetReplaceQuadRow label="名称">
+                <span className="line-clamp-3">{origGobricksCaption}</span>
+              </SheetReplaceQuadRow>
+              <SheetReplaceQuadRow label="颜色">{origGobricksColorLine}</SheetReplaceQuadRow>
+              <SheetReplaceQuadRow label="单价（元）">
+                <span className="font-mono">{origGobricksPrice}</span>
+              </SheetReplaceQuadRow>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <SheetReplaceCurrentLegoCell title="现·乐高" item={item} onClose={onClose} />
@@ -1356,6 +1357,8 @@ export function MocPartsList({
             const showUnitInTile = sheetRowReplaceContext?.branch === "fulfillment";
             const unitGrid = showUnitInTile ? sheetRowGobricksUnitPriceText(r) : undefined;
             const sheetRowModified = restHasSheetRowReplacedMarker(r.rest);
+            const leftBadgeRows = (sheetRowModified ? 1 : 0) + (!r.partFound ? 1 : 0);
+            const thumbTopMarginClass = leftBadgeRows > 1 ? "mt-5" : "mt-3";
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
               sheetRowModified
@@ -1368,22 +1371,35 @@ export function MocPartsList({
               .join(" ");
             const inner = (
               <>
-                {sheetRowModified ? (
-                  <span className="pointer-events-none absolute left-1 top-1 z-[1] max-w-[calc(100%-2.5rem)] truncate text-[9px] font-medium leading-none text-sky-200/95">
-                    有修改
-                  </span>
+                {(sheetRowModified || !r.partFound) ? (
+                  <div
+                    className="pointer-events-none absolute left-1 top-1 z-[1] flex max-w-[calc(100%-2.5rem)] flex-col items-start gap-0.5"
+                    aria-label={
+                      [sheetRowModified && "本行已手动更换零件", !r.partFound && "本地目录未收录该零件号"]
+                        .filter(Boolean)
+                        .join("，") || undefined
+                    }
+                  >
+                    {sheetRowModified ? (
+                      <span className="truncate text-[9px] font-medium leading-none text-sky-200/95">
+                        有修改
+                      </span>
+                    ) : null}
+                    {!r.partFound ? (
+                      <span className="truncate text-[9px] font-medium leading-none text-amber-200/95">
+                        未收录
+                      </span>
+                    ) : null}
+                  </div>
                 ) : null}
                 {detailSubstituteSuggestions && r.gdsPicture?.trim() ? (
                   <span className="pointer-events-none absolute right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-violet-200/95">
                     高砖
                   </span>
                 ) : null}
-                {!r.partFound ? (
-                  <span className="pointer-events-none absolute left-1 top-1 z-[1] max-w-[calc(100%-2.5rem)] truncate text-[9px] font-medium leading-none text-amber-200/95">
-                    未收录
-                  </span>
-                ) : null}
-                <div className="relative mx-auto mt-3 aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]">
+                <div
+                  className={`relative mx-auto ${thumbTopMarginClass} aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]`}
+                >
                   {thumbSrc ? (
                     <RemoteCoverImage
                       src={thumbSrc}
@@ -1515,7 +1531,6 @@ export function MocPartsList({
                     item={detailItem}
                     context={sheetRowReplaceContext}
                     onReplaced={handleSheetRowReplaced}
-                    showSubstituteSuggestions={Boolean(detailSubstituteSuggestions)}
                   />
                 </div>
               ) : (
@@ -1527,7 +1542,6 @@ export function MocPartsList({
                   showShortageReasonSummary={shortageListMode}
                   detailSubstituteSuggestions={detailSubstituteSuggestions}
                   hideTopBar
-                  omitSubstituteBlock={Boolean(sheetRowReplaceContext && detailSubstituteSuggestions)}
                   sheetRowReplaceContext={sheetRowReplaceContext}
                   onSheetRowRestored={sheetRowReplaceContext ? handleSheetRowReplaced : undefined}
                 />

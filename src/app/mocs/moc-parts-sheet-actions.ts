@@ -1077,6 +1077,9 @@ export async function replaceBuildPartsSheetRowAction(input: {
     ...newRow,
     lineNumber: old.lineNumber,
     quantity: old.quantity,
+    ...(preservedUnit != null
+      ? { gobricksUnitPrice: preservedUnit, gdsUnitPrice: preservedUnit }
+      : {}),
     rest: appendSheetRowReplacedMarker(
       input.branch === "shortage" ? stripShortageReasonTextFromRest(old.rest) : old.rest,
       preservedOriginal,
@@ -1296,6 +1299,9 @@ export async function restoreBuildPartsSheetRowAction(input: {
     ...newRow,
     lineNumber: old.lineNumber,
     quantity: old.quantity,
+    ...(preservedUnit != null
+      ? { gobricksUnitPrice: preservedUnit, gdsUnitPrice: preservedUnit }
+      : {}),
     rest: cleanRest,
   };
 

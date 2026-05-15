@@ -27,6 +27,7 @@ import {
 import { likeFragment } from "@/lib/search";
 import {
   fetchGobricksItemFilterInStockColors,
+  fetchGobricksSearchItemHits,
   parseGobricksProductIdFromGdsItemId,
   resolveGobricksProductIdForPartNum,
   searchGobricksProductIdByLegoDesignId,
@@ -46,6 +47,14 @@ export type SheetReplaceCategoryRow = {
 export type SheetReplacePieceFilter = "all" | "plain" | "printed";
 
 export type SheetReplacePartHit = {
+  partNum: string;
+  name: string;
+  imgUrl: string | null;
+};
+
+/** 更换零件第一步：高砖站内搜索结果（含 `product_id`，选色时直拉库存接口） */
+export type SheetReplaceGobricksSearchHit = {
+  productId: string;
   partNum: string;
   name: string;
   imgUrl: string | null;
@@ -252,6 +261,31 @@ export async function searchPartsForSheetReplaceAction(input: {
 }
 
 /**
+ * 配货/缺件更换零件：按关键词调用高砖站内搜索（不查本地零件库）。
+ */
+export async function searchGobricksPartsForSheetReplaceAction(input: {
+  q: string;
+}): Promise<{ ok: true; parts: SheetReplaceGobricksSearchHit[] } | { ok: false; error: string }> {
+  const q = likeFragment(input.q ?? "", MAX_Q_LEN);
+  if (!q) return { ok: true, parts: [] };
+  try {
+    const res = await fetchGobricksSearchItemHits(q);
+    if (!res.ok) return { ok: false, error: res.error };
+    return {
+      ok: true,
+      parts: res.hits.map((h) => ({
+        productId: h.productId,
+        partNum: h.legoPartNum,
+        name: h.name,
+        imgUrl: h.imgUrl,
+      })),
+    };
+  } catch {
+    return { ok: false, error: "高砖搜索失败。" };
+  }
+}
+
+/**
  * 某零件在 elements 表中出现过的颜色（官方配色），用于更换时选色。
  */
 export async function listElementColorsForPartSheetReplaceAction(
@@ -311,6 +345,8 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
   sheetRowPartNum: string;
   sheetRowGdsItemId?: string | null;
   probeLegoColorId: number;
+  /** 第一步从高砖搜索命中传入时可省略 lego2ItemList / 站内二次探测 */
+  preresolvedProductId?: string | null;
   /** 为 true 时包含库存为 0 的 SKU（还原时按原 GDS 匹配） */
   includeZeroInventory?: boolean;
 }): Promise<
@@ -326,7 +362,11 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
 
   try {
     let productId: string | null = null;
-    if (rowPn && partNum === rowPn) {
+    const pre = input.preresolvedProductId?.trim() ?? "";
+    if (pre && /^\d+$/.test(pre)) {
+      productId = pre;
+    }
+    if (!productId && rowPn && partNum === rowPn) {
       productId = parseGobricksProductIdFromGdsItemId(input.sheetRowGdsItemId ?? null);
     }
     if (!productId) {
@@ -344,7 +384,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
       return {
         ok: false,
         error:
-          "未能解析该零件在高砖商城的 product_id（已尝试同步 GDS、lego2ItemList 与站内搜索），无法拉取有货颜色。",
+          "未能解析该零件在高砖商城的 product_id（已尝试 GDS、lego2ItemList 与站内搜索），无法拉取有货颜色。",
       };
     }
 
@@ -363,6 +403,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         nameZh: string | null;
         nameEn: string | null;
         gdsColorId: string;
+        swatchHex: string | null;
       }
     >();
     for (const r of stockRes.rows) {
@@ -374,6 +415,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
           nameZh: r.colorNameZh,
           nameEn: r.colorNameEn,
           gdsColorId: r.gdsColorId,
+          swatchHex: r.swatchHex,
         });
       }
     }
@@ -406,16 +448,26 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
       const id = Number(legoStr);
       if (!Number.isFinite(id) || id < 0) continue;
       const meta = metaById.get(id);
-      if (!meta) continue;
-      const zh = agg.nameZh?.trim() || meta.name.trim();
-      const en = agg.nameEn?.trim() || meta.name.trim();
+      const zh = agg.nameZh?.trim() || meta?.name?.trim() || `色号 ${legoStr}`;
+      const en = agg.nameEn?.trim() || meta?.name?.trim() || zh;
+      const hexGb = agg.swatchHex?.replace(/^#/, "").trim() ?? "";
+      const rgb =
+        meta?.rgb && /^[0-9a-fA-F]{6}$/.test(meta.rgb)
+          ? meta.rgb
+          : /^[0-9a-fA-F]{6}$/.test(hexGb)
+            ? hexGb
+            : "cccccc";
+      const name = meta?.name?.trim() || zh;
+      const isTrans =
+        meta?.isTrans ??
+        (zh.includes("透") || en.toLowerCase().includes("trans") || en.toLowerCase().includes("clear"));
       variants.push({
-        colorId: meta.id,
-        name: meta.name,
+        colorId: id,
+        name,
         nameZh: zh,
         nameEn: en,
-        rgb: meta.rgb,
-        isTrans: meta.isTrans,
+        rgb,
+        isTrans,
         picture: agg.picture,
         inventory: agg.inventory,
         gdsColorId: agg.gdsColorId,
@@ -430,18 +482,12 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         ok: false,
         error:
           stockRes.rows.length > 0
-            ? "高砖有货 SKU 的色号均未在本地目录中收录，无法更换为其中颜色。"
+            ? "高砖返回了库存行但无有效乐高色 ID，无法生成选色列表。"
             : "高砖当前未返回该商品有库存的配色。",
       };
     }
 
-    const skippedLocal = bestByLego.size - variants.length;
-    const hint =
-      skippedLocal > 0
-        ? `有 ${skippedLocal} 个高砖有货色号未在本地颜色表收录，已隐藏。`
-        : null;
-
-    return { ok: true, variants, hint, productId };
+    return { ok: true, variants, hint: null, productId };
   } catch {
     return { ok: false, error: "读取高砖有货颜色失败。" };
   }

@@ -17,6 +17,12 @@ import {
 const MAX_CSV_CHARS = 512_000;
 const MAX_SHEET_ROWS = 100_000;
 
+function sheetRowUnitPriceTrimmed(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = String(v).trim();
+  return t.length > 0 ? t : null;
+}
+
 export type ResolveShortageCsvDbResult =
   | { ok: true; skippedHeader: boolean; items: ShortageResolveItem[] }
   | { ok: false; error: string; lineNumber?: number | null };
@@ -139,14 +145,16 @@ export async function resolveGobricksSheetSerializedRowsInDb(
       imgUrl = partThumb;
       imgSource = "part";
     }
-    const price = r.gdsUnitPrice ?? r.gobricksUnitPrice ?? null;
+    const gdsU = sheetRowUnitPriceTrimmed(r.gdsUnitPrice);
+    const gbU = sheetRowUnitPriceTrimmed(r.gobricksUnitPrice);
+    const price = gdsU ?? gbU ?? null;
     return {
       lineNumber: i + 1,
       partNum: r.partNum,
       colorId: r.colorId,
       quantity: r.quantity,
       gobricksUnitPrice: price,
-      gdsUnitPrice: r.gdsUnitPrice ?? price,
+      gdsUnitPrice: gdsU ?? price,
       gdsItemId: r.gdsItemId,
       gdsColorId: r.gdsColorId,
       gdsPicture: r.gdsPicture,

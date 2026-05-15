@@ -1,25 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import type { BuildSubjectKind } from "@/lib/build-subject";
+import { parseGobricksProductIdFromGdsItemId } from "@/lib/gobricks-item-filter-inventory";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
-import {
-  getPartSubstituteSuggestionsAction,
-  type PartSubstituteSuggestion,
-} from "@/app/mocs/part-substitute-suggestions-action";
 import { replaceBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-actions";
 import {
-  getDefaultPartCategoryForSheetReplaceAction,
   listGobricksStockColorsForSheetReplaceAction,
-  listPartCategoriesForSheetReplaceAction,
-  searchPartsForSheetReplaceAction,
-  type SheetReplaceCategoryRow,
+  searchGobricksPartsForSheetReplaceAction,
+  type SheetReplaceGobricksSearchHit,
   type SheetReplaceGobricksStockColor,
-  type SheetReplacePartHit,
-  type SheetReplacePieceFilter,
 } from "@/app/mocs/sheet-row-replace-catalog-action";
 
 export type SheetRowReplaceContext = {
@@ -32,44 +25,19 @@ type Props = {
   item: ShortageResolveItem;
   context: SheetRowReplaceContext;
   onReplaced: () => void;
-  /** 在第一步内展示「推荐替换」，点击后与下方列表一样进入高砖有货选色 */
-  showSubstituteSuggestions?: boolean;
 };
 
 type Step = "pickPart" | "pickColor";
 
-const PIECE_FILTER_OPTIONS: { id: SheetReplacePieceFilter; label: string }[] = [
-  { id: "all", label: "全部" },
-  { id: "plain", label: "普通零件" },
-  { id: "printed", label: "印刷件" },
-];
-
-function substituteRelBadgeLabel(t: "A" | "M"): string {
-  return t === "A" ? "替代" : "模具";
-}
-
-export function SheetRowReplacePanel({
-  item,
-  context,
-  onReplaced,
-  showSubstituteSuggestions = false,
-}: Props) {
+export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
   const [step, setStep] = useState<Step>("pickPart");
-  const [categories, setCategories] = useState<SheetReplaceCategoryRow[] | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [partCatFilter, setPartCatFilter] = useState<number | "all">("all");
-  const [catReady, setCatReady] = useState(false);
-  const [pieceFilter, setPieceFilter] = useState<SheetReplacePieceFilter>("all");
-  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const [partsHits, setPartsHits] = useState<SheetReplacePartHit[]>([]);
+  const [partsHits, setPartsHits] = useState<SheetReplaceGobricksSearchHit[]>([]);
   const [partsLoading, setPartsLoading] = useState(false);
   const [partsError, setPartsError] = useState<string | null>(null);
-
-  const [substituteRows, setSubstituteRows] = useState<PartSubstituteSuggestion[] | null>(null);
 
   const [pickedPart, setPickedPart] = useState<string | null>(null);
   const [pickedPartName, setPickedPartName] = useState<string>("");
@@ -83,89 +51,24 @@ export function SheetRowReplacePanel({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const catPickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!categoryPickerOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const el = catPickerRef.current;
-      if (!el || el.contains(e.target as Node)) return;
-      setCategoryPickerOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [categoryPickerOpen]);
-
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 380);
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
   useEffect(() => {
-    if (!showSubstituteSuggestions) {
-      setSubstituteRows(null);
+    let cancelled = false;
+    const q = debouncedSearch.trim();
+    if (!q) {
+      setPartsLoading(false);
+      setPartsError(null);
+      setPartsHits([]);
       return;
     }
-    let cancelled = false;
-    setSubstituteRows(null);
-    const pn = item.partNum.trim();
-    if (!pn) {
-      setSubstituteRows([]);
-      return;
-    }
-    void (async () => {
-      const res = await getPartSubstituteSuggestionsAction(pn);
-      if (cancelled) return;
-      if (res.ok) setSubstituteRows(res.items);
-      else setSubstituteRows([]);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [showSubstituteSuggestions, item.partNum]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setCatalogError(null);
-    setCatReady(false);
-
-    void (async () => {
-      const [catRes, defRes] = await Promise.all([
-        listPartCategoriesForSheetReplaceAction(),
-        getDefaultPartCategoryForSheetReplaceAction(item.partNum),
-      ]);
-      if (cancelled) return;
-      if (!catRes.ok) {
-        setCatalogError(catRes.error);
-        setCatReady(true);
-        return;
-      }
-      setCategories(catRes.categories);
-      const defCat = defRes.ok ? defRes.partCatId : null;
-      if (defCat != null && catRes.categories.some((c) => c.id === defCat)) {
-        setPartCatFilter(defCat);
-      } else {
-        setPartCatFilter("all");
-      }
-      setCatReady(true);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [item.lineNumber, item.partNum]);
-
-  useEffect(() => {
-    if (!catReady) return;
-    let cancelled = false;
     setPartsLoading(true);
     setPartsError(null);
     void (async () => {
-      const res = await searchPartsForSheetReplaceAction({
-        partCatId: partCatFilter,
-        q: debouncedSearch,
-        pieceFilter,
-      });
+      const res = await searchGobricksPartsForSheetReplaceAction({ q });
       if (cancelled) return;
       setPartsLoading(false);
       if (!res.ok) {
@@ -178,10 +81,10 @@ export function SheetRowReplacePanel({
     return () => {
       cancelled = true;
     };
-  }, [catReady, partCatFilter, debouncedSearch, pieceFilter]);
+  }, [debouncedSearch]);
 
   const loadGobricksPalette = useCallback(
-    async (partNum: string, fallbackPreferredColorId: number) => {
+    async (partNum: string, fallbackPreferredColorId: number, preresolvedProductId: string | null) => {
       setColorsLoadError(null);
       setGobricksHint(null);
       setGobricksVariants(null);
@@ -190,6 +93,7 @@ export function SheetRowReplacePanel({
         sheetRowPartNum: item.partNum,
         sheetRowGdsItemId: item.gdsItemId ?? null,
         probeLegoColorId: fallbackPreferredColorId,
+        preresolvedProductId,
       });
       if (!res.ok) {
         setColorsLoadError(res.error);
@@ -204,27 +108,19 @@ export function SheetRowReplacePanel({
   );
 
   const goToColorStep = useCallback(
-    (partNum: string, partName: string) => {
-      setCategoryPickerOpen(false);
+    (partNum: string, partName: string, productId: string | null) => {
       setPickedPart(partNum);
       setPickedPartName(partName);
       setStep("pickColor");
       setColorFilter("");
-      void loadGobricksPalette(partNum, item.colorId);
+      void loadGobricksPalette(partNum, item.colorId, productId);
     },
     [item.colorId, loadGobricksPalette]
   );
 
   const onPickPart = useCallback(
-    (hit: SheetReplacePartHit) => {
-      goToColorStep(hit.partNum, hit.name);
-    },
-    [goToColorStep]
-  );
-
-  const onPickSubstituteSuggestion = useCallback(
-    (s: PartSubstituteSuggestion) => {
-      goToColorStep(s.otherPartNum, s.partName ?? "");
+    (hit: SheetReplaceGobricksSearchHit) => {
+      goToColorStep(hit.partNum, hit.name, hit.productId);
     },
     [goToColorStep]
   );
@@ -250,14 +146,6 @@ export function SheetRowReplacePanel({
     if (hit.nameZh === hit.nameEn) return hit.nameZh;
     return `${hit.nameZh} · ${hit.nameEn}`;
   }, [colorId, gobricksVariants]);
-
-  const currentCategoryLabel = useMemo(() => {
-    if (catalogError) return "无法加载分类";
-    if (!catReady) return "加载中…";
-    if (partCatFilter === "all") return "全部分类";
-    const c = categories?.find((x) => x.id === partCatFilter);
-    return c?.name ?? `类型 #${partCatFilter}`;
-  }, [catReady, catalogError, partCatFilter, categories]);
 
   const handleApply = useCallback(async () => {
     const pn = (pickedPart ?? "").trim();
@@ -303,7 +191,6 @@ export function SheetRowReplacePanel({
   ]);
 
   const backToParts = useCallback(() => {
-    setCategoryPickerOpen(false);
     setStep("pickPart");
     setPickedPart(null);
     setPickedPartName("");
@@ -322,222 +209,46 @@ export function SheetRowReplacePanel({
 
       {step === "pickPart" ? (
         <>
-          {showSubstituteSuggestions &&
-          substituteRows !== null &&
-          substituteRows.length > 0 ? (
-            <div className="space-y-2">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-2)]">
-                推荐替换
-              </h3>
-              <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                {substituteRows.map((s) => (
-                  <li key={s.otherPartNum}>
-                    <button
-                      type="button"
-                      onClick={() => onPickSubstituteSuggestion(s)}
-                      className="flex w-full min-h-0 gap-2.5 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)] px-2.5 py-2 text-left transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface)] sm:gap-3 sm:px-3 sm:py-2.5"
-                    >
-                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-14 sm:w-14">
-                        {s.imgUrl ? (
-                          <RemoteCoverImage
-                            src={s.imgUrl}
-                            width={56}
-                            height={56}
-                            className="h-full w-full object-contain p-0.5 sm:p-1"
-                            sizes="56px"
-                            fallbackLabel="无图"
-                            fallbackClassName="!text-[8px]"
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
-                            无图
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-xs font-semibold text-[var(--accent)]">
-                            {s.otherPartNum}
-                          </span>
-                          {s.relTypes.map((t) => (
-                            <span
-                              key={t}
-                              className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1 py-px text-[10px] font-medium text-emerald-100/95"
-                            >
-                              {substituteRelBadgeLabel(t)}
-                            </span>
-                          ))}
-                        </div>
-                        {s.partName ? (
-                          <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--muted)]">{s.partName}</p>
-                        ) : null}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
           <div className="space-y-1.5">
             <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
-              类型与搜索
+              高砖商城搜索
             </span>
-            <div className="flex flex-row items-stretch gap-2 sm:gap-3">
-              <div ref={catPickerRef} className="relative max-w-[13.5rem] shrink-0 basis-[40%] sm:basis-[38%]">
-                <button
-                  type="button"
-                  disabled={Boolean(catalogError) || !categories}
-                  aria-expanded={categoryPickerOpen}
-                  aria-haspopup="listbox"
-                  onClick={() => setCategoryPickerOpen((o) => !o)}
-                  className="field flex h-10 w-full items-center justify-between gap-2 px-3 text-left text-sm disabled:opacity-45"
-                >
-                  <span className="min-w-0 truncate text-[var(--text)]">{currentCategoryLabel}</span>
-                  <span className="shrink-0 text-[10px] text-[var(--muted-2)]" aria-hidden>
-                    {categoryPickerOpen ? "▲" : "▼"}
-                  </span>
-                </button>
-                {categoryPickerOpen ? (
-                  <ul
-                    className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-30 max-h-[min(50vh,15rem)] overflow-y-auto overscroll-contain rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.45)]"
-                    role="listbox"
-                    aria-label="零件类型"
-                  >
-                    {!categories && !catalogError ? (
-                      <li className="px-3 py-4 text-center text-xs text-[var(--muted)]">加载类型…</li>
-                    ) : (
-                      <>
-                        <li>
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={partCatFilter === "all"}
-                            disabled={Boolean(catalogError)}
-                            onClick={() => {
-                              setPartCatFilter("all");
-                              setCategoryPickerOpen(false);
-                            }}
-                            className={`flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-sm transition-colors ${
-                              partCatFilter === "all"
-                                ? "bg-[var(--accent-soft)] text-[var(--text)]"
-                                : "text-[var(--text)] hover:bg-[var(--surface-2)]"
-                            }`}
-                          >
-                            <div className="relative size-6 shrink-0 overflow-hidden rounded border border-[var(--border-soft)] bg-[var(--surface-3)]">
-                              <span className="flex h-full w-full items-center justify-center text-[7px] font-bold text-[var(--muted)]">
-                                全
-                              </span>
-                            </div>
-                            <span className="min-w-0 flex-1 truncate">全部分类</span>
-                            {partCatFilter === "all" ? (
-                              <span className="shrink-0 text-xs text-[var(--accent)]">✓</span>
-                            ) : null}
-                          </button>
-                        </li>
-                        {categories?.map((c) => {
-                          const selected = partCatFilter === c.id;
-                          return (
-                            <li key={c.id}>
-                              <button
-                                type="button"
-                                role="option"
-                                aria-selected={selected}
-                                onClick={() => {
-                                  setPartCatFilter(c.id);
-                                  setCategoryPickerOpen(false);
-                                }}
-                                className={`flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-sm transition-colors ${
-                                  selected
-                                    ? "bg-[var(--accent-soft)] text-[var(--text)]"
-                                    : "text-[var(--text)] hover:bg-[var(--surface-2)]"
-                                }`}
-                              >
-                                <div className="relative size-6 shrink-0 overflow-hidden rounded border border-[var(--border-soft)] bg-white">
-                                  {c.heroImgUrl ? (
-                                    <RemoteCoverImage
-                                      src={c.heroImgUrl}
-                                      fill
-                                      className="object-contain p-px"
-                                      sizes="24px"
-                                      alt=""
-                                      fallbackLabel="—"
-                                      fallbackClassName="!text-[6px]"
-                                    />
-                                  ) : (
-                                    <span className="flex h-full w-full items-center justify-center text-[6px] text-[var(--muted)]">
-                                      —
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                                {selected ? (
-                                  <span className="shrink-0 text-xs text-[var(--accent)]">✓</span>
-                                ) : null}
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </>
-                    )}
-                  </ul>
-                ) : null}
-              </div>
-              <label className="flex min-w-0 flex-1 flex-col justify-center">
-                <span className="sr-only">搜索零件</span>
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="名称、part_num 或 element_id…"
-                  className="field h-10 w-full text-sm"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </label>
-            </div>
+            <label className="block">
+              <span className="sr-only">搜索高砖商品</span>
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="乐高零件号、中文商品名或关键词…"
+                className="field h-10 w-full text-sm"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </label>
           </div>
 
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
-              零件形态
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {PIECE_FILTER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  disabled={!catReady}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                    pieceFilter === opt.id
-                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
-                      : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
-                  } ${!catReady ? "cursor-not-allowed opacity-45" : ""}`}
-                  onClick={() => setPieceFilter(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {catalogError ? <p className="text-sm text-amber-200/90">{catalogError}</p> : null}
           {partsError ? <p className="text-sm text-amber-200/90">{partsError}</p> : null}
 
           <div className="max-h-[min(52vh,22rem)] overflow-y-auto overscroll-contain rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-2 sm:max-h-[min(60vh,26rem)] sm:p-3">
-            {partsLoading && partsHits.length === 0 ? (
-              <p className="p-6 text-center text-sm text-[var(--muted)]">加载零件列表…</p>
+            {!debouncedSearch.trim() ? (
+              <p className="p-6 text-center text-sm text-[var(--muted)]">
+                输入关键词后调用高砖站内搜索；选中商品后再选有货颜色。
+              </p>
+            ) : partsLoading && partsHits.length === 0 ? (
+              <p className="p-6 text-center text-sm text-[var(--muted)]">搜索高砖商品中…</p>
             ) : partsHits.length === 0 ? (
-              <p className="p-6 text-center text-sm text-[var(--muted)]">无匹配零件，请调整类型或关键词。</p>
+              <p className="p-6 text-center text-sm text-[var(--muted)]">无匹配商品，请尝试其它关键词或更完整的零件号。</p>
             ) : (
               <ul
                 className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-4 lg:grid-cols-5"
                 role="list"
               >
                 {partsHits.map((hit) => {
-                  const isCurrentRow = hit.partNum === item.partNum;
+                  const sheetPid = parseGobricksProductIdFromGdsItemId(item.gdsItemId ?? null);
+                  const isCurrentRow =
+                    hit.partNum === item.partNum && (sheetPid == null || hit.productId === sheetPid);
                   return (
-                    <li key={hit.partNum}>
+                    <li key={`${hit.productId}-${hit.partNum}`}>
                       <button
                         type="button"
                         onClick={() => onPickPart(hit)}
@@ -566,6 +277,7 @@ export function SheetRowReplacePanel({
                         <p className="line-clamp-2 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
                           {hit.partNum}
                         </p>
+                        <p className="line-clamp-2 text-center text-[9px] leading-snug text-[var(--muted)]">{hit.name}</p>
                         {isCurrentRow ? (
                           <p className="text-center text-[9px] font-medium text-[var(--accent)]">当前行</p>
                         ) : null}
@@ -577,7 +289,7 @@ export function SheetRowReplacePanel({
             )}
           </div>
           <p className="text-[11px] text-[var(--muted-2)]">
-            列表最多 160 条。
+            列表最多 160 条，来自高砖搜索接口。
             {partsHits.length > 0 ? `当前 ${partsHits.length} 条。` : null}
           </p>
         </>
