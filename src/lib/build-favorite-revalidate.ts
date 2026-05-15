@@ -4,6 +4,7 @@ import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subjec
 import type { BuildSubjectKind } from "@/lib/build-subject";
 
 export function revalidateFavoritePaths(kind: BuildSubjectKind, subjectId: string): void {
+  revalidatePath("/");
   revalidatePath(buildSubjectListPath(kind));
   revalidatePath(buildSubjectDetailPath(kind, subjectId));
 }

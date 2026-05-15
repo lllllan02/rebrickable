@@ -250,7 +250,9 @@ export async function SetsOfficialCatalogSection({
   const catalogDb = getCatalogDb();
   const userDb = getUserDb();
 
-  const showThemePicker = themeRaw.length === 0 && q.length === 0;
+  /** 仅有 mark 时也应进入全库列表，否则会卡在「请先选主题」且下拉无法反映已拥有/收藏 */
+  const showThemePicker =
+    themeRaw.length === 0 && q.length === 0 && markFilter === "all";
 
   if (showThemePicker) {
     const invLatest = invLatestSubquery(catalogDb);
@@ -391,7 +393,10 @@ export async function SetsOfficialCatalogSection({
     );
   }
 
-  const useFullCatalog = themeRaw === "all" || (themeRaw.length === 0 && q.length > 0);
+  const useFullCatalog =
+    themeRaw === "all" ||
+    (themeRaw.length === 0 && q.length > 0) ||
+    (markFilter !== "all" && themeRaw.length === 0 && q.length === 0);
   const parsedThemeId = Number.parseInt(themeRaw, 10);
   const themeNumericOk = Number.isFinite(parsedThemeId) && String(parsedThemeId) === themeRaw;
   let themeFilterIds: number[] | null = null;

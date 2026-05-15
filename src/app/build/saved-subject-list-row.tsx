@@ -32,6 +32,7 @@ export function SavedSubjectListRow({
   shortageClearedAt,
   gobricksShortageSyncAt,
   gobricksGdsPriceCny = null,
+  className,
 }: {
   kind: BuildSubjectKind;
   subjectId: string;
@@ -57,6 +58,8 @@ export function SavedSubjectListRow({
   gobricksShortageSyncAt: string | null;
   /** 高砖整单参考价（元），接口 `gdsPrice` 分片之和；未对照时为 null */
   gobricksGdsPriceCny?: number | null;
+  /** 追加到根 `li`（如首页横向滚动条固定卡片宽度） */
+  className?: string;
 }) {
   const coverImageClassName = kind === BUILD_SUBJECT_SET ? "object-contain p-3" : "object-cover";
   const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
@@ -71,10 +74,9 @@ export function SavedSubjectListRow({
       ? new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gobricksGdsPriceCny)
       : null;
 
+  const liBase = `result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`;
   return (
-    <li
-      className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`}
-    >
+    <li className={className != null && className.trim().length > 0 ? `${liBase} ${className}` : liBase}>
       <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
         <Link href={detailHref} className="absolute inset-0 z-0 block" aria-label={`${title} 封面`}>
           {usableImgUrl(coverUrl) ? (
