@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
+import { MocListSortControl } from "@/app/build/moc-list-sort-control";
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
 import { getUserDb } from "@/db/client";
 import {
@@ -19,6 +20,11 @@ import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { buildSubjectUi } from "@/lib/build-ui";
 import { mocListHref } from "@/lib/moc-list-href";
+import {
+  MOC_LIST_NEUTRAL_SORT_STATE,
+  mocListOrderByFromState,
+  type MocListSortState,
+} from "@/lib/moc-list-sort";
 import { MOC_PROFILE_MAX_TAG_LEN, parseTagsJson } from "@/lib/moc-profile-parse";
 import { likeFragment } from "@/lib/search";
 
@@ -29,6 +35,7 @@ export async function BuildSubjectListPage({
   listFilterTag,
   listFilterMark = "all",
   listHeroTitleOnly = false,
+  listMocSortState,
 }: {
   kind: BuildSubjectKind;
   /** 插入在上传区之后（例如套装页的官方目录区块） */
@@ -39,6 +46,8 @@ export async function BuildSubjectListPage({
   listFilterTag?: string;
   /** 已存列表：按拥有 / 收藏筛选 */
   listFilterMark?: ListMarkFilter;
+  /** 仅 MOC 列表：排序（URL sort/dir；中性时不写参数） */
+  listMocSortState?: MocListSortState;
   /** 仅 MOC 列表页：顶部与套装目录页一致，仅一条 `page-title text-xl sm:text-2xl` 标题，无 hero-panel */
   listHeroTitleOnly?: boolean;
 }) {
@@ -47,13 +56,12 @@ export async function BuildSubjectListPage({
     return <div className="page-stack">{officialCatalogSection}</div>;
   }
 
+  const mocSortState = listMocSortState ?? MOC_LIST_NEUTRAL_SORT_STATE;
+
   const db = getUserDb();
   const listOrderBy =
     kind === BUILD_SUBJECT_MOC
-      ? [
-          desc(sql`coalesce(${buildSavedPartsSheets.firstSavedAt}, ${buildSavedPartsSheets.updatedAt})`),
-          asc(buildSavedPartsSheets.subjectId),
-        ]
+      ? mocListOrderByFromState(mocSortState)
       : [desc(buildSavedPartsSheets.updatedAt), asc(buildSavedPartsSheets.subjectId)];
   const rows = await db
     .select({
@@ -201,7 +209,7 @@ export async function BuildSubjectListPage({
   const hasListFilters = hasQFilter || hasTagFilter || hasMarkFilter;
   const clearListHref =
     hasListFilters && kind === BUILD_SUBJECT_MOC
-      ? mocListHref({})
+      ? mocListHref({ mocSort: mocSortState })
       : hasListFilters && kind === BUILD_SUBJECT_SET
         ? "/sets"
         : listPath;
@@ -238,7 +246,13 @@ export async function BuildSubjectListPage({
             className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
             role="search"
           >
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-end gap-2">
+              <MocListSortControl
+                qSafe={safeQForHref}
+                tagHidden={hiddenTagValue}
+                mark={listFilterMark}
+                sortState={mocSortState}
+              />
               {(
                 [
                   { key: "all" as const, label: "全部" },
@@ -255,6 +269,7 @@ export async function BuildSubjectListPage({
                       q: safeQForHref,
                       tag: tagArg,
                       mark: opt.key === "all" ? undefined : opt.key,
+                      mocSort: mocSortState,
                     })}
                     className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                       active
@@ -279,14 +294,20 @@ export async function BuildSubjectListPage({
                 placeholder="MOC ID、显示名称或标签…"
                 defaultValue={safeQForHref}
                 maxLength={80}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-1)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)]/25 placeholder:text-[var(--muted-2)] focus:border-[var(--accent)]/50 focus:ring-2"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)]/25 placeholder:text-[var(--muted-2)] focus:border-[var(--accent)]/50 focus:ring-2"
               />
             </div>
             {hiddenTagValue ? <input type="hidden" name="tag" value={hiddenTagValue} /> : null}
             {listFilterMark === "owned" || listFilterMark === "favorite" ? (
               <input type="hidden" name="mark" value={listFilterMark} />
             ) : null}
-            <div className="flex shrink-0 gap-2">
+            {!mocSortState.neutral ? (
+              <>
+                <input type="hidden" name="sort" value={mocSortState.key} />
+                <input type="hidden" name="dir" value={mocSortState.dir} />
+              </>
+            ) : null}
+            <div className="flex w-full shrink-0 flex-wrap items-end justify-end gap-2 sm:ml-auto sm:w-auto">
               <button
                 type="submit"
                 className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-4 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--accent)]/15"
@@ -330,6 +351,7 @@ export async function BuildSubjectListPage({
                           q: safeQForHref,
                           tag: x.display,
                           mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                          mocSort: mocSortState,
                         })}
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                           active
@@ -349,6 +371,7 @@ export async function BuildSubjectListPage({
                       href={mocListHref({
                         q: safeQForHref,
                         mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                        mocSort: mocSortState,
                       })}
                       className="text-[var(--accent)] underline-offset-2 hover:underline"
                     >
@@ -361,7 +384,7 @@ export async function BuildSubjectListPage({
           ) : null}
         </section>
       ) : null}
-      <div className="table-shell">
+      <div className="table-shell bg-[var(--surface)]">
           {hasListFilters ? (
             <p className="mb-4 px-2 text-sm text-[var(--muted)]">
               已存列表
@@ -459,6 +482,7 @@ export async function BuildSubjectListPage({
                               q: safeQForHref,
                               tag,
                               mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                              mocSort: mocSortState,
                             })
                         : undefined
                     }
