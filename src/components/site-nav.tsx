@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { GlobalSearch } from "@/components/global-search";
+import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
 const trailingLinks = [
   { href: "/mocs", label: "MOCs" },
@@ -23,6 +25,7 @@ export function SiteNav() {
               </Link>
             ))}
           </nav>
+          <BuildPartsSheetUpload kind={BUILD_SUBJECT_MOC} variant="minimal" />
           <GlobalSearch />
         </div>
       </div>

@@ -172,7 +172,7 @@ export function BuildPartsSheetUpload({ kind, variant = "panel" }: Props) {
         disabled={parseBusy}
         onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
       />
-      {parseBusy ? "解析中…" : "上传零件表 CSV"}
+      {parseBusy ? "解析中…" : kind === BUILD_SUBJECT_MOC ? "上传 MOC" : "上传零件表 CSV"}
     </label>
   );
 

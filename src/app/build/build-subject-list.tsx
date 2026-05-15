@@ -211,12 +211,9 @@ export async function BuildSubjectListPage({
       {officialCatalogSection == null ? (
         listHeroTitleOnly ? (
           <section className="space-y-4" aria-labelledby="mocs-saved-list-heading">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <h2 id="mocs-saved-list-heading" className="page-title text-xl sm:text-2xl">
-                MOC 目录
-              </h2>
-              <BuildPartsSheetUpload kind={kind} variant="minimal" />
-            </div>
+            <h2 id="mocs-saved-list-heading" className="page-title text-xl sm:text-2xl">
+              MOC 目录
+            </h2>
           </section>
         ) : (
           <section className="hero-panel">
