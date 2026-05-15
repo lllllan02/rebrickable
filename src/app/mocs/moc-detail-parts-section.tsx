@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
@@ -13,6 +13,84 @@ import { buildSubjectUi } from "@/lib/build-ui";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 type ListTab = "full" | "fulfillment" | "shortage" | "official";
+
+/** MOC 零件表 Tab ↔ URL hash 片段（与列表「缺 n」链接 `#moc-parts-shortage` 一致） */
+const MOC_PARTS_TAB_HASH: Record<ListTab, string> = {
+  full: "moc-parts-full",
+  fulfillment: "moc-parts-fulfillment",
+  shortage: "moc-parts-shortage",
+  official: "moc-parts-official",
+};
+
+const MOC_PARTS_TAB_STORAGE_PREFIX = "rb:mocPartsTab:v1:";
+
+function hashFragmentToListTab(fragment: string): ListTab | null {
+  const id = fragment.replace(/^#/, "");
+  if (!id) return null;
+  const hit = (Object.keys(MOC_PARTS_TAB_HASH) as ListTab[]).find((t) => MOC_PARTS_TAB_HASH[t] === id);
+  return hit ?? null;
+}
+
+function mocTabHasData(
+  tab: ListTab,
+  ctx: {
+    initialFull: InitialMocSheetFromServer | null;
+    initialFulfillment: InitialMocSheetFromServer | null;
+    initialShortage: InitialMocSheetFromServer | null;
+    hasOfficial: boolean;
+  },
+): boolean {
+  switch (tab) {
+    case "full":
+      return Boolean(ctx.initialFull);
+    case "fulfillment":
+      return Boolean(ctx.initialFulfillment);
+    case "shortage":
+      return Boolean(ctx.initialShortage);
+    case "official":
+      return ctx.hasOfficial;
+    default:
+      return false;
+  }
+}
+
+function readStoredMocListTab(subjectId: string): ListTab | null {
+  try {
+    const raw = sessionStorage.getItem(`${MOC_PARTS_TAB_STORAGE_PREFIX}${subjectId}`);
+    if (raw === "full" || raw === "fulfillment" || raw === "shortage" || raw === "official") return raw;
+  } catch {
+    /* 隐私模式等 */
+  }
+  return null;
+}
+
+function writeStoredMocListTab(subjectId: string, tab: ListTab) {
+  try {
+    sessionStorage.setItem(`${MOC_PARTS_TAB_STORAGE_PREFIX}${subjectId}`, tab);
+  } catch {
+    /* ignore */
+  }
+}
+
+function replaceUrlHashForMocTab(tab: ListTab) {
+  if (typeof window === "undefined") return;
+  const next = `#${MOC_PARTS_TAB_HASH[tab]}`;
+  if (window.location.hash === next) return;
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next}`);
+}
+
+/** 等 Tab 切换提交后再滚动（Next 客户端跳转带 hash 时浏览器未必能滚到动态 id） */
+function scheduleScrollToElementById(elementId: string) {
+  if (typeof document === "undefined" || !elementId) return;
+  const run = () => {
+    document.getElementById(elementId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  queueMicrotask(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+  });
+}
 
 type Props = {
   subjectKind?: BuildSubjectKind;
@@ -59,6 +137,16 @@ export function MocDetailPartsSection({
     return "full";
   });
 
+  const mocTabDataCtx = useMemo(
+    () => ({
+      initialFull,
+      initialFulfillment,
+      initialShortage,
+      hasOfficial,
+    }),
+    [initialFull, initialFulfillment, initialShortage, hasOfficial],
+  );
+
   useEffect(() => {
     if (isSetSubject) {
       if (listTab === "full") setListTab("official");
@@ -85,6 +173,44 @@ export function MocDetailPartsSection({
     }
   }, [hasOfficial, initialFull, initialFulfillment, initialShortage, isSetSubject, listTab]);
 
+  useLayoutEffect(() => {
+    if (isSetSubject || typeof window === "undefined") return;
+    const id = window.location.hash.replace(/^#/, "");
+    const fromHash = id ? hashFragmentToListTab(id) : null;
+    const fromHashOk = fromHash && mocTabHasData(fromHash, mocTabDataCtx) ? fromHash : null;
+    const fromStore = readStoredMocListTab(subjectId);
+    const fromStoreOk = fromStore && mocTabHasData(fromStore, mocTabDataCtx) ? fromStore : null;
+    const chosen = fromHashOk ?? fromStoreOk;
+    if (!chosen) return;
+    setListTab(chosen);
+    writeStoredMocListTab(subjectId, chosen);
+    if (fromHashOk) scheduleScrollToElementById(id);
+  }, [isSetSubject, subjectId, mocTabDataCtx]);
+
+  useEffect(() => {
+    if (isSetSubject) return;
+    const onHashChange = () => {
+      const id = window.location.hash.replace(/^#/, "");
+      const fromHash = id ? hashFragmentToListTab(id) : null;
+      if (!fromHash || !mocTabHasData(fromHash, mocTabDataCtx)) return;
+      setListTab(fromHash);
+      writeStoredMocListTab(subjectId, fromHash);
+      scheduleScrollToElementById(id);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [isSetSubject, subjectId, mocTabDataCtx]);
+
+  useEffect(() => {
+    if (isSetSubject) return;
+    if (!mocTabHasData(listTab, mocTabDataCtx)) return;
+    writeStoredMocListTab(subjectId, listTab);
+  }, [isSetSubject, subjectId, listTab, mocTabDataCtx]);
+
+  const selectMocListTab = useCallback((tab: ListTab) => {
+    setListTab(tab);
+    replaceUrlHashForMocTab(tab);
+  }, []);
   const hasAnySheet = Boolean(initialFull || initialShortage || initialFulfillment);
   const hasListArea = isSetSubject
     ? officialInventory != null || Boolean(initialShortage) || Boolean(initialFulfillment)
@@ -159,7 +285,10 @@ export function MocDetailPartsSection({
         />
 
         {hasListArea ? (
-          <div className="border-t border-[var(--border-soft)] pt-5">
+          <div
+            id={!isSetSubject ? MOC_PARTS_TAB_HASH[listTab] : undefined}
+            className="scroll-mt-24 border-t border-[var(--border-soft)] pt-5"
+          >
             <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
               <div className="flex flex-wrap gap-2">
                 {isSetSubject ? (
@@ -218,7 +347,7 @@ export function MocDetailPartsSection({
                           : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
                       } ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
                       onClick={() => {
-                        if (initialFull) setListTab("full");
+                        if (initialFull) selectMocListTab("full");
                       }}
                     >
                       完整零件表
@@ -233,7 +362,7 @@ export function MocDetailPartsSection({
                           : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
                       } ${!initialFulfillment ? "cursor-not-allowed opacity-45" : ""}`}
                       onClick={() => {
-                        if (initialFulfillment) setListTab("fulfillment");
+                        if (initialFulfillment) selectMocListTab("fulfillment");
                       }}
                     >
                       配货表
@@ -248,7 +377,7 @@ export function MocDetailPartsSection({
                           : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
                       } ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
                       onClick={() => {
-                        if (initialShortage) setListTab("shortage");
+                        if (initialShortage) selectMocListTab("shortage");
                       }}
                     >
                       缺件表
@@ -261,7 +390,7 @@ export function MocDetailPartsSection({
                             ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
                             : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--accent)]/35 hover:bg-[var(--surface-2)]"
                         }`}
-                        onClick={() => setListTab("official")}
+                        onClick={() => selectMocListTab("official")}
                       >
                         官方清单
                       </button>

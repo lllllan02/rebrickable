@@ -174,6 +174,9 @@ export function SavedSubjectListRow({
               shortageTotalQty={shortageTotalQty}
               markedNoShortage={markedNoShortage}
               gobricksShortageSyncAt={gobricksShortageSyncAt}
+              shortageDetailHref={
+                kind === BUILD_SUBJECT_MOC && hasShortage ? `${detailHref}#moc-parts-shortage` : undefined
+              }
             />
             <div className="text-left tabular-nums">
               <span className="text-[var(--muted-2)]">保存时间 </span>

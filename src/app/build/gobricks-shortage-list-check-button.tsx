@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 
@@ -24,9 +25,11 @@ type Props = {
   shortageTotalQty: number | null;
   markedNoShortage: boolean;
   gobricksShortageSyncAt: string | null;
+  /** 若提供：有缺件时「缺 n」跳转该地址（如 MOC 详情缺件表锚点），不再触发高砖同步 */
+  shortageDetailHref?: string | null;
 };
 
-/** 列表卡片：点击「检查」或「缺 n」触发高砖同步；无缺件时显示绿色「全」并可再次对照 */
+/** 列表卡片：点击「检查」或「全」触发高砖同步；MOC 有缺件时可改为跳转详情缺件表 */
 export function GobricksShortageListInlineCheck({
   subjectKind,
   subjectId,
@@ -36,6 +39,7 @@ export function GobricksShortageListInlineCheck({
   shortageTotalQty,
   markedNoShortage,
   gobricksShortageSyncAt,
+  shortageDetailHref = null,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -71,17 +75,28 @@ export function GobricksShortageListInlineCheck({
         <span className="text-[var(--muted-2)]">零件总数 </span>
         {totalPartQty.toLocaleString("zh-CN")}
         {hasShortage ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={runCheck}
-            className={`${triggerClass} font-medium text-amber-200/95`}
-            title={`缺件表 ${(shortageLineCount ?? 0).toLocaleString("zh-CN")} 行，点击更新`}
-            aria-busy={pending}
-            aria-label="对照高砖更新缺件"
-          >
-            缺 {(shortageTotalQty ?? 0).toLocaleString("zh-CN")}
-          </button>
+          shortageDetailHref ? (
+            <Link
+              href={shortageDetailHref}
+              className={`${triggerClass} font-medium text-amber-200/95`}
+              title={`缺件表 ${(shortageLineCount ?? 0).toLocaleString("zh-CN")} 行，点击查看`}
+              aria-label="前往缺件表"
+            >
+              缺 {(shortageTotalQty ?? 0).toLocaleString("zh-CN")}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={runCheck}
+              className={`${triggerClass} font-medium text-amber-200/95`}
+              title={`缺件表 ${(shortageLineCount ?? 0).toLocaleString("zh-CN")} 行，点击更新`}
+              aria-busy={pending}
+              aria-label="对照高砖更新缺件"
+            >
+              缺 {(shortageTotalQty ?? 0).toLocaleString("zh-CN")}
+            </button>
+          )
         ) : showGreenQuan ? (
           <button
             type="button"
