@@ -45,6 +45,51 @@ type QuickPickTile = {
 const PICK_GRID =
   "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-4 lg:grid-cols-5";
 
+const TILE_PRIMARY_CLASS =
+  "line-clamp-2 text-center font-mono text-[12px] font-semibold leading-tight text-[#b8e632] sm:text-[13px]";
+const TILE_SECONDARY_CLASS =
+  "line-clamp-2 text-center text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]";
+
+function LegoReferenceHalfRow({
+  imgUrl,
+  partNum,
+  partName,
+  colorLine,
+}: {
+  imgUrl: string | null;
+  partNum: string;
+  partName: string | null;
+  colorLine: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 items-start gap-2">
+      <div className="relative size-[4.25rem] shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-white sm:size-[4.75rem]">
+        {imgUrl ? (
+          <RemoteCoverImage
+            src={imgUrl}
+            fill
+            className="object-contain p-1"
+            sizes="76px"
+            alt=""
+            fallbackLabel="无图"
+            fallbackClassName="!text-[9px]"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">无图</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-2)]">参考 · 乐高</div>
+        <p className="mt-0.5 font-mono text-[12px] font-semibold leading-tight text-[var(--text)] sm:text-[13px]">{partNum}</p>
+        {partName ? (
+          <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]">{partName}</p>
+        ) : null}
+        <p className="mt-1 text-[11px] leading-snug text-[var(--muted-2)] sm:text-[12px]">{colorLine}</p>
+      </div>
+    </div>
+  );
+}
+
 function buildGobricksQuickTile(
   partNumRaw: string,
   gdsItemId: string | null | undefined,
@@ -77,7 +122,7 @@ function buildGobricksQuickTile(
       key: `${key}-fallback`,
       partNum,
       primaryLine,
-      subtitle: cap || "颜色未匹配等，将按目录解析高砖商品",
+      subtitle: cap || "将按目录解析",
       imgUrl,
       preresolvedProductId: null,
       badge,
@@ -101,6 +146,8 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
 
   const [pickedPart, setPickedPart] = useState<string | null>(null);
   const [pickedPartName, setPickedPartName] = useState<string>("");
+  /** 进入选色步时目录/方格上的商品缩略图（颜色加载前或与变体图互补） */
+  const [pickedPartImgUrl, setPickedPartImgUrl] = useState<string | null>(null);
 
   const [gobricksVariants, setGobricksVariants] = useState<SheetReplaceGobricksStockColor[] | null>(null);
   const [gobricksHint, setGobricksHint] = useState<string | null>(null);
@@ -192,6 +239,73 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     return cg ? [cg] : [];
   }, [item.partNum, item.gdsItemId, item.gdsCaption, item.gdsCaptionEn, item.gdsPicture]);
 
+  /** 选高砖色时对照：配货表本行对应的乐高颜色名（已更换行优先用标记里存档的原色） */
+  const legoReferenceColorLine = useMemo(() => {
+    if (
+      replaceMeta.hasMarker &&
+      replaceMeta.originalColorId != null &&
+      Number.isFinite(replaceMeta.originalColorId)
+    ) {
+      const id = replaceMeta.originalColorId;
+      const name = replaceMeta.originalColorName?.trim();
+      return name ? `${name}（${id}）` : `色 ID ${id}`;
+    }
+    const id = item.colorId;
+    const name = item.colorName?.trim();
+    return name ? `${name}（${id}）` : `色 ID ${id}`;
+  }, [
+    replaceMeta.hasMarker,
+    replaceMeta.originalColorId,
+    replaceMeta.originalColorName,
+    item.colorId,
+    item.colorName,
+  ]);
+
+  const legoReferenceImgUrl = useMemo(() => {
+    if (
+      replaceMeta.hasMarker &&
+      replaceMeta.originalColorId != null &&
+      Number.isFinite(replaceMeta.originalColorId)
+    ) {
+      const snap = replaceMeta.originalLegoImgUrl?.trim();
+      if (snap) return snap;
+    }
+    return item.imgUrl?.trim() || null;
+  }, [
+    replaceMeta.hasMarker,
+    replaceMeta.originalColorId,
+    replaceMeta.originalLegoImgUrl,
+    item.imgUrl,
+  ]);
+
+  const legoReferencePartNum = useMemo(() => {
+    if (replaceMeta.hasMarker) {
+      const op = replaceMeta.originalPartNum?.trim();
+      if (op) return op;
+    }
+    return item.partNum.trim() || "—";
+  }, [replaceMeta.hasMarker, replaceMeta.originalPartNum, item.partNum]);
+
+  const legoReferencePartName = useMemo(() => {
+    if (replaceMeta.hasMarker) {
+      const n = replaceMeta.originalLegoPartName?.trim();
+      if (n) return n;
+    }
+    return item.partName?.trim() || null;
+  }, [replaceMeta.hasMarker, replaceMeta.originalLegoPartName, item.partName]);
+
+  const selectedGobricksVariant = useMemo(
+    () => gobricksVariants?.find((c) => c.colorId === colorId) ?? null,
+    [colorId, gobricksVariants]
+  );
+
+  const pickedGobricksThumb = useMemo(() => {
+    const pic =
+      selectedGobricksVariant?.picture?.trim() || pickedPartImgUrl?.trim() || null;
+    const rgb = selectedGobricksVariant?.rgb?.trim() || null;
+    return { picture: pic, rgb };
+  }, [pickedPartImgUrl, selectedGobricksVariant]);
+
   const quickPickProductIds = useMemo(() => {
     const s = new Set<string>();
     for (const t of [...beforeReplaceTiles, ...currentRowTiles]) {
@@ -250,9 +364,10 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
   );
 
   const goToColorStep = useCallback(
-    (partNum: string, partName: string, productId: string | null) => {
+    (partNum: string, partName: string, productId: string | null, catalogImgUrl: string | null) => {
       setPickedPart(partNum);
       setPickedPartName(partName);
+      setPickedPartImgUrl(catalogImgUrl?.trim() || null);
       setStep("pickColor");
       setColorFilter("");
       void loadGobricksPalette(partNum, item.colorId, productId);
@@ -262,14 +377,14 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
 
   const onPickPart = useCallback(
     (hit: SheetReplaceGobricksSearchHit) => {
-      goToColorStep(hit.partNum, hit.name, hit.productId);
+      goToColorStep(hit.partNum, hit.name, hit.productId, hit.imgUrl);
     },
     [goToColorStep]
   );
 
   const onPickQuickTile = useCallback(
     (t: QuickPickTile) => {
-      goToColorStep(t.partNum, t.subtitle, t.preresolvedProductId);
+      goToColorStep(t.partNum, t.subtitle, t.preresolvedProductId, t.imgUrl);
     },
     [goToColorStep]
   );
@@ -343,6 +458,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     setStep("pickPart");
     setPickedPart(null);
     setPickedPartName("");
+    setPickedPartImgUrl(null);
     setGobricksVariants(null);
     setGobricksHint(null);
     setColorsLoadError(null);
@@ -395,11 +511,11 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                   {t.badge}
                 </span>
               </div>
-              <p className="line-clamp-2 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-                {t.primaryLine}
-              </p>
-              <p className="line-clamp-2 text-center text-[9px] leading-snug text-[var(--muted)]">{t.subtitle}</p>
-              {accent ? <p className="text-center text-[9px] font-medium text-[var(--accent)]">当前行</p> : null}
+              <p className={TILE_PRIMARY_CLASS}>{t.primaryLine}</p>
+              <p className={TILE_SECONDARY_CLASS}>{t.subtitle}</p>
+              {accent ? (
+                <p className="text-center text-[10px] font-medium text-[var(--accent)] sm:text-[11px]">当前行</p>
+              ) : null}
             </button>
           </li>
         );
@@ -444,11 +560,11 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                   </span>
                 ) : null}
               </div>
-              <p className="line-clamp-2 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-                商品 {hit.productId}
-              </p>
-              <p className="line-clamp-2 text-center text-[9px] leading-snug text-[var(--muted)]">{hit.name}</p>
-              {isCurrentRow ? <p className="text-center text-[9px] font-medium text-[var(--accent)]">当前行</p> : null}
+              <p className={TILE_PRIMARY_CLASS}>商品 {hit.productId}</p>
+              <p className={TILE_SECONDARY_CLASS}>{hit.name}</p>
+              {isCurrentRow ? (
+                <p className="text-center text-[10px] font-medium text-[var(--accent)] sm:text-[11px]">当前行</p>
+              ) : null}
             </button>
           </li>
         );
@@ -467,53 +583,52 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     !partsError;
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm leading-relaxed text-[var(--muted)]">
-        数量与备注沿用当前行；单价沿用原行；高砖商品图来自下方所选有货颜色。其余高砖字段可再「从高砖同步」刷新。
-      </p>
-
+    <div className="flex min-h-0 flex-1 flex-col">
       {step === "pickPart" ? (
-        <>
-          <div className="max-h-[min(64vh,32rem)] space-y-5 overflow-y-auto overscroll-contain rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-3 sm:max-h-[min(70vh,36rem)] sm:p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+          <p className="shrink-0 text-xs text-[var(--muted)]">数量、备注与单价沿用本行；选有货颜色后保存。</p>
+          <div
+            className="shrink-0 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/80 p-2.5 sm:p-3"
+            role="region"
+            aria-label="本行乐高零件参考"
+          >
+            <LegoReferenceHalfRow
+              imgUrl={legoReferenceImgUrl}
+              partNum={legoReferencePartNum}
+              partName={legoReferencePartName}
+              colorLine={legoReferenceColorLine}
+            />
+          </div>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-3 sm:p-4">
             {beforeReplaceTiles.length > 0 ? (
-              <section className="space-y-2">
+              <section className="space-y-1.5">
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)]">原 · 高砖</h3>
-                <p className="text-[11px] leading-relaxed text-[var(--muted-2)]">
-                  本行曾手动更换过零件；以下为存档中的原高砖商品（若有），可点选后仅换色或改选其它 SKU。
-                </p>
                 {renderQuickTiles(beforeReplaceTiles)}
               </section>
             ) : null}
 
             {currentRowTiles.length > 0 ? (
-              <section className="space-y-2">
+              <section className="space-y-1.5">
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)]">现 · 高砖</h3>
-                <p className="text-[11px] leading-relaxed text-[var(--muted-2)]">
-                  本行已同步的高砖商品（含颜色未匹配等仅有图/标题、SKU 非标准时仍可点选，由后台按目录解析）。
-                </p>
                 {renderQuickTiles(currentRowTiles)}
               </section>
             ) : null}
 
-            <section className="space-y-2">
+            <section className="space-y-1.5">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)]">推荐 · 高砖</h3>
               {legoSubstituteLoading ? (
-                <p className="py-4 text-center text-sm text-[var(--muted)]">正在按目录 A/M 关联查询高砖商品…</p>
+                <p className="py-3 text-center text-sm text-[var(--muted)]">加载推荐…</p>
               ) : legoSubstituteHits.length === 0 ? (
-                <p className="py-2 text-center text-[11px] leading-relaxed text-[var(--muted)]">
-                  本地目录无替代 / 模具变体记录，或高砖暂无匹配。
-                </p>
+                <p className="py-2 text-center text-xs text-[var(--muted)]">无推荐或高砖无匹配</p>
               ) : legoSubstituteHitsDeduped.length === 0 ? (
-                <p className="py-2 text-center text-[11px] leading-relaxed text-[var(--muted)]">
-                  推荐商品与上方快速区重复已全部隐藏。
-                </p>
+                <p className="py-2 text-center text-xs text-[var(--muted)]">与上方重复，已省略</p>
               ) : (
                 renderSearchHits(legoSubstituteHitsDeduped)
               )}
             </section>
 
-            <div className="space-y-1.5 border-t border-[var(--border-soft)] pt-4">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">高砖商城搜索</span>
+            <div className="space-y-1.5 border-t border-[var(--border-soft)] pt-3">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">搜索</span>
               <label className="block">
                 <span className="sr-only">搜索高砖商品</span>
                 <input
@@ -531,156 +646,197 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
             {partsError ? <p className="text-sm text-amber-200/90">{partsError}</p> : null}
 
             {debouncedSearch.trim() && partsLoading && partsHits.length === 0 ? (
-              <p className="py-4 text-center text-sm text-[var(--muted)]">搜索高砖商品中…</p>
+              <p className="py-3 text-center text-sm text-[var(--muted)]">搜索中…</p>
             ) : null}
 
             {debouncedSearch.trim() && !partsLoading && partsHits.length === 0 && !partsError ? (
-              <p className="py-3 text-center text-sm text-[var(--muted)]">无匹配商品，请尝试其它关键词。</p>
+              <p className="py-2 text-center text-xs text-[var(--muted)]">无匹配</p>
             ) : null}
 
             {partsHitsDeduped.length > 0 ? (
-              <section className="space-y-2">
+              <section className="space-y-1.5">
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-2)]">搜索 · 高砖</h3>
                 {renderSearchHits(partsHitsDeduped)}
               </section>
             ) : null}
 
             {pickSummaryEmpty ? (
-              <p className="py-6 text-center text-sm text-[var(--muted)]">暂无可用选项，请尝试上方搜索。</p>
+              <p className="py-5 text-center text-sm text-[var(--muted)]">请使用上方搜索</p>
             ) : null}
           </div>
 
-          <p className="text-[11px] text-[var(--muted-2)]">
-            分区：原/现/推荐高砖与站内搜索；与「原」「现」重复的 <span className="font-mono">product_id</span>{" "}
-            在推荐与搜索列表中隐藏。单次搜索最多 160 条。卡片悬停可看目录设计号。
-            {legoSubstituteHitsDeduped.length + partsHitsDeduped.length > 0
-              ? `推荐 ${legoSubstituteHitsDeduped.length} 条 · 搜索 ${partsHitsDeduped.length} 条。`
-              : null}
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={backToParts}
-              className="rounded-full border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-2)]"
-            >
-              ← 返回选零件
-            </button>
-          </div>
-          <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/80 px-3 py-2.5 text-sm">
-            <p className="font-mono text-[13px] font-semibold text-[var(--accent)]">{pickedPart}</p>
-            {pickedPartName ? (
-              <p className="mt-1 line-clamp-2 text-[var(--muted)]">{pickedPartName}</p>
-            ) : null}
-          </div>
-
-          <p className="text-xs text-[var(--muted-2)]">点方格选色；悬停可看库存。</p>
-          {colorsLoadError ? <p className="text-sm text-amber-200/90">{colorsLoadError}</p> : null}
-          {gobricksHint ? (
-            <p className="text-xs leading-relaxed text-[var(--muted-2)]">{gobricksHint}</p>
+          {(legoSubstituteHitsDeduped.length > 0 || partsHitsDeduped.length > 0) ? (
+            <p className="shrink-0 text-[10px] text-[var(--muted-2)]">
+              推荐 {legoSubstituteHitsDeduped.length} 条 · 搜索 {partsHitsDeduped.length} 条
+            </p>
           ) : null}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div
+            className="flex shrink-0 items-stretch gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/80 p-2.5 sm:gap-3 sm:p-3"
+            role="region"
+            aria-label="乐高参考与选中高砖零件"
+          >
+            <LegoReferenceHalfRow
+              imgUrl={legoReferenceImgUrl}
+              partNum={legoReferencePartNum}
+              partName={legoReferencePartName}
+              colorLine={legoReferenceColorLine}
+            />
 
-          {!gobricksVariants ? (
-            <p className="text-sm text-[var(--muted)]">加载高砖有货颜色…</p>
-          ) : (
-            <>
-              <div className="text-sm">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">
-                  已选颜色
-                </span>
-                <p className="mt-1 text-[var(--text)]">{selectedColorLabel}</p>
-              </div>
-              <label className="block text-xs text-[var(--muted)]">
-                筛选颜色
-                <input
-                  type="search"
-                  value={colorFilter}
-                  onChange={(e) => setColorFilter(e.target.value)}
-                  placeholder="中英文名称或 RGB…"
-                  className="field mt-1 w-full text-sm"
-                  disabled={busy}
-                />
-              </label>
-              <div className="max-h-[min(52vh,22rem)] overflow-y-auto overscroll-contain rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-2 sm:max-h-[min(60vh,26rem)] sm:p-3">
-                {filteredVariants.length === 0 ? (
-                  <p className="p-6 text-center text-sm text-[var(--muted)]">无匹配颜色</p>
+            <div className="w-px shrink-0 self-stretch bg-[var(--border-soft)]" aria-hidden />
+
+            <div className="flex min-w-0 flex-1 items-start gap-2">
+              <div className="relative size-[4.25rem] shrink-0 overflow-hidden rounded-md border border-[var(--border)] bg-white sm:size-[4.75rem]">
+                {pickedGobricksThumb.picture ? (
+                  <RemoteCoverImage
+                    src={pickedGobricksThumb.picture}
+                    fill
+                    className="object-contain p-1"
+                    sizes="76px"
+                    alt=""
+                    fallbackLabel="无图"
+                    fallbackClassName="!text-[9px]"
+                  />
+                ) : pickedGobricksThumb.rgb ? (
+                  <span
+                    className="block h-full w-full"
+                    style={{ background: `#${pickedGobricksThumb.rgb}` }}
+                    aria-hidden
+                  />
                 ) : (
-                  <ul
-                    className={PICK_GRID}
-                    role="list"
-                    aria-label="高砖有货颜色"
-                  >
-                    {filteredVariants.map((c) => {
-                      const sel = c.colorId === colorId;
-                      return (
-                        <li key={c.colorId}>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            title={`${c.nameZh} / ${c.nameEn} · 库存 ${c.inventory.toLocaleString("zh-CN")}`}
-                            onClick={() => setColorId(c.colorId)}
-                            className={`flex w-full flex-col gap-1 rounded-lg border p-2 text-left transition-colors ${
-                              sel
-                                ? "border-[var(--accent)] bg-[var(--accent-soft)]/80 ring-1 ring-[var(--accent)]/50"
-                                : "border-[var(--border-soft)] bg-[var(--surface-2)] hover:border-[var(--accent)]/40 hover:bg-[var(--surface)]"
-                            }`}
-                          >
-                            <div className="relative mx-auto aspect-square w-full max-w-[5.5rem] overflow-hidden rounded-md border border-[var(--border)] bg-white">
-                              {c.picture ? (
-                                <RemoteCoverImage
-                                  src={c.picture}
-                                  fill
-                                  className="object-contain p-1"
-                                  sizes="(max-width:640px)28vw,5.5rem"
-                                  alt=""
-                                  fallbackLabel="无图"
-                                  fallbackClassName="!text-[9px]"
-                                />
-                              ) : c.rgb ? (
-                                <span
-                                  className="block h-full w-full"
-                                  style={{ background: `#${c.rgb}` }}
-                                  aria-hidden
-                                />
-                              ) : (
-                                <span className="flex h-full w-full items-center justify-center text-[10px] text-[var(--muted)]">
-                                  无图
-                                </span>
-                              )}
-                            </div>
-                            <p className="line-clamp-2 text-center text-[10px] font-medium leading-snug text-[var(--text)] sm:text-[11px]">
-                              {c.nameZh}
-                            </p>
-                            {c.nameEn !== c.nameZh ? (
-                              <p className="line-clamp-2 text-center text-[10px] leading-snug text-[var(--muted)] sm:text-[11px]">
-                                {c.nameEn}
-                              </p>
-                            ) : null}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">无图</span>
                 )}
               </div>
-            </>
-          )}
-
-          {actionError ? <p className="text-sm text-amber-200/90">{actionError}</p> : null}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={busy || !pickedPart || !gobricksVariants?.length}
-              onClick={() => void handleApply()}
-              className="button-primary text-sm disabled:opacity-50"
-            >
-              {busy ? "保存中…" : "保存更换"}
-            </button>
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-2)]">选中 · 高砖</div>
+                <p className="mt-0.5 font-mono text-[12px] font-semibold leading-tight text-[var(--accent)] sm:text-[13px]">
+                  {pickedPart}
+                </p>
+                {pickedPartName ? (
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]">{pickedPartName}</p>
+                ) : null}
+                {gobricksVariants && selectedColorLabel ? (
+                  <p className="mt-1 text-[10px] text-[var(--muted-2)] sm:text-[11px]">已选 {selectedColorLabel}</p>
+                ) : null}
+              </div>
+            </div>
           </div>
-        </>
+
+          {colorsLoadError ? <p className="shrink-0 text-sm text-amber-200/90">{colorsLoadError}</p> : null}
+          {gobricksHint ? <p className="shrink-0 text-[11px] text-[var(--muted-2)]">{gobricksHint}</p> : null}
+
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            {!gobricksVariants ? (
+              <p className="shrink-0 text-sm text-[var(--muted)]">加载颜色…</p>
+            ) : (
+              <>
+                <label className="shrink-0 block">
+                  <span className="sr-only">筛选颜色</span>
+                  <input
+                    type="search"
+                    value={colorFilter}
+                    onChange={(e) => setColorFilter(e.target.value)}
+                    placeholder="筛选名称或 RGB…"
+                    className="field w-full text-sm"
+                    disabled={busy}
+                  />
+                </label>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-2 sm:p-3">
+                    {filteredVariants.length === 0 ? (
+                      <p className="p-6 text-center text-sm text-[var(--muted)]">无匹配颜色</p>
+                    ) : (
+                      <ul
+                        className={PICK_GRID}
+                        role="list"
+                        aria-label="高砖有货颜色"
+                      >
+                        {filteredVariants.map((c) => {
+                          const sel = c.colorId === colorId;
+                          return (
+                            <li key={c.colorId}>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                title={`${c.nameZh} / ${c.nameEn} · 库存 ${c.inventory.toLocaleString("zh-CN")}`}
+                                onClick={() => setColorId(c.colorId)}
+                                className={`flex w-full flex-col gap-1 rounded-lg border p-2 text-left transition-colors ${
+                                  sel
+                                    ? "border-[var(--accent)] bg-[var(--accent-soft)]/80 ring-1 ring-[var(--accent)]/50"
+                                    : "border-[var(--border-soft)] bg-[var(--surface-2)] hover:border-[var(--accent)]/40 hover:bg-[var(--surface)]"
+                                }`}
+                              >
+                                <div className="relative mx-auto aspect-square w-full max-w-[5.5rem] overflow-hidden rounded-md border border-[var(--border)] bg-white">
+                                  {c.picture ? (
+                                    <RemoteCoverImage
+                                      src={c.picture}
+                                      fill
+                                      className="object-contain p-1"
+                                      sizes="(max-width:640px)28vw,5.5rem"
+                                      alt=""
+                                      fallbackLabel="无图"
+                                      fallbackClassName="!text-[9px]"
+                                    />
+                                  ) : c.rgb ? (
+                                    <span
+                                      className="block h-full w-full"
+                                      style={{ background: `#${c.rgb}` }}
+                                      aria-hidden
+                                    />
+                                  ) : (
+                                    <span className="flex h-full w-full items-center justify-center text-[10px] text-[var(--muted)]">
+                                      无图
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="line-clamp-2 text-center text-[11px] font-medium leading-snug text-[var(--text)] sm:text-[12px]">
+                                  {c.nameZh}
+                                </p>
+                                {c.nameEn !== c.nameZh ? (
+                                  <p className="line-clamp-2 text-center text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]">
+                                    {c.nameEn}
+                                  </p>
+                                ) : null}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  {actionError ? <p className="mt-2 text-sm text-amber-200/90">{actionError}</p> : null}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div
+            className="shrink-0 border-t border-[var(--border-soft)] bg-[var(--surface)]/95 px-0 pt-2 shadow-[0_-4px_16px_-6px_rgba(0,0,0,0.12)] backdrop-blur-md [-webkit-backdrop-filter:blur(8px)]"
+            style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom, 0px))" }}
+            role="toolbar"
+            aria-label="选色操作"
+          >
+            <div className="flex w-full items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={backToParts}
+                className="rounded-full border border-[var(--border-soft)] px-2.5 py-1 text-[11px] font-medium leading-tight text-[var(--text)] shadow-sm hover:bg-[var(--surface-2)] sm:px-3 sm:text-xs"
+              >
+                ← 返回选零件
+              </button>
+              <button
+                type="button"
+                disabled={busy || !pickedPart || !gobricksVariants?.length}
+                onClick={() => void handleApply()}
+                className="button-primary !px-3 !py-1.5 text-xs font-extrabold leading-tight disabled:opacity-50 sm:!py-2 sm:text-sm"
+              >
+                {busy ? "保存中…" : "保存更换"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

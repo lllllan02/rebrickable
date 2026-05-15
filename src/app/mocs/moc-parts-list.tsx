@@ -214,7 +214,7 @@ function CatalogImageFigure({
       <div
         className={`relative mx-auto aspect-square w-full overflow-hidden ${
           compact
-            ? "max-w-[min(10rem,42vw)] min-h-[7rem] sm:max-w-[11rem] sm:min-h-[7.5rem]"
+            ? "max-w-[min(12.5rem,50vw)] min-h-[8.75rem] sm:max-w-[14rem] sm:min-h-[9.75rem]"
             : "max-w-[min(13rem,48vw)] min-h-[8rem] sm:max-w-[14rem] sm:min-h-[8.5rem]"
         }`}
       >
@@ -238,14 +238,14 @@ function SheetReplaceQuadThumb({
   emptyLabel: string;
 }) {
   return (
-    <div className="relative h-[3.75rem] w-[3.75rem] shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-[4.25rem] sm:w-[4.25rem]">
+    <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-[5.25rem] sm:w-[5.25rem]">
       {imageUrl ? (
         <RemoteCoverImage
           src={imageUrl}
           width={128}
           height={128}
           className="h-full w-full object-contain p-1"
-          sizes="72px"
+          sizes="96px"
           fallbackLabel="无图"
           fallbackClassName="!text-[10px]"
         />
@@ -916,7 +916,7 @@ function MocPartDetailBody({
   const showTwinLegoGobricksCatalog = Boolean(
     sheetRowReplaceContext && catalogDual && !showReplaceQuad
   );
-  const catalogImgSizes = "(max-width:639px)42vw,(max-width:1023px)11rem,12rem";
+  const catalogImgSizes = "(max-width:639px)52vw,(max-width:1023px)14rem,16rem";
 
   return (
     <div className="flex flex-col">
@@ -1028,7 +1028,7 @@ function MocPartDetailBody({
                         showCaption={false}
                       />
                     ) : (
-                      <div className="flex aspect-square w-[min(10rem,42vw)] max-w-[11rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] leading-snug text-[var(--muted)]">
+                      <div className="flex aspect-square w-[min(12.5rem,50vw)] max-w-[14rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] leading-snug text-[var(--muted)]">
                         {item.partFound ? "无目录缩略图" : "未收录"}
                       </div>
                     )}
@@ -1071,7 +1071,7 @@ function MocPartDetailBody({
                             showCaption={false}
                           />
                         ) : (
-                          <div className="flex aspect-square w-[min(10rem,42vw)] max-w-[11rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
+                          <div className="flex aspect-square w-[min(12.5rem,50vw)] max-w-[14rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
                             无高砖商品图
                           </div>
                         )}
@@ -1117,7 +1117,7 @@ function MocPartDetailBody({
                     showCaption={false}
                   />
                 ) : (
-                  <div className="flex aspect-square w-[min(10rem,62vw)] max-w-[13rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
+                  <div className="flex aspect-square w-[min(12.5rem,52vw)] max-w-[14rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
                     {item.partFound ? "无图" : "未收录"}
                   </div>
                 )}
@@ -1238,6 +1238,20 @@ export function MocPartsList({
     [listAfterShortageReason, sheetListFilter]
   );
 
+  /** 配货表：有「更换零件」标记的行置顶，便于核对 */
+  const listDisplayed = useMemo(() => {
+    if (sheetRowReplaceContext?.branch !== "fulfillment") return listFiltered;
+    const modified: ShortageResolveItem[] = [];
+    const rest: ShortageResolveItem[] = [];
+    for (const r of listFiltered) {
+      (restHasSheetRowReplacedMarker(r.rest) ? modified : rest).push(r);
+    }
+    const byLine = (a: ShortageResolveItem, b: ShortageResolveItem) => a.lineNumber - b.lineNumber;
+    modified.sort(byLine);
+    rest.sort(byLine);
+    return [...modified, ...rest];
+  }, [listFiltered, sheetRowReplaceContext?.branch]);
+
   const totalPartQty = useMemo(() => {
     if (!shortageListMode && typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
       return totalPartQtyProp;
@@ -1343,7 +1357,7 @@ export function MocPartsList({
         </div>
       </div>
 
-      {listFiltered.length === 0 ? (
+      {listDisplayed.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">
           {shortageListMode
             ? "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」或调整「缺件原因」查看完整列表。"
@@ -1351,7 +1365,7 @@ export function MocPartsList({
         </p>
       ) : (
         <div className="tiles-grid">
-          {listFiltered.map((r, idx) => {
+          {listDisplayed.map((r, idx) => {
             const reasonLine = partsSheetGridReasonLine(r, shortageListMode);
             const thumbSrc = sheetRowListThumbSrc(r, detailSubstituteSuggestions);
             const showUnitInTile = sheetRowReplaceContext?.branch === "fulfillment";
@@ -1474,7 +1488,7 @@ export function MocPartsList({
             onClick={closeDetail}
           >
             <div
-              className="max-h-[min(92dvh,52rem)] w-full max-w-[min(64rem,calc(100vw-1.25rem))] overflow-y-auto overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
+              className="flex max-h-[min(92dvh,52rem)] min-h-0 w-full max-w-[min(64rem,calc(100vw-1.25rem))] flex-col overflow-hidden overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">
@@ -1525,7 +1539,7 @@ export function MocPartsList({
               </div>
 
               {detailModalTab === "replace" && sheetRowReplaceContext ? (
-                <div className="px-5 py-5 sm:px-8 sm:py-7">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-5 sm:px-8 sm:py-7">
                   <SheetRowReplacePanel
                     key={`${detailItem.lineNumber}-${detailItem.partNum}-${detailItem.colorId}`}
                     item={detailItem}
@@ -1534,18 +1548,20 @@ export function MocPartsList({
                   />
                 </div>
               ) : (
-                <MocPartDetailBody
-                  item={detailItem}
-                  titleId={detailTitleId}
-                  onClose={closeDetail}
-                  parentSubjectOwned={parentSubjectOwned}
-                  showShortageReasonSummary={shortageListMode}
-                  detailSubstituteSuggestions={detailSubstituteSuggestions}
-                  hideTopBar
-                  omitSubstituteBlock={Boolean(sheetRowReplaceContext)}
-                  sheetRowReplaceContext={sheetRowReplaceContext}
-                  onSheetRowRestored={sheetRowReplaceContext ? handleSheetRowReplaced : undefined}
-                />
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  <MocPartDetailBody
+                    item={detailItem}
+                    titleId={detailTitleId}
+                    onClose={closeDetail}
+                    parentSubjectOwned={parentSubjectOwned}
+                    showShortageReasonSummary={shortageListMode}
+                    detailSubstituteSuggestions={detailSubstituteSuggestions}
+                    hideTopBar
+                    omitSubstituteBlock={Boolean(sheetRowReplaceContext)}
+                    sheetRowReplaceContext={sheetRowReplaceContext}
+                    onSheetRowRestored={sheetRowReplaceContext ? handleSheetRowReplaced : undefined}
+                  />
+                </div>
               )}
             </div>
           </div>
