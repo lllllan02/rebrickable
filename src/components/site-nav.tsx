@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
+import { SiteBrandLogo } from "@/components/site-brand-logo";
 import { GlobalSearch } from "@/components/global-search";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
@@ -14,8 +15,8 @@ export function SiteNav() {
   return (
     <header className="site-header">
       <div className="site-nav-inner">
-        <Link href="/" className="site-brand">
-          Rebrickable 本地库
+        <Link href="/" className="site-brand" aria-label="ReBrickable 本地库">
+          <SiteBrandLogo />
         </Link>
         <div className="site-nav-trailing">
           <nav className="site-links" aria-label="主要栏目">
