@@ -17,6 +17,7 @@ import {
 
 import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
+import { GobricksShortageListInlineCheck } from "@/app/build/gobricks-shortage-list-check-button";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   inventories,
@@ -24,12 +25,14 @@ import {
   inventoryParts,
   buildFavoriteSubjects,
   buildOwnedSubjects,
+  buildSavedPartsSheets,
   legoSets,
   legoThemes,
   minifigs,
 } from "@/db/schema";
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { SetsCatalogThemeFilter } from "@/app/sets/sets-catalog-theme-filter";
 import { parseListMarkFilter } from "@/lib/build-list-mark-filter";
 import { likeFragment } from "@/lib/search";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
@@ -232,6 +235,92 @@ async function loadThemeSelectRootRows(
           .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"))
       : null;
   return (flatFallback ?? roots).map((t) => ({ id: t.id, name: t.name }));
+}
+
+/** 与主题栅格一致：按各主题（含子系列）下盒图最优的一套作为缩略图 */
+async function loadThemeHeroUrlsForOptionIds(
+  catalogDb: ReturnType<typeof getCatalogDb>,
+  optionThemeIds: number[]
+): Promise<Map<number, string | null>> {
+  const out = new Map<number, string | null>();
+  if (optionThemeIds.length === 0) return out;
+
+  const themeRows = await catalogDb
+    .select({ id: legoThemes.id, name: legoThemes.name, parentId: legoThemes.parentId })
+    .from(legoThemes);
+  const children = buildChildrenMap(themeRows);
+  const themeIdSet = new Set(themeRows.map((t) => t.id));
+
+  const expandedIds = new Set<number>();
+  for (const tid of optionThemeIds) {
+    for (const id of collectDescendantThemeIds(tid, themeIdSet, children)) {
+      expandedIds.add(id);
+    }
+  }
+  const expanded = [...expandedIds];
+  if (expanded.length === 0) {
+    for (const tid of optionThemeIds) out.set(tid, null);
+    return out;
+  }
+
+  const invLatest = invLatestSubquery(catalogDb);
+  const heroCand = await catalogDb
+    .select({
+      themeId: legoSets.themeId,
+      imgUrl: legoSets.imgUrl,
+      numParts: legoSets.numParts,
+      setNum: legoSets.setNum,
+    })
+    .from(inventories)
+    .innerJoin(
+      invLatest,
+      and(eq(inventories.setNum, invLatest.setNum), eq(inventories.version, invLatest.maxVersion))
+    )
+    .innerJoin(legoSets, eq(inventories.setNum, legoSets.setNum))
+    .where(
+      and(
+        isNotNull(legoSets.themeId),
+        inArray(legoSets.themeId, expanded),
+        isNotNull(legoSets.imgUrl),
+        ne(legoSets.imgUrl, "")
+      )
+    );
+
+  const directBest = new Map<number, { parts: number; setNum: string; url: string }>();
+  for (const row of heroCand) {
+    if (row.themeId == null || !row.imgUrl?.trim()) continue;
+    const tid = row.themeId;
+    const parts = Number(row.numParts ?? 0);
+    const cur = directBest.get(tid);
+    if (!cur || parts > cur.parts || (parts === cur.parts && row.setNum < cur.setNum)) {
+      directBest.set(tid, { parts, setNum: row.setNum, url: row.imgUrl.trim() });
+    }
+  }
+
+  const heroByThemeId = new Map<number, string | null>();
+  function resolveHero(id: number): string | null {
+    if (heroByThemeId.has(id)) return heroByThemeId.get(id)!;
+    const own = directBest.get(id)?.url ?? null;
+    if (own) {
+      heroByThemeId.set(id, own);
+      return own;
+    }
+    for (const cid of [...(children.get(id) ?? [])].sort((a, b) => a - b)) {
+      const h = resolveHero(cid);
+      if (h) {
+        heroByThemeId.set(id, h);
+        return h;
+      }
+    }
+    heroByThemeId.set(id, null);
+    return null;
+  }
+
+  for (const tid of optionThemeIds) {
+    resolveHero(tid);
+    out.set(tid, heroByThemeId.get(tid) ?? null);
+  }
+  return out;
 }
 
 export async function SetsOfficialCatalogSection({
@@ -482,6 +571,7 @@ export async function SetsOfficialCatalogSection({
       version: inventories.version,
       setBoxImg: legoSets.imgUrl,
       setName: legoSets.name,
+      themeId: legoSets.themeId,
       themeName: legoThemes.name,
     })
     .from(inventories)
@@ -517,8 +607,21 @@ export async function SetsOfficialCatalogSection({
 
   const ownedPageSetNums = new Set<string>();
   const favoritePageSetNums = new Set<string>();
+  /** 本页套装在本站已存零件表（与 MOC 列表卡片同源字段）；无记录时卡片仍展示官方清单粒数作「零件总数」回退 */
+  const sheetMetaBySetNum = new Map<
+    string,
+    {
+      totalPartQty: number;
+      shortageLineCount: number | null;
+      shortageTotalQty: number | null;
+      shortageClearedAt: string | null;
+      gobricksShortageSyncAt: string | null;
+      updatedAt: string;
+      gobricksGdsPriceCny: number | null;
+    }
+  >();
   if (pageSetNums.length > 0) {
-    const [ownedRows, favoriteRows] = await Promise.all([
+    const [ownedRows, favoriteRows, sheetRows] = await Promise.all([
       userDb
         .select({ subjectId: buildOwnedSubjects.subjectId })
         .from(buildOwnedSubjects)
@@ -537,9 +640,41 @@ export async function SetsOfficialCatalogSection({
             inArray(buildFavoriteSubjects.subjectId, pageSetNums)
           )
         ),
+      userDb
+        .select({
+          subjectId: buildSavedPartsSheets.subjectId,
+          totalPartQty: buildSavedPartsSheets.totalPartQty,
+          shortageLineCount: buildSavedPartsSheets.shortageLineCount,
+          shortageTotalQty: buildSavedPartsSheets.shortageTotalQty,
+          shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
+          gobricksShortageSyncAt: buildSavedPartsSheets.gobricksShortageSyncAt,
+          updatedAt: buildSavedPartsSheets.updatedAt,
+          gobricksGdsPriceCny: buildSavedPartsSheets.gobricksGdsPriceCny,
+        })
+        .from(buildSavedPartsSheets)
+        .where(
+          and(
+            eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_SET),
+            inArray(buildSavedPartsSheets.subjectId, pageSetNums)
+          )
+        ),
     ]);
     for (const r of ownedRows) ownedPageSetNums.add(r.subjectId);
     for (const r of favoriteRows) favoritePageSetNums.add(r.subjectId);
+    for (const r of sheetRows) {
+      const p = r.gobricksGdsPriceCny;
+      const gobricksGdsPriceCny =
+        typeof p === "number" && Number.isFinite(p) && p >= 0 ? p : null;
+      sheetMetaBySetNum.set(r.subjectId, {
+        totalPartQty: r.totalPartQty,
+        shortageLineCount: r.shortageLineCount ?? null,
+        shortageTotalQty: r.shortageTotalQty ?? null,
+        shortageClearedAt: r.shortageClearedAt ?? null,
+        gobricksShortageSyncAt: r.gobricksShortageSyncAt ?? null,
+        updatedAt: r.updatedAt,
+        gobricksGdsPriceCny,
+      });
+    }
   }
 
   const invIdsNeedInvMinifigThumb = rows
@@ -598,6 +733,18 @@ export async function SetsOfficialCatalogSection({
       ? [{ id: parsedThemeId, name: filteredThemeLabel }, ...themeSelectRoots]
       : themeSelectRoots;
 
+  const themeOptionIds = [...new Set(themeOptionsForSelect.map((t) => t.id))];
+  const themeHeroById = await loadThemeHeroUrlsForOptionIds(catalogDb, themeOptionIds);
+
+  const themeFilterRows = [
+    { value: "all", name: "全库浏览", thumbUrl: null as string | null },
+    ...themeOptionsForSelect.map((t) => ({
+      value: String(t.id),
+      name: t.name,
+      thumbUrl: themeHeroById.get(t.id) ?? null,
+    })),
+  ];
+
   const themeSelectDefault =
     themeNumericOk && themeRaw.length > 0 && themeRaw !== "all" ? themeRaw : "all";
 
@@ -644,22 +791,16 @@ export async function SetsOfficialCatalogSection({
         </p>
       ) : null}
       <form method="get" action={actionBase} className="filter-bar">
-        <label className="sr-only" htmlFor="sets-catalog-theme">
+        <label className="sr-only" htmlFor="sets-catalog-theme-btn">
           主题
         </label>
-        <AutoSubmitSelect
-          id="sets-catalog-theme"
+        <SetsCatalogThemeFilter
+          key={themeSelectDefault}
           name="theme"
           defaultValue={themeSelectDefault}
-          className="field max-w-full text-sm sm:max-w-[240px]"
-        >
-          <option value="all">全库浏览</option>
-          {themeOptionsForSelect.map((t) => (
-            <option key={t.id} value={String(t.id)}>
-              {t.name}
-            </option>
-          ))}
-        </AutoSubmitSelect>
+          themes={themeFilterRows}
+          className="max-w-full text-sm sm:max-w-[240px]"
+        />
         <label className="sr-only" htmlFor="sets-catalog-mark">
           拥有或收藏
         </label>
@@ -692,22 +833,36 @@ export async function SetsOfficialCatalogSection({
                 : minifigThumbBySetNum.get(r.setNum) ?? thumbByInv.get(r.inventoryId);
             const mainQty = mainQtyByInv.get(r.inventoryId) ?? 0;
             const spareQty = spareQtyByInv.get(r.inventoryId) ?? 0;
+            const officialPartTotal = mainQty + spareQty;
             const themeLabel = (r.themeName ?? "").trim();
+            const themeId = r.themeId;
+            const themeFilterHref =
+              themeId != null && Number.isFinite(themeId)
+                ? `${actionBase}?theme=${encodeURIComponent(String(themeId))}`
+                : null;
             const title = (r.setName ?? "").trim() || `套装 ${r.setNum}`;
             const href = detailPath(r.setNum);
             const owned = ownedPageSetNums.has(r.setNum);
             const favorite = favoritePageSetNums.has(r.setNum);
+            const sheet = sheetMetaBySetNum.get(r.setNum);
+            const gdsCny = sheet?.gobricksGdsPriceCny ?? null;
+            const gobricksGdsLabel =
+              typeof gdsCny === "number" && Number.isFinite(gdsCny) && gdsCny >= 0
+                ? new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gdsCny)
+                : null;
+            const totalPartQty = sheet?.totalPartQty ?? officialPartTotal;
+            const savedAtIso = sheet?.updatedAt;
+            const savedAt =
+              typeof savedAtIso === "string" && savedAtIso.trim().length > 0
+                ? savedAtIso.slice(0, 19).replace("T", " ")
+                : null;
             return (
               <li
                 key={r.setNum}
                 className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`}
               >
                 <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
-                  <Link
-                    href={href}
-                    className="absolute inset-0 z-0 block"
-                    aria-label={`${title} 封面`}
-                  >
+                  <Link href={href} className="absolute inset-0 z-0 block" aria-label={`${title} 封面`}>
                     {thumb ? (
                       <RemoteCoverImage
                         src={thumb}
@@ -715,11 +870,11 @@ export async function SetsOfficialCatalogSection({
                         className="object-contain p-3"
                         sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
                         alt=""
-                        fallbackLabel="无图"
+                        fallbackLabel="无参考图"
                       />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
-                        无图
+                        无参考图
                       </span>
                     )}
                   </Link>
@@ -740,47 +895,76 @@ export async function SetsOfficialCatalogSection({
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
                   <div className="min-w-0">
-                    <Link
-                      href={href}
-                      className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
-                    >
-                      {title}
-                    </Link>
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <Link
+                        href={href}
+                        className="min-w-0 max-w-full line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
+                      >
+                        {title}
+                      </Link>
+                      {gobricksGdsLabel ? (
+                        <span
+                          className="shrink-0 font-mono text-sm font-semibold tabular-nums text-emerald-200/95"
+                          title="高砖整单参考价（接口 gdsPrice，按完整清单分片求和）"
+                        >
+                          {gobricksGdsLabel}
+                        </span>
+                      ) : null}
+                    </div>
                     <p
                       className="mt-1 truncate font-mono text-xs text-[var(--muted)]"
                       title={`${r.setNum} · 清单 v${r.version}`}
                     >
-                      {r.setNum} · v{r.version}
+                      {r.setNum}
                     </p>
                   </div>
-                  <div className="mt-auto flex flex-wrap items-start justify-between gap-x-3 gap-y-1 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
-                    <span className="min-w-0 flex-1 text-left leading-snug text-[var(--text)]">
-                      <span className="text-[var(--muted-2)]">主题 </span>
-                      <span className="line-clamp-2 break-words" title={themeLabel || undefined}>
-                        {themeLabel || "—"}
-                      </span>
-                    </span>
-                    <span className="max-w-[55%] shrink-0 text-right leading-snug tabular-nums">
-                      {mainQty > 0 || spareQty > 0 ? (
-                        <>
-                          {mainQty > 0 ? (
-                            <>
-                              <span className="text-[var(--muted-2)]">主件 </span>
-                              {mainQty.toLocaleString("zh-CN")} 粒
-                            </>
-                          ) : null}
-                          {mainQty > 0 && spareQty > 0 ? <span className="text-[var(--muted)]"> · </span> : null}
-                          {spareQty > 0 ? (
-                            <>
-                              <span className="text-[var(--muted-2)]">备用 </span>
-                              {spareQty.toLocaleString("zh-CN")} 粒
-                            </>
-                          ) : null}
-                        </>
+                  {themeLabel ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {themeFilterHref != null ? (
+                        <Link
+                          href={themeFilterHref}
+                          className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)] underline-offset-2 hover:border-[var(--accent)]/40 hover:underline"
+                          title={`查看「${themeLabel}」主题下的套装`}
+                          aria-label={`按主题筛选：${themeLabel}`}
+                        >
+                          {themeLabel}
+                        </Link>
                       ) : (
-                        <span className="text-[var(--muted-2)]">—</span>
+                        <span
+                          className="rounded border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)]"
+                          title="LEGO 主题（无目录 id，无法筛选）"
+                        >
+                          {themeLabel}
+                        </span>
                       )}
-                    </span>
+                    </div>
+                  ) : null}
+                  <div className="mt-auto min-w-0 border-t border-[var(--border-soft)] pt-2.5 text-xs text-[var(--muted)]">
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <GobricksShortageListInlineCheck
+                        subjectKind={BUILD_SUBJECT_SET}
+                        subjectId={r.setNum}
+                        totalPartQty={totalPartQty}
+                        hasShortage={
+                          sheet != null &&
+                          sheet.shortageLineCount != null &&
+                          sheet.shortageLineCount > 0
+                        }
+                        shortageLineCount={sheet?.shortageLineCount ?? null}
+                        shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                        markedNoShortage={
+                          typeof sheet?.shortageClearedAt === "string" &&
+                          sheet.shortageClearedAt.trim().length > 0
+                        }
+                        gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                      />
+                      {savedAt != null && savedAtIso != null ? (
+                        <div className="text-left tabular-nums">
+                          <span className="text-[var(--muted-2)]">保存时间 </span>
+                          <time dateTime={savedAtIso}>{savedAt}</time>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </li>
