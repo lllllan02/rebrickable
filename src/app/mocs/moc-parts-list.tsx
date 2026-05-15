@@ -872,7 +872,7 @@ function MocPartDetailBody({
   detailSubstituteSuggestions: boolean;
   /** 为 true 时不渲染本组件顶部条（由外层模态框统一提供标题 / Tab 与关闭） */
   hideTopBar?: boolean;
-  /** 为 true 时不渲染「推荐替换」区块（改在「更换零件」Tab 顶部展示） */
+  /** 为 true 时不渲染「推荐替换」区块（配货/缺件带「更换零件」Tab 时改在更换页置顶查高砖） */
   omitSubstituteBlock?: boolean;
   /** 配货/缺件详情：用于展示「更换」原/现对照与还原 */
   sheetRowReplaceContext?: SheetRowReplaceContext | null;
@@ -1542,6 +1542,7 @@ export function MocPartsList({
                   showShortageReasonSummary={shortageListMode}
                   detailSubstituteSuggestions={detailSubstituteSuggestions}
                   hideTopBar
+                  omitSubstituteBlock={Boolean(sheetRowReplaceContext)}
                   sheetRowReplaceContext={sheetRowReplaceContext}
                   onSheetRowRestored={sheetRowReplaceContext ? handleSheetRowReplaced : undefined}
                 />

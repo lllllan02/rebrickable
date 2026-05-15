@@ -9,6 +9,7 @@ import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 import { replaceBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-actions";
 import {
+  listGobricksHitsForLegoSubstitutePartsAction,
   listGobricksStockColorsForSheetReplaceAction,
   searchGobricksPartsForSheetReplaceAction,
   type SheetReplaceGobricksSearchHit,
@@ -39,6 +40,9 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
   const [partsLoading, setPartsLoading] = useState(false);
   const [partsError, setPartsError] = useState<string | null>(null);
 
+  const [legoSubstituteHits, setLegoSubstituteHits] = useState<SheetReplaceGobricksSearchHit[]>([]);
+  const [legoSubstituteLoading, setLegoSubstituteLoading] = useState(false);
+
   const [pickedPart, setPickedPart] = useState<string | null>(null);
   const [pickedPartName, setPickedPartName] = useState<string>("");
 
@@ -55,6 +59,22 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 380);
     return () => window.clearTimeout(t);
   }, [searchInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLegoSubstituteHits([]);
+    setLegoSubstituteLoading(true);
+    void (async () => {
+      const res = await listGobricksHitsForLegoSubstitutePartsAction({ legoPartNum: item.partNum });
+      if (cancelled) return;
+      setLegoSubstituteLoading(false);
+      if (res.ok) setLegoSubstituteHits(res.parts);
+      else setLegoSubstituteHits([]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.partNum, item.lineNumber]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +102,27 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       cancelled = true;
     };
   }, [debouncedSearch]);
+
+  const substituteProductIds = useMemo(
+    () => new Set(legoSubstituteHits.map((h) => h.productId)),
+    [legoSubstituteHits]
+  );
+
+  const displayHits = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SheetReplaceGobricksSearchHit[] = [];
+    for (const h of legoSubstituteHits) {
+      if (seen.has(h.productId)) continue;
+      seen.add(h.productId);
+      out.push(h);
+    }
+    for (const h of partsHits) {
+      if (seen.has(h.productId)) continue;
+      seen.add(h.productId);
+      out.push(h);
+    }
+    return out;
+  }, [legoSubstituteHits, partsHits]);
 
   const loadGobricksPalette = useCallback(
     async (partNum: string, fallbackPreferredColorId: number, preresolvedProductId: string | null) => {
@@ -230,23 +271,28 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
           {partsError ? <p className="text-sm text-amber-200/90">{partsError}</p> : null}
 
           <div className="max-h-[min(52vh,22rem)] overflow-y-auto overscroll-contain rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-2 sm:max-h-[min(60vh,26rem)] sm:p-3">
-            {!debouncedSearch.trim() ? (
+            {legoSubstituteLoading && displayHits.length === 0 ? (
               <p className="p-6 text-center text-sm text-[var(--muted)]">
-                输入关键词后调用高砖站内搜索；选中商品后再选有货颜色。
+                正在按乐高目录 A/M 推荐零件号查询高砖…
               </p>
-            ) : partsLoading && partsHits.length === 0 ? (
+            ) : !debouncedSearch.trim() && displayHits.length === 0 ? (
+              <p className="p-6 text-center text-sm text-[var(--muted)]">
+                本地目录无 A/M 推荐替换，或高砖暂无匹配；可输入关键词再搜高砖商品。选中商品后再选有货颜色。
+              </p>
+            ) : debouncedSearch.trim() && partsLoading && displayHits.length === 0 ? (
               <p className="p-6 text-center text-sm text-[var(--muted)]">搜索高砖商品中…</p>
-            ) : partsHits.length === 0 ? (
+            ) : displayHits.length === 0 ? (
               <p className="p-6 text-center text-sm text-[var(--muted)]">无匹配商品，请尝试其它关键词或更完整的零件号。</p>
             ) : (
               <ul
                 className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-4 lg:grid-cols-5"
                 role="list"
               >
-                {partsHits.map((hit) => {
+                {displayHits.map((hit) => {
                   const sheetPid = parseGobricksProductIdFromGdsItemId(item.gdsItemId ?? null);
                   const isCurrentRow =
                     hit.partNum === item.partNum && (sheetPid == null || hit.productId === sheetPid);
+                  const isLegoSubstitute = substituteProductIds.has(hit.productId);
                   return (
                     <li key={`${hit.productId}-${hit.partNum}`}>
                       <button
@@ -273,6 +319,11 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                               无图
                             </span>
                           )}
+                          {isLegoSubstitute ? (
+                            <span className="pointer-events-none absolute left-0.5 top-0.5 rounded border border-emerald-400/35 bg-emerald-500/85 px-1 py-px text-[8px] font-medium leading-none text-emerald-50">
+                              乐高推荐
+                            </span>
+                          ) : null}
                         </div>
                         <p className="line-clamp-2 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
                           {hit.partNum}
@@ -289,8 +340,8 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
             )}
           </div>
           <p className="text-[11px] text-[var(--muted-2)]">
-            列表最多 160 条，来自高砖搜索接口。
-            {partsHits.length > 0 ? `当前 ${partsHits.length} 条。` : null}
+            列表最多 160 条/次搜索；乐高 A/M 推荐最多预查 {16} 个零件号，结果置顶并去重。
+            {displayHits.length > 0 ? `当前展示 ${displayHits.length} 条。` : null}
           </p>
         </>
       ) : (

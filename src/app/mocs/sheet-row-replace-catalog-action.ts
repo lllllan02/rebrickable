@@ -24,6 +24,7 @@ import {
   partRelationships,
   parts,
 } from "@/db/schema";
+import { fetchPartSubstituteSuggestions } from "@/lib/part-substitute-suggestions-server";
 import { likeFragment } from "@/lib/search";
 import {
   fetchGobricksItemFilterInStockColors,
@@ -36,6 +37,8 @@ import {
 const MAX_Q_LEN = 80;
 const MAX_PART_NUM_LEN = 32;
 const MAX_PART_ROWS = 160;
+/** 乐高 A/M 推荐零件较多时，限制并行高砖搜索次数，避免一次打开弹层触发过多外呼 */
+const MAX_LEGO_SUBSTITUTE_GOBRICKS_QUERIES = 16;
 
 export type SheetReplaceCategoryRow = {
   id: number;
@@ -282,6 +285,54 @@ export async function searchGobricksPartsForSheetReplaceAction(input: {
     };
   } catch {
     return { ok: false, error: "高砖搜索失败。" };
+  }
+}
+
+/**
+ * 配货/缺件「更换零件」：按本地 `part_relationships` 的 A/M 推荐零件号依次查高砖站内搜索，
+ * 合并去重（保留推荐顺序），供面板置顶展示；单次推荐条数有上限。
+ */
+export async function listGobricksHitsForLegoSubstitutePartsAction(input: {
+  legoPartNum: string;
+}): Promise<{ ok: true; parts: SheetReplaceGobricksSearchHit[] } | { ok: false; error: string }> {
+  const pn = input.legoPartNum.trim().slice(0, MAX_PART_NUM_LEN);
+  if (!pn) return { ok: true, parts: [] };
+  try {
+    const suggestions = await fetchPartSubstituteSuggestions(pn);
+    if (suggestions.length === 0) return { ok: true, parts: [] };
+    const queries = suggestions
+      .map((s) => s.otherPartNum.trim())
+      .filter(Boolean)
+      .slice(0, MAX_LEGO_SUBSTITUTE_GOBRICKS_QUERIES);
+
+    const batches = await Promise.all(
+      queries.map(async (q) => {
+        const frag = likeFragment(q, MAX_Q_LEN);
+        if (!frag) return [];
+        const res = await fetchGobricksSearchItemHits(frag);
+        if (!res.ok) return [];
+        return res.hits;
+      })
+    );
+
+    const seen = new Set<string>();
+    const parts: SheetReplaceGobricksSearchHit[] = [];
+    for (const hits of batches) {
+      for (const h of hits) {
+        if (seen.has(h.productId)) continue;
+        seen.add(h.productId);
+        parts.push({
+          productId: h.productId,
+          partNum: h.legoPartNum,
+          name: h.name,
+          imgUrl: h.imgUrl,
+        });
+      }
+    }
+    return { ok: true, parts };
+  } catch (e) {
+    const msg = e instanceof Error && e.message.trim() ? e.message.trim() : "加载乐高推荐零件的高砖匹配失败。";
+    return { ok: false, error: msg };
   }
 }
 
