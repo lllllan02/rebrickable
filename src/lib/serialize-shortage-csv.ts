@@ -11,6 +11,8 @@ export const SHORTAGE_CSV_HEADER_LINE = "Part,Color,Quantity,高砖单价,备注
 export type ShortageCsvSerializeRow = {
   partNum: string;
   colorId: number;
+  /** 写入 Color 列的完整字段（通常含前导 `'`）；未指定时用乐高色 ID */
+  colorField?: string;
   quantity: number;
   /** 高砖网店单价（元）；无则省略或空第四列 */
   gobricksUnitPrice?: string | null;
@@ -19,7 +21,7 @@ export type ShortageCsvSerializeRow = {
 };
 
 export function serializeShortageCsvLine(r: ShortageCsvSerializeRow): string {
-  const colorField = `'${r.colorId}`;
+  const colorField = r.colorField?.trim() || `'${r.colorId}`;
   const priceRaw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim();
   const restOut = stripSheetRowReplacedMarker(r.rest);
   return `${r.partNum},${colorField},${r.quantity},${priceRaw},${restOut}`;

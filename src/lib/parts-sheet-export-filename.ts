@@ -28,18 +28,24 @@ export function sanitizePartsSheetExportSegment(raw: string, maxLen: number): st
  * 导出文件名的主体（不含扩展名）。
  * 规格：`{id}-{name}-{内容}`；乐高官方套装（subjectKind=set）前加 `LEGO-`。
  */
+/** 配货表「修改部分」导出文件名中的内容段 */
+export const FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL = "修改部分";
+
 export function buildPartsSheetExportStem(input: {
   kind: BuildSubjectKind;
   subjectId: string;
   displayName: string;
   branch: PartsSheetExportBranch;
+  /** 覆盖默认分支名（如 {@link FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL}） */
+  contentLabel?: string;
 }): string {
   const idRaw = input.subjectId.trim();
   const id = sanitizePartsSheetExportSegment(idRaw, 128) || "unknown";
   const nameRaw = input.displayName.trim() || "未命名";
   const name =
     sanitizePartsSheetExportSegment(nameRaw, MOC_PROFILE_MAX_DISPLAY_NAME) || "未命名";
-  const content = BRANCH_LABEL[input.branch];
+  const content =
+    input.contentLabel?.trim() || BRANCH_LABEL[input.branch];
   const body = `${id}-${name}-${content}`;
   const prefix = input.kind === BUILD_SUBJECT_SET ? "LEGO-" : "";
   let stem = `${prefix}${body}`;

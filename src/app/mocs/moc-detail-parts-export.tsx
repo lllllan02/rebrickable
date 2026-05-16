@@ -4,8 +4,15 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
-import { buildPartsSheetExportStem } from "@/lib/parts-sheet-export-filename";
+import {
+  buildPartsSheetExportStem,
+  FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
+} from "@/lib/parts-sheet-export-filename";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
+import {
+  countFulfillmentModifiedExportable,
+  serializeFulfillmentModifiedCsv,
+} from "@/lib/fulfillment-modified-csv-export";
 import { serializeBrickLinkInventoryXml } from "@/lib/serialize-bricklink-inventory-xml";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
@@ -45,6 +52,14 @@ export function MocDetailPartsListExportBar({
   const branch =
     listTab === "full" ? initialFull : listTab === "shortage" ? initialShortage : initialFulfillment;
   const canExport = Boolean(branch && branch.items.length > 0);
+  const fulfillmentModifiedCounts = useMemo(() => {
+    if (listTab !== "fulfillment" || !initialFulfillment?.items.length) {
+      return { modified: 0, exportable: 0 };
+    }
+    return countFulfillmentModifiedExportable(initialFulfillment.items);
+  }, [initialFulfillment?.items, listTab]);
+  const canExportModifiedCsv =
+    listTab === "fulfillment" && fulfillmentModifiedCounts.exportable > 0;
   const exportProgressTitleId = useId();
   const exportProgressDialogRef = useRef<HTMLDialogElement>(null);
   const [exportBusy, setExportBusy] = useState(false);
@@ -65,6 +80,18 @@ export function MocDetailPartsListExportBar({
         branch: listTab,
       }),
     [exportDisplayName, listTab, subjectId, subjectKind]
+  );
+
+  const modifiedFilenameStem = useMemo(
+    () =>
+      buildPartsSheetExportStem({
+        kind: subjectKind,
+        subjectId,
+        displayName: exportDisplayName,
+        branch: "fulfillment",
+        contentLabel: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
+      }),
+    [exportDisplayName, subjectId, subjectKind]
   );
 
   useEffect(() => {
@@ -98,6 +125,27 @@ export function MocDetailPartsListExportBar({
     );
     downloadText(`${filenameStem}.csv`, text);
   }, [branch, filenameStem]);
+
+  const onExportModifiedCsv = useCallback(() => {
+    if (!initialFulfillment || initialFulfillment.items.length === 0) return;
+    setExportError(null);
+    const { modified, exportable } = countFulfillmentModifiedExportable(initialFulfillment.items);
+    if (exportable === 0) {
+      setExportError(
+        modified > 0
+          ? "已修改的行缺少 GDS 商品编号，无法导出修改 CSV。"
+          : "当前配货表没有通过「更换零件」修改过的行。"
+      );
+      return;
+    }
+    const text = serializeFulfillmentModifiedCsv(initialFulfillment.items);
+    downloadText(`${modifiedFilenameStem}.csv`, text);
+    if (exportable < modified) {
+      setExportError(
+        `已导出 ${exportable.toLocaleString("zh-CN")} 行；另有 ${(modified - exportable).toLocaleString("zh-CN")} 行缺少 GDS 商品编号已跳过。`
+      );
+    }
+  }, [initialFulfillment, modifiedFilenameStem]);
 
   const onExportXml = useCallback(() => {
     if (!branch || branch.items.length === 0) return;
@@ -182,6 +230,23 @@ export function MocDetailPartsListExportBar({
         >
           CSV
         </button>
+        {listTab === "fulfillment" ? (
+          <button
+            type="button"
+            className="shrink-0 rounded-md border border-sky-500/35 bg-sky-950/25 px-2.5 py-1 text-xs font-medium leading-none text-sky-100/95 hover:bg-sky-950/45 disabled:opacity-45"
+            disabled={!canExportModifiedCsv || exportBusy}
+            title={
+              fulfillmentModifiedCounts.modified === 0
+                ? "配货表中没有通过「更换零件」修改过的行"
+                : fulfillmentModifiedCounts.exportable === 0
+                  ? "已修改的行均缺少 GDS 商品编号"
+                  : `导出 ${fulfillmentModifiedCounts.exportable.toLocaleString("zh-CN")} 行已修改零件；Part 列为 GDS 商品编号（如 GDS-656-072），Color 列为高砖色 ID`
+            }
+            onClick={onExportModifiedCsv}
+          >
+            修改 CSV
+          </button>
+        ) : null}
         <button
           type="button"
           className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium leading-none text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-45"
