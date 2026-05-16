@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
@@ -10,26 +11,19 @@ import { MocPartsList } from "@/app/mocs/moc-parts-list";
 import { buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
+import {
+  hashFragmentToMocPartsListTab,
+  MOC_PARTS_SCROLL_QUERY,
+  MOC_PARTS_TAB_HASH,
+  mocPartsTabElementId,
+  parseMocPartsScrollQuery,
+  type MocPartsListTab,
+} from "@/lib/moc-parts-tab-navigation";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
-type ListTab = "full" | "fulfillment" | "shortage" | "official";
-
-/** MOC 零件表 Tab ↔ URL hash 片段（与列表「缺 n」链接 `#moc-parts-shortage` 一致） */
-const MOC_PARTS_TAB_HASH: Record<ListTab, string> = {
-  full: "moc-parts-full",
-  fulfillment: "moc-parts-fulfillment",
-  shortage: "moc-parts-shortage",
-  official: "moc-parts-official",
-};
+type ListTab = MocPartsListTab;
 
 const MOC_PARTS_TAB_STORAGE_PREFIX = "rb:mocPartsTab:v1:";
-
-function hashFragmentToListTab(fragment: string): ListTab | null {
-  const id = fragment.replace(/^#/, "");
-  if (!id) return null;
-  const hit = (Object.keys(MOC_PARTS_TAB_HASH) as ListTab[]).find((t) => MOC_PARTS_TAB_HASH[t] === id);
-  return hit ?? null;
-}
 
 function mocTabHasData(
   tab: ListTab,
@@ -79,7 +73,7 @@ function replaceUrlHashForMocTab(tab: ListTab) {
   window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next}`);
 }
 
-/** 等 Tab 切换提交后再滚动（Next 客户端跳转带 hash 时浏览器未必能滚到动态 id） */
+/** 列表带 `partsScroll` 进入时滚到对应 Tab（等 Tab 提交后再滚，动态 id 才存在） */
 function scheduleScrollToElementById(elementId: string) {
   if (typeof document === "undefined" || !elementId) return;
   const run = () => {
@@ -125,6 +119,9 @@ export function MocDetailPartsSection({
   parentSubjectOwned = false,
   exportDisplayName,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const ui = buildSubjectUi(subjectKind);
   const listHref = buildSubjectListPath(subjectKind);
   const isSetSubject = subjectKind === BUILD_SUBJECT_SET;
@@ -178,27 +175,38 @@ export function MocDetailPartsSection({
 
   useLayoutEffect(() => {
     if (isSetSubject || typeof window === "undefined") return;
+    const scrollFromList = parseMocPartsScrollQuery(searchParams.get(MOC_PARTS_SCROLL_QUERY));
+    const scrollFromListOk =
+      scrollFromList && mocTabHasData(scrollFromList, mocTabDataCtx) ? scrollFromList : null;
     const id = window.location.hash.replace(/^#/, "");
-    const fromHash = id ? hashFragmentToListTab(id) : null;
+    const fromHash = id ? hashFragmentToMocPartsListTab(id) : null;
     const fromHashOk = fromHash && mocTabHasData(fromHash, mocTabDataCtx) ? fromHash : null;
     const fromStore = readStoredMocListTab(subjectId);
     const fromStoreOk = fromStore && mocTabHasData(fromStore, mocTabDataCtx) ? fromStore : null;
-    const chosen = fromHashOk ?? fromStoreOk;
+    const chosen = scrollFromListOk ?? fromHashOk ?? fromStoreOk;
     if (!chosen) return;
     setListTab(chosen);
     writeStoredMocListTab(subjectId, chosen);
-    if (fromHashOk) scheduleScrollToElementById(id);
-  }, [isSetSubject, subjectId, mocTabDataCtx]);
+    if (scrollFromListOk) {
+      scheduleScrollToElementById(mocPartsTabElementId(scrollFromListOk));
+      if (searchParams.has(MOC_PARTS_SCROLL_QUERY)) {
+        const next = new URLSearchParams(searchParams.toString());
+        next.delete(MOC_PARTS_SCROLL_QUERY);
+        const qs = next.toString();
+        const hash = window.location.hash;
+        router.replace(`${pathname}${qs ? `?${qs}` : ""}${hash}`, { scroll: false });
+      }
+    }
+  }, [isSetSubject, pathname, router, searchParams, subjectId, mocTabDataCtx]);
 
   useEffect(() => {
     if (isSetSubject) return;
     const onHashChange = () => {
       const id = window.location.hash.replace(/^#/, "");
-      const fromHash = id ? hashFragmentToListTab(id) : null;
+      const fromHash = id ? hashFragmentToMocPartsListTab(id) : null;
       if (!fromHash || !mocTabHasData(fromHash, mocTabDataCtx)) return;
       setListTab(fromHash);
       writeStoredMocListTab(subjectId, fromHash);
-      scheduleScrollToElementById(id);
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);

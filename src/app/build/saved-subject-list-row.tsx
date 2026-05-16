@@ -5,6 +5,7 @@ import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { GobricksShortageListInlineCheck } from "@/app/build/gobricks-shortage-list-check-button";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildMocPartsDetailHref } from "@/lib/moc-parts-tab-navigation";
 
 function usableImgUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && u.trim().length > 0;
@@ -176,8 +177,13 @@ export function SavedSubjectListRow({
               shortageTotalQty={shortageTotalQty}
               markedNoShortage={markedNoShortage}
               gobricksShortageSyncAt={gobricksShortageSyncAt}
+              partsDetailHref={
+                kind === BUILD_SUBJECT_MOC ? buildMocPartsDetailHref(detailHref, "full") : undefined
+              }
               shortageDetailHref={
-                kind === BUILD_SUBJECT_MOC && hasShortage ? `${detailHref}#moc-parts-shortage` : undefined
+                kind === BUILD_SUBJECT_MOC && hasShortage
+                  ? buildMocPartsDetailHref(detailHref, "shortage")
+                  : undefined
               }
             />
             <div className="text-left tabular-nums">

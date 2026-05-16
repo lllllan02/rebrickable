@@ -25,11 +25,13 @@ type Props = {
   shortageTotalQty: number | null;
   markedNoShortage: boolean;
   gobricksShortageSyncAt: string | null;
-  /** 若提供：有缺件时「缺 n」跳转该地址（如 MOC 详情缺件表锚点），不再触发高砖同步 */
+  /** 若提供：「零件总数」跳转该地址（如 MOC 详情完整表，带列表滚动标记） */
+  partsDetailHref?: string | null;
+  /** 若提供：有缺件时「缺 n」跳转该地址（如 MOC 详情缺件表），不再触发高砖同步 */
   shortageDetailHref?: string | null;
 };
 
-/** 列表卡片：点击「检查」或「全」触发高砖同步；MOC 有缺件时可改为跳转详情缺件表 */
+/** 列表卡片：MOC 有 `partsDetailHref` 时「零件总数 / 全 / 缺 n」跳转详情零件表；否则「检查」触发高砖同步 */
 export function GobricksShortageListInlineCheck({
   subjectKind,
   subjectId,
@@ -39,6 +41,7 @@ export function GobricksShortageListInlineCheck({
   shortageTotalQty,
   markedNoShortage,
   gobricksShortageSyncAt,
+  partsDetailHref = null,
   shortageDetailHref = null,
 }: Props) {
   const router = useRouter();
@@ -73,7 +76,18 @@ export function GobricksShortageListInlineCheck({
     <div className="min-w-0 space-y-1">
       <p className="text-pretty leading-snug tabular-nums text-[var(--text)]">
         <span className="text-[var(--muted-2)]">零件总数 </span>
-        {totalPartQty.toLocaleString("zh-CN")}
+        {partsDetailHref ? (
+          <Link
+            href={partsDetailHref}
+            className={`${triggerClass} font-medium text-[var(--text)]`}
+            title="前往完整零件表"
+            aria-label="前往完整零件表"
+          >
+            {totalPartQty.toLocaleString("zh-CN")}
+          </Link>
+        ) : (
+          totalPartQty.toLocaleString("zh-CN")
+        )}
         {hasShortage ? (
           shortageDetailHref ? (
             <Link
@@ -98,17 +112,28 @@ export function GobricksShortageListInlineCheck({
             </button>
           )
         ) : showGreenQuan ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={runCheck}
-            className={`${triggerClass} font-semibold text-emerald-400/95`}
-            title={quanTitle}
-            aria-busy={pending}
-            aria-label="对照高砖复查缺件"
-          >
-            {pending ? "检查中…" : "全"}
-          </button>
+          partsDetailHref ? (
+            <Link
+              href={partsDetailHref}
+              className={`${triggerClass} font-semibold text-emerald-400/95`}
+              title="前往完整零件表"
+              aria-label="前往完整零件表"
+            >
+              全
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={runCheck}
+              className={`${triggerClass} font-semibold text-emerald-400/95`}
+              title={quanTitle}
+              aria-busy={pending}
+              aria-label="对照高砖复查缺件"
+            >
+              {pending ? "检查中…" : "全"}
+            </button>
+          )
         ) : (
           <button
             type="button"

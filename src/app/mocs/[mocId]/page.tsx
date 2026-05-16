@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { and, asc, eq } from "drizzle-orm";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
@@ -136,16 +137,18 @@ export default async function MocDetailPage({ params }: Props) {
         initialFavorite={initialFavorite}
       />
 
-      <MocDetailPartsSection
-        subjectId={mocId}
-        exportDisplayName={initialDisplayName}
-        initialFull={initialFull}
-        initialShortage={initialShortage}
-        initialFulfillment={initialFulfillment}
-        initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
-        initialMocLoadError={initialMocLoadError}
-        parentSubjectOwned={initialOwned}
-      />
+      <Suspense fallback={null}>
+        <MocDetailPartsSection
+          subjectId={mocId}
+          exportDisplayName={initialDisplayName}
+          initialFull={initialFull}
+          initialShortage={initialShortage}
+          initialFulfillment={initialFulfillment}
+          initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
+          initialMocLoadError={initialMocLoadError}
+          parentSubjectOwned={initialOwned}
+        />
+      </Suspense>
     </div>
   );
 }
