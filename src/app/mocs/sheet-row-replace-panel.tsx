@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import type { BuildSubjectKind } from "@/lib/build-subject";
+import {
+  formatGobricksBilingualColorLabel,
+  gobricksCaptionNameOrFallback,
+} from "@/lib/gobricks-display-caption";
 import { parseGobricksProductIdFromGdsItemId } from "@/lib/gobricks-item-filter-inventory";
 import { parseSheetRowReplaceMeta } from "@/lib/sheet-row-replaced-marker";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
@@ -103,12 +107,14 @@ function buildGobricksQuickTile(
   captionEn: string | null | undefined,
   picture: string | null | undefined,
   key: string,
-  badge: string
+  badge: string,
+  /** 用于从旧版 gdsCaption 中剥掉拼接的颜色后缀 */
+  legoColorName?: string | null
 ): QuickPickTile | null {
   const partNum = partNumRaw.trim();
   if (!partNum) return null;
   const pid = parseGobricksProductIdFromGdsItemId(gdsItemId ?? null);
-  const cap = caption?.trim() || captionEn?.trim() || "";
+  const cap = gobricksCaptionNameOrFallback(caption, captionEn, legoColorName);
   const imgUrl = picture?.trim() || null;
   const gdsTrim = typeof gdsItemId === "string" && gdsItemId.trim() ? gdsItemId.trim() : "";
   const footLine = `乐高 ${partNum}`;
@@ -232,10 +238,11 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       op,
       replaceMeta.originalGobricksItemId,
       replaceMeta.originalGobricksCaption,
-      null,
+      replaceMeta.originalGobricksCaptionEn,
       replaceMeta.originalGobricksPicture,
       "before-gobricks",
-      "原·高砖"
+      "原·高砖",
+      replaceMeta.originalColorName
     );
     return og ? [og] : [];
   }, [replaceMeta]);
@@ -250,7 +257,8 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       item.gdsCaptionEn,
       item.gdsPicture,
       "current-gobricks",
-      "现·高砖"
+      "现·高砖",
+      item.colorName
     );
     return cg ? [cg] : [];
   }, [item.partNum, item.gdsItemId, item.gdsCaption, item.gdsCaptionEn, item.gdsPicture]);
@@ -423,8 +431,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     if (!gobricksVariants) return null;
     const hit = gobricksVariants.find((c) => c.colorId === colorId);
     if (!hit) return null;
-    if (hit.nameZh === hit.nameEn) return hit.nameZh;
-    return `${hit.nameZh} · ${hit.nameEn}`;
+    return formatGobricksBilingualColorLabel({ nameZh: hit.nameZh, nameEn: hit.nameEn });
   }, [colorId, gobricksVariants]);
 
   const handleApply = useCallback(async () => {
@@ -437,7 +444,6 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     setActionError(null);
     const hit = gobricksVariants?.find((c) => c.colorId === colorId);
     const pickedPicture = hit?.picture?.trim() || null;
-    const labelLine = [pickedPartName.trim(), selectedColorLabel].filter(Boolean).join(" / ");
     const res = await replaceBuildPartsSheetRowAction({
       subjectKind: context.subjectKind,
       subjectId: context.subjectId,
@@ -448,8 +454,10 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       gdsPicture: pickedPicture,
       gdsItemId: hit?.gdsItemId ?? null,
       gdsColorId: hit?.gdsColorId ?? null,
-      gdsCaption: labelLine || null,
+      gdsCaption: pickedPartName.trim() || null,
       gdsLegoColorId: String(colorId),
+      gdsColorNameZh: hit?.nameZh ?? null,
+      gdsColorNameEn: hit?.nameEn ?? null,
     });
     setBusy(false);
     if (!res.ok) {
@@ -467,7 +475,6 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     onReplaced,
     pickedPart,
     pickedPartName,
-    selectedColorLabel,
   ]);
 
   const backToParts = useCallback(() => {
@@ -733,10 +740,14 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                   {pickedPart}
                 </p>
                 {pickedPartName ? (
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]">{pickedPartName}</p>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--text)] sm:text-[12px]">
+                    {pickedPartName}
+                  </p>
                 ) : null}
                 {gobricksVariants && selectedColorLabel ? (
-                  <p className="mt-1 text-[10px] text-[var(--muted-2)] sm:text-[11px]">已选 {selectedColorLabel}</p>
+                  <p className="mt-1 text-[11px] leading-snug text-[var(--muted-2)] sm:text-[12px]">
+                    {selectedColorLabel}
+                  </p>
                 ) : null}
               </div>
             </div>
@@ -809,14 +820,12 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                                     </span>
                                   )}
                                 </div>
-                                <p className="line-clamp-2 text-center text-[11px] font-medium leading-snug text-[var(--text)] sm:text-[12px]">
-                                  {c.nameZh}
+                                <p className="line-clamp-3 text-center text-[11px] font-medium leading-snug text-[var(--text)] sm:text-[12px]">
+                                  {formatGobricksBilingualColorLabel({
+                                    nameZh: c.nameZh,
+                                    nameEn: c.nameEn,
+                                  })}
                                 </p>
-                                {c.nameEn !== c.nameZh ? (
-                                  <p className="line-clamp-2 text-center text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]">
-                                    {c.nameEn}
-                                  </p>
-                                ) : null}
                               </button>
                             </li>
                           );

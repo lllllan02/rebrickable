@@ -573,9 +573,9 @@ export function PartsSheetImport({
 
   const onExportCsv = useCallback(() => {
     if (!items || items.length === 0) return;
-    const text = rowsToCsv(items, skippedHeader);
+    const text = rowsToCsv(items, true);
     downloadText(`${exportStem}.csv`, text);
-  }, [exportStem, items, skippedHeader]);
+  }, [exportStem, items]);
 
   const onExportXml = useCallback(() => {
     if (!items || items.length === 0) return;

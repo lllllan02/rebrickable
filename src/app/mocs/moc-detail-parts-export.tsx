@@ -94,7 +94,7 @@ export function MocDetailPartsListExportBar({
         gdsUnitPrice: r.gdsUnitPrice ?? r.gobricksUnitPrice,
         rest: r.rest,
       })),
-      { includeHeader: branch.skippedHeader }
+      { includeHeader: true }
     );
     downloadText(`${filenameStem}.csv`, text);
   }, [branch, filenameStem]);

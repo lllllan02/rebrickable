@@ -5,6 +5,9 @@
 
 import { stripSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
 
+/** 与 {@link parseShortageCsv} 识别的表头行一致。 */
+export const SHORTAGE_CSV_HEADER_LINE = "Part,Color,Quantity,高砖单价,备注";
+
 export type ShortageCsvSerializeRow = {
   partNum: string;
   colorId: number;
@@ -28,7 +31,7 @@ export function serializeShortageCsv(
 ): string {
   const lines: string[] = [];
   if (opts?.includeHeader) {
-    lines.push("Part,Color,Quantity,高砖单价,备注");
+    lines.push(SHORTAGE_CSV_HEADER_LINE);
   }
   for (const r of rows) {
     lines.push(serializeShortageCsvLine(r));

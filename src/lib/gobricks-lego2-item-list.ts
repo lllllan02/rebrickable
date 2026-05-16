@@ -1,4 +1,5 @@
 import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
+import { readColorNamesFromLego2ApiRow } from "@/lib/gobricks-color-data";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
 export const GOBRICKS_LEGO2_ITEM_LIST_URL =
@@ -92,6 +93,8 @@ type GdsSnapshot = {
   gdsCaptionEn: string | null;
   gdsShelfState: string | null;
   gdsLegoColorId: string | null;
+  gdsColorNameZh: string | null;
+  gdsColorNameEn: string | null;
 };
 
 function emptyGdsSnapshot(): GdsSnapshot {
@@ -104,6 +107,8 @@ function emptyGdsSnapshot(): GdsSnapshot {
     gdsCaptionEn: null,
     gdsShelfState: null,
     gdsLegoColorId: null,
+    gdsColorNameZh: null,
+    gdsColorNameEn: null,
   };
 }
 
@@ -143,6 +148,9 @@ function gdsSnapshotFromApiRow(
     }
   }
   s.gdsUnitPrice = gobricksUnitPriceFromRow(row);
+  const colorNames = readColorNamesFromLego2ApiRow(row);
+  s.gdsColorNameZh = colorNames.zh;
+  s.gdsColorNameEn = colorNames.en;
   return s;
 }
 
@@ -180,6 +188,9 @@ function bump(
     prev.quantity += qty;
     prev.rests.push(rest);
     if (!prev.unitPrice && unitPrice) prev.unitPrice = unitPrice;
+    const incoming = gdsSnapshotFromApiRow(row, base);
+    if (!prev.gds.gdsColorNameZh && incoming.gdsColorNameZh) prev.gds.gdsColorNameZh = incoming.gdsColorNameZh;
+    if (!prev.gds.gdsColorNameEn && incoming.gdsColorNameEn) prev.gds.gdsColorNameEn = incoming.gdsColorNameEn;
   } else {
     acc.set(k, {
       quantity: qty,
@@ -211,6 +222,8 @@ function accRowToSerializedRow(
     gdsCaptionEn: g.gdsCaptionEn,
     gdsShelfState: g.gdsShelfState,
     gdsLegoColorId: g.gdsLegoColorId,
+    gdsColorNameZh: g.gdsColorNameZh,
+    gdsColorNameEn: g.gdsColorNameEn,
   };
 }
 

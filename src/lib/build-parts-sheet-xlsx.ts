@@ -19,6 +19,8 @@ export type PartsSheetXlsxRow = {
   gdsCaptionEn?: string | null;
   gdsShelfState?: string | null;
   gdsLegoColorId?: string | null;
+  gdsColorNameZh?: string | null;
+  gdsColorNameEn?: string | null;
   rest: string;
   partFound: boolean;
   partName: string | null;

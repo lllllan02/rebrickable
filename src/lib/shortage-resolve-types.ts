@@ -16,6 +16,10 @@ export type ShortageResolveItem = {
   gdsCaptionEn?: string | null;
   gdsShelfState?: string | null;
   gdsLegoColorId?: string | null;
+  /** 高砖中文色名 */
+  gdsColorNameZh?: string | null;
+  /** 高砖英文色名 */
+  gdsColorNameEn?: string | null;
   rest: string;
   partFound: boolean;
   partName: string | null;

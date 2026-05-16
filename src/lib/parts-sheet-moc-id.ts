@@ -194,6 +194,8 @@ function isShortageResolveItem(v: unknown): v is ShortageResolveItem {
     isOptionalStringOrNull(o.gdsCaptionEn) &&
     isOptionalStringOrNull(o.gdsShelfState) &&
     isOptionalStringOrNull(o.gdsLegoColorId) &&
+    isOptionalStringOrNull(o.gdsColorNameZh) &&
+    isOptionalStringOrNull(o.gdsColorNameEn) &&
     (o.imgUrl === null || typeof o.imgUrl === "string") &&
     (o.imgSource === null || o.imgSource === "color" || o.imgSource === "part")
   );

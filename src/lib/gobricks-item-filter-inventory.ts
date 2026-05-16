@@ -1,7 +1,11 @@
+import { readGobricksColorDataNames } from "@/lib/gobricks-color-data";
 import {
   fetchGobricksLego2ItemListJson,
   type GobricksTestListItem,
 } from "@/lib/gobricks-lego2-item-list";
+import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
+
+export { readGobricksColorDataNames } from "@/lib/gobricks-color-data";
 
 const GOBRICKS_ITEM_FILTER_URL = "https://gobricks.cn/frontend/v1/item/filter";
 const GOBRICKS_SEARCH_URL = "https://gobricks.cn/frontend/v1/search/search";
@@ -396,20 +400,6 @@ function readPictureUrl(row: Record<string, unknown>): string | null {
   return null;
 }
 
-function readColorDataExtra(cd: unknown): {
-  zh: string | null;
-  en: string | null;
-  hex: string | null;
-} {
-  if (typeof cd !== "object" || cd === null) return { zh: null, en: null, hex: null };
-  const o = cd as Record<string, unknown>;
-  const zh = typeof o.name === "string" && o.name.trim() ? o.name.trim() : null;
-  const en = typeof o.name_en === "string" && o.name_en.trim() ? o.name_en.trim() : null;
-  const raw = typeof o.color === "string" ? o.color.trim() : "";
-  const hex = raw ? raw.replace(/^#/, "") : null;
-  return { zh, en, hex };
-}
-
 /**
  * 请求高砖 `item/filter`（`hasInventory=YES` 时有货 SKU）。公开接口，无需登录。
  */
@@ -475,7 +465,7 @@ export async function fetchGobricksItemFilterInStockColors(
       if (!includeZero && inv <= 0) continue;
       const gdsColorId = readGdsColorId(row);
       if (!gdsColorId) continue;
-      const { zh, en, hex } = readColorDataExtra(row.color_data);
+      const { zh, en, hex } = readGobricksColorDataNames(row.color_data);
       out.push({
         legoColorId,
         inventory: Math.trunc(inv),
@@ -499,4 +489,55 @@ export async function fetchGobricksItemFilterInStockColors(
   } finally {
     clearTimeout(timer);
   }
+}
+
+const ENRICH_COLOR_NAMES_MAX_PRODUCTS = 80;
+
+/**
+ * `lego2ItemList` 同步结果常无 `color_data`；按 `gdsItemId` 的 product_id 调 item/filter 补全双语色名。
+ */
+export async function enrichGobricksSheetRowsWithColorNames(
+  rows: readonly GobricksSheetSerializedRow[],
+  init?: { signal?: AbortSignal }
+): Promise<GobricksSheetSerializedRow[]> {
+  const productIds = new Set<string>();
+  for (const row of rows) {
+    if (row.gdsColorNameZh?.trim()) continue;
+    const pid = parseGobricksProductIdFromGdsItemId(row.gdsItemId);
+    if (pid) productIds.add(pid);
+  }
+  if (productIds.size === 0) return [...rows];
+
+  const ids = [...productIds].slice(0, ENRICH_COLOR_NAMES_MAX_PRODUCTS);
+  const byProduct = new Map<string, Map<string, { zh: string | null; en: string | null }>>();
+
+  for (const pid of ids) {
+    if (init?.signal?.aborted) break;
+    const stock = await fetchGobricksItemFilterInStockColors(pid, {
+      signal: init?.signal,
+      includeZeroInventory: true,
+    });
+    if (!stock.ok) continue;
+    const m = new Map<string, { zh: string | null; en: string | null }>();
+    for (const cr of stock.rows) {
+      m.set(cr.legoColorId, { zh: cr.colorNameZh, en: cr.colorNameEn });
+    }
+    byProduct.set(pid, m);
+  }
+
+  return rows.map((row) => {
+    if (row.gdsColorNameZh?.trim()) return row;
+    const pid = parseGobricksProductIdFromGdsItemId(row.gdsItemId);
+    if (!pid) return row;
+    const palette = byProduct.get(pid);
+    if (!palette) return row;
+    const legoKey = (row.gdsLegoColorId?.trim() || String(row.colorId)).trim();
+    const hit = palette.get(legoKey);
+    if (!hit?.zh && !hit?.en) return row;
+    return {
+      ...row,
+      gdsColorNameZh: row.gdsColorNameZh?.trim() || hit.zh || null,
+      gdsColorNameEn: row.gdsColorNameEn?.trim() || hit.en || null,
+    };
+  });
 }

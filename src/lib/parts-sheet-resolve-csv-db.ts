@@ -166,6 +166,8 @@ export async function resolveGobricksSheetSerializedRowsInDb(
       gdsCaptionEn: r.gdsCaptionEn,
       gdsShelfState: r.gdsShelfState,
       gdsLegoColorId: r.gdsLegoColorId,
+      gdsColorNameZh: r.gdsColorNameZh ?? null,
+      gdsColorNameEn: r.gdsColorNameEn ?? null,
       rest: r.rest,
       partFound,
       partName,
@@ -179,7 +181,7 @@ export async function resolveGobricksSheetSerializedRowsInDb(
     };
   });
 
-  return { ok: true, skippedHeader: false, items };
+  return { ok: true, skippedHeader: true, items };
 }
 
 export async function resolveShortageCsvInDb(csv: string): Promise<ResolveShortageCsvDbResult> {

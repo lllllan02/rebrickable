@@ -7,6 +7,7 @@ import {
   setGobricksShortageSyncAtInDb,
   stripShortageBranchKeepingFullInDb,
 } from "@/app/mocs/moc-parts-sheet-actions";
+import { enrichGobricksSheetRowsWithColorNames } from "@/lib/gobricks-item-filter-inventory";
 import {
   bomToGobricksTestList,
   fetchGobricksLego2MergedPayload,
@@ -121,15 +122,27 @@ export async function syncGobricksShortageForSubjectAction(input: {
     clearTimeout(timer);
   }
 
-  const shortageRows = shortageSerializeRowsFromGobricksPayload(merged);
-  const fulfillmentRows = fulfillmentSerializeRowsFromGobricksPayload(merged);
+  const shortageSerialized = shortageSerializeRowsFromGobricksPayload(merged);
+  const fulfillmentSerialized = fulfillmentSerializeRowsFromGobricksPayload(merged);
 
-  const shortageResolved = await resolveGobricksSheetSerializedRowsInDb(shortageRows.rows);
+  const enrichTimer = setTimeout(() => controller.abort(), GOBRICKS_TIMEOUT_MS);
+  let shortageEnriched = shortageSerialized.rows;
+  let fulfillmentEnriched = fulfillmentSerialized.rows;
+  try {
+    [shortageEnriched, fulfillmentEnriched] = await Promise.all([
+      enrichGobricksSheetRowsWithColorNames(shortageSerialized.rows, { signal: controller.signal }),
+      enrichGobricksSheetRowsWithColorNames(fulfillmentSerialized.rows, { signal: controller.signal }),
+    ]);
+  } finally {
+    clearTimeout(enrichTimer);
+  }
+
+  const shortageResolved = await resolveGobricksSheetSerializedRowsInDb(shortageEnriched);
   if (!shortageResolved.ok) {
     return { ok: false, error: shortageResolved.error };
   }
 
-  const fulfillmentResolved = await resolveGobricksSheetSerializedRowsInDb(fulfillmentRows.rows);
+  const fulfillmentResolved = await resolveGobricksSheetSerializedRowsInDb(fulfillmentEnriched);
   if (!fulfillmentResolved.ok) {
     return { ok: false, error: fulfillmentResolved.error };
   }

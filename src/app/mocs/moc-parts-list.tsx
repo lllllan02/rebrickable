@@ -18,6 +18,7 @@ import {
   type ShortageReasonFilterId,
 } from "@/lib/shortage-reason-filter";
 import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT, PART_GRID_TILE_SHEET_ROW_MODIFIED } from "@/lib/part-grid-tile-classes";
+import { formatGobricksColorLine, gobricksCaptionNameOrFallback } from "@/lib/gobricks-display-caption";
 import {
   parseSheetRowReplaceMeta,
   restHasSheetRowReplacedMarker,
@@ -276,14 +277,17 @@ function SheetReplaceQuadRow({ label, children }: { label: string; children: Rea
   );
 }
 
-function sheetRowCurrentGobricksColorLine(item: ShortageResolveItem): string {
-  return item.gdsColorId?.trim()
-    ? `高砖色 ${item.gdsColorId.trim()}`
-    : item.gdsLegoColorId?.trim()
-      ? `接口乐高色 ${item.gdsLegoColorId.trim()}`
-      : item.colorName
-        ? `乐高色 ${item.colorName}（${item.colorId}）`
-        : `乐高色 ID ${item.colorId}`;
+function sheetRowGobricksDisplayName(item: ShortageResolveItem): string {
+  const name = gobricksCaptionNameOrFallback(item.gdsCaption, item.gdsCaptionEn, item.colorName);
+  return name || "—";
+}
+
+function sheetRowGobricksColorLine(item: ShortageResolveItem): string {
+  return formatGobricksColorLine({
+    nameZh: item.gdsColorNameZh,
+    nameEn: item.gdsColorNameEn,
+    catalogColorName: item.colorName,
+  });
 }
 
 const SHEET_QUAD_NO_MATCH =
@@ -354,7 +358,7 @@ function SheetReplaceCurrentLegoCell({
 function SheetReplaceCurrentGobricksCell({ title, item }: { title: string; item: ShortageResolveItem }) {
   const curGdsPic = item.gdsPicture?.trim() || null;
   const unitText = sheetRowGobricksUnitPriceText(item);
-  const curGobricksColorLine = sheetRowCurrentGobricksColorLine(item);
+  const curGobricksColorLine = sheetRowGobricksColorLine(item);
   return (
     <div className={SHEET_QUAD_CELL_SHELL}>
       <div className={SHEET_QUAD_CELL_TITLE}>{title}</div>
@@ -365,7 +369,7 @@ function SheetReplaceCurrentGobricksCell({ title, item }: { title: string; item:
             <span className="break-all font-mono">{item.gdsItemId?.trim() ?? "—"}</span>
           </SheetReplaceQuadRow>
           <SheetReplaceQuadRow label="名称">
-            <span className="line-clamp-3">{item.gdsCaption?.trim() ?? "—"}</span>
+            <span className="line-clamp-3">{sheetRowGobricksDisplayName(item)}</span>
           </SheetReplaceQuadRow>
           <SheetReplaceQuadRow label="颜色">{curGobricksColorLine}</SheetReplaceQuadRow>
           <SheetReplaceQuadRow label="单价（元）">
@@ -415,13 +419,21 @@ function SheetReplaceFourQuadrants({
         ? `色 ID ${ocid}`
         : "—";
 
-  const origGobricksCaption = replaceMeta.originalGobricksCaption?.trim() || "—";
+  const origGobricksCaption =
+    gobricksCaptionNameOrFallback(
+      replaceMeta.originalGobricksCaption,
+      replaceMeta.originalGobricksCaptionEn,
+      replaceMeta.originalColorName
+    ) || "—";
   const ogc = replaceMeta.originalGobricksColorId?.trim();
   const oglc = replaceMeta.originalGobricksLegoColorId?.trim();
-  const origGobricksColorLine = ogc
-    ? `高砖色 ${ogc}`
-    : oglc
-      ? `接口乐高色 ${oglc}`
+  const origGobricksColorLine =
+    ocid != null
+      ? formatGobricksColorLine({
+          nameZh: replaceMeta.originalGobricksColorNameZh,
+          nameEn: replaceMeta.originalGobricksColorNameEn,
+          catalogColorName: replaceMeta.originalColorName,
+        })
       : "—";
   const origGobricksPrice = replaceMeta.originalGobricksUnitPrice?.trim() ?? "—";
 
@@ -552,17 +564,13 @@ function GobricksCatalogAsideFacts({
   compact: boolean;
 }) {
   const unit = item.gdsUnitPrice?.trim() || item.gobricksUnitPrice?.trim() || null;
-  const cap = item.gdsCaption?.trim();
+  const cap = gobricksCaptionNameOrFallback(item.gdsCaption, item.gdsCaptionEn, item.colorName);
   const gid = item.gdsItemId?.trim() ?? "";
 
   const rowLabel = "text-[10px] font-medium text-[var(--muted-2)] sm:text-[11px]";
   const rowVal = "mt-0.5 text-[12px] text-[var(--text)] sm:text-[13px]";
 
-  const colorLine = item.gdsColorId?.trim()
-    ? `高砖色 ${item.gdsColorId.trim()}`
-    : item.gdsLegoColorId?.trim()
-      ? `接口乐高色 ${item.gdsLegoColorId.trim()}`
-      : "—";
+  const colorLine = sheetRowGobricksColorLine(item);
 
   return (
     <div className={`min-w-0 flex-1 ${compact ? "space-y-1.5" : "space-y-2"}`}>
@@ -633,16 +641,21 @@ function GobricksDetailSection({
             <dd className="mt-0.5 break-all font-mono text-[var(--text)]">{item.gdsItemId.trim()}</dd>
           </div>
         ) : null}
-        {item.gdsCaption?.trim() && !hideChineseCaptionRow ? (
+        {gobricksCaptionNameOrFallback(item.gdsCaption, item.gdsCaptionEn, item.colorName) &&
+        !hideChineseCaptionRow ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称（中文）</dt>
-            <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaption.trim()}</dd>
+            <dd className="mt-0.5 text-[var(--text)]">
+              {gobricksCaptionNameOrFallback(item.gdsCaption, item.gdsCaptionEn, item.colorName)}
+            </dd>
           </div>
         ) : null}
-        {item.gdsCaptionEn?.trim() ? (
+        {gobricksCaptionNameOrFallback(item.gdsCaptionEn, null, item.colorName) ? (
           <div>
             <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称（英文）</dt>
-            <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaptionEn.trim()}</dd>
+            <dd className="mt-0.5 text-[var(--text)]">
+              {gobricksCaptionNameOrFallback(item.gdsCaptionEn, null, item.colorName)}
+            </dd>
           </div>
         ) : null}
         {item.gdsColorId?.trim() ? (
@@ -1088,7 +1101,9 @@ function MocPartDetailBody({
                       forceShowUnitPrice={fulfillmentListDetail}
                       compact
                       hidePictureUrlRow={hideGdsPictureUrl}
-                      hideChineseCaptionRow={Boolean(item.gdsCaption?.trim())}
+                      hideChineseCaptionRow={Boolean(
+                        gobricksCaptionNameOrFallback(item.gdsCaption, item.gdsCaptionEn, item.colorName)
+                      )}
                     />
                   </>
                 ) : (

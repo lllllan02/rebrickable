@@ -22,8 +22,14 @@ type EncodedPayload = {
   oln?: string;
   /** 原乐高颜色名 */
   ocn?: string;
-  /** 原高砖商品名 / 标题 */
+  /** 原高砖商品名 / 标题（中文） */
   ogx?: string;
+  /** 原高砖商品名 / 标题（英文） */
+  ogxe?: string;
+  /** 原高砖中文色名 */
+  ogcz?: string;
+  /** 原高砖英文色名 */
+  ogce?: string;
   /** 原高砖 color_id */
   ogc?: string;
   /** 原高砖接口乐高色 id */
@@ -39,6 +45,9 @@ function snapshotToPayloadFields(snapshot: SheetRowReplaceSnapshot): Partial<Enc
   const oln = clipSnapshotStr(snapshot.originalLegoPartName);
   const ocn = clipSnapshotStr(snapshot.originalColorName);
   const ogx = clipSnapshotStr(snapshot.originalGobricksCaption);
+  const ogxe = clipSnapshotStr(snapshot.originalGobricksCaptionEn);
+  const ogcz = clipSnapshotStr(snapshot.originalGobricksColorNameZh);
+  const ogce = clipSnapshotStr(snapshot.originalGobricksColorNameEn);
   const ogc = clipSnapshotStr(snapshot.originalGobricksColorId);
   const ogl = clipSnapshotStr(snapshot.originalGobricksLegoColorId);
   const ogp = clipSnapshotStr(snapshot.originalGobricksUnitPrice);
@@ -49,6 +58,9 @@ function snapshotToPayloadFields(snapshot: SheetRowReplaceSnapshot): Partial<Enc
   if (oln) out.oln = oln;
   if (ocn) out.ocn = ocn;
   if (ogx) out.ogx = ogx;
+  if (ogxe) out.ogxe = ogxe;
+  if (ogcz) out.ogcz = ogcz;
+  if (ogce) out.ogce = ogce;
   if (ogc) out.ogc = ogc;
   if (ogl) out.ogl = ogl;
   if (ogp) out.ogp = ogp;
@@ -90,6 +102,9 @@ function decodeReplacePayload(payload: string): EncodedPayload | null {
       oln: typeof o.oln === "string" && o.oln.trim() ? o.oln.trim() : undefined,
       ocn: typeof o.ocn === "string" && o.ocn.trim() ? o.ocn.trim() : undefined,
       ogx: typeof o.ogx === "string" && o.ogx.trim() ? o.ogx.trim() : undefined,
+      ogxe: typeof o.ogxe === "string" && o.ogxe.trim() ? o.ogxe.trim() : undefined,
+      ogcz: typeof o.ogcz === "string" && o.ogcz.trim() ? o.ogcz.trim() : undefined,
+      ogce: typeof o.ogce === "string" && o.ogce.trim() ? o.ogce.trim() : undefined,
       ogc: typeof o.ogc === "string" && o.ogc.trim() ? o.ogc.trim() : undefined,
       ogl: typeof o.ogl === "string" && o.ogl.trim() ? o.ogl.trim() : undefined,
       ogp: typeof o.ogp === "string" && o.ogp.trim() ? o.ogp.trim() : undefined,
@@ -114,6 +129,9 @@ export type SheetRowReplaceSnapshot = {
   originalLegoPartName: string | null;
   originalColorName: string | null;
   originalGobricksCaption: string | null;
+  originalGobricksCaptionEn: string | null;
+  originalGobricksColorNameZh: string | null;
+  originalGobricksColorNameEn: string | null;
   originalGobricksColorId: string | null;
   originalGobricksLegoColorId: string | null;
   originalGobricksUnitPrice: string | null;
@@ -129,6 +147,9 @@ export type ParsedSheetRowReplaceMeta = {
   originalLegoPartName: string | null;
   originalColorName: string | null;
   originalGobricksCaption: string | null;
+  originalGobricksCaptionEn: string | null;
+  originalGobricksColorNameZh: string | null;
+  originalGobricksColorNameEn: string | null;
   originalGobricksColorId: string | null;
   originalGobricksLegoColorId: string | null;
   originalGobricksUnitPrice: string | null;
@@ -145,6 +166,9 @@ function payloadToParsed(d: EncodedPayload, hasMarker: true): ParsedSheetRowRepl
     originalLegoPartName: d.oln ?? null,
     originalColorName: d.ocn ?? null,
     originalGobricksCaption: d.ogx ?? null,
+    originalGobricksCaptionEn: d.ogxe ?? null,
+    originalGobricksColorNameZh: d.ogcz ?? null,
+    originalGobricksColorNameEn: d.ogce ?? null,
     originalGobricksColorId: d.ogc ?? null,
     originalGobricksLegoColorId: d.ogl ?? null,
     originalGobricksUnitPrice: d.ogp ?? null,
@@ -162,6 +186,9 @@ export function parseSheetRowReplaceMeta(rest: string): ParsedSheetRowReplaceMet
     originalLegoPartName: null,
     originalColorName: null,
     originalGobricksCaption: null,
+    originalGobricksCaptionEn: null,
+    originalGobricksColorNameZh: null,
+    originalGobricksColorNameEn: null,
     originalGobricksColorId: null,
     originalGobricksLegoColorId: null,
     originalGobricksUnitPrice: null,
@@ -189,6 +216,9 @@ function snapshotHasAnyData(s: SheetRowReplaceSnapshot): boolean {
       s.originalLegoPartName ||
       s.originalColorName ||
       s.originalGobricksCaption ||
+      s.originalGobricksCaptionEn ||
+      s.originalGobricksColorNameZh ||
+      s.originalGobricksColorNameEn ||
       s.originalGobricksColorId ||
       s.originalGobricksLegoColorId ||
       s.originalGobricksUnitPrice
@@ -203,6 +233,9 @@ export type RowSnapshotSource = {
   partName?: string | null;
   colorName?: string | null;
   gdsCaption?: string | null;
+  gdsCaptionEn?: string | null;
+  gdsColorNameZh?: string | null;
+  gdsColorNameEn?: string | null;
   gdsColorId?: string | null;
   gdsLegoColorId?: string | null;
   gdsUnitPrice?: string | null;
@@ -218,6 +251,9 @@ export function buildSheetRowReplaceSnapshotFromRow(row: RowSnapshotSource): She
     originalLegoPartName: clipSnapshotStr(row.partName ?? null),
     originalColorName: clipSnapshotStr(row.colorName ?? null),
     originalGobricksCaption: clipSnapshotStr(row.gdsCaption ?? null),
+    originalGobricksCaptionEn: clipSnapshotStr(row.gdsCaptionEn ?? null),
+    originalGobricksColorNameZh: clipSnapshotStr(row.gdsColorNameZh ?? null),
+    originalGobricksColorNameEn: clipSnapshotStr(row.gdsColorNameEn ?? null),
     originalGobricksColorId: clipSnapshotStr(row.gdsColorId ?? null),
     originalGobricksLegoColorId: clipSnapshotStr(row.gdsLegoColorId ?? null),
     originalGobricksUnitPrice: clipSnapshotStr(unit),
@@ -235,6 +271,9 @@ function snapshotFromParsedReplaceMeta(m: ParsedSheetRowReplaceMeta): SheetRowRe
     originalLegoPartName: m.originalLegoPartName,
     originalColorName: m.originalColorName,
     originalGobricksCaption: m.originalGobricksCaption,
+    originalGobricksCaptionEn: m.originalGobricksCaptionEn,
+    originalGobricksColorNameZh: m.originalGobricksColorNameZh,
+    originalGobricksColorNameEn: m.originalGobricksColorNameEn,
     originalGobricksColorId: m.originalGobricksColorId,
     originalGobricksLegoColorId: m.originalGobricksLegoColorId,
     originalGobricksUnitPrice: m.originalGobricksUnitPrice,

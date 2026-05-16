@@ -988,6 +988,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
   gdsCaption?: string | null;
   /** 高砖侧乐高色 ID（字符串），通常与 `colorId` 一致 */
   gdsLegoColorId?: string | null;
+  gdsColorNameZh?: string | null;
+  gdsColorNameEn?: string | null;
 }): Promise<ReplaceBuildPartsSheetRowResult> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
@@ -1062,6 +1064,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
     gdsCaptionEn: null,
     gdsShelfState: null,
     gdsLegoColorId: gdsLegoColorIdIn ?? String(Math.trunc(input.colorId)),
+    gdsColorNameZh: input.gdsColorNameZh?.trim() || null,
+    gdsColorNameEn: input.gdsColorNameEn?.trim() || null,
   };
 
   const resolved = await resolveGobricksSheetSerializedRowsInDb([serialized]);
@@ -1075,6 +1079,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
 
   const merged: ShortageResolveItem = {
     ...newRow,
+    gdsColorNameZh: serialized.gdsColorNameZh ?? newRow.gdsColorNameZh ?? null,
+    gdsColorNameEn: serialized.gdsColorNameEn ?? newRow.gdsColorNameEn ?? null,
     lineNumber: old.lineNumber,
     quantity: old.quantity,
     ...(preservedUnit != null
@@ -1242,11 +1248,15 @@ export async function restoreBuildPartsSheetRowAction(input: {
   let restoreGdsItemId: string;
   let restoreGdsColorId: string;
   let restoreGdsPicture: string | null;
+  let restoreColorNameZh: string | null = meta.originalGobricksColorNameZh?.trim() || null;
+  let restoreColorNameEn: string | null = meta.originalGobricksColorNameEn?.trim() || null;
 
   if (hit) {
     restoreGdsItemId = hit.gdsItemId;
     restoreGdsColorId = hit.gdsColorId;
     restoreGdsPicture = hit.picture?.trim() || null;
+    restoreColorNameZh = restoreColorNameZh || hit.nameZh?.trim() || null;
+    restoreColorNameEn = restoreColorNameEn || hit.nameEn?.trim() || null;
   } else if (originalGds && parseGobricksProductIdFromGdsItemId(originalGds)) {
     const gcd =
       parseGdsColorSegmentFromGdsItemId(originalGds) ?? meta.originalGobricksColorId?.trim() ?? null;
@@ -1280,10 +1290,12 @@ export async function restoreBuildPartsSheetRowAction(input: {
     gdsColorId: restoreGdsColorId,
     gdsPicture: restoreGdsPicture,
     gdsUnitPrice: preservedUnit,
-    gdsCaption: null,
-    gdsCaptionEn: null,
+    gdsCaption: meta.originalGobricksCaption?.trim() || null,
+    gdsCaptionEn: meta.originalGobricksCaptionEn?.trim() || null,
     gdsShelfState: null,
     gdsLegoColorId: String(colorId),
+    gdsColorNameZh: restoreColorNameZh,
+    gdsColorNameEn: restoreColorNameEn,
   };
 
   const resolved = await resolveGobricksSheetSerializedRowsInDb([serialized]);
@@ -1302,6 +1314,10 @@ export async function restoreBuildPartsSheetRowAction(input: {
     ...(preservedUnit != null
       ? { gobricksUnitPrice: preservedUnit, gdsUnitPrice: preservedUnit }
       : {}),
+    gdsCaption: serialized.gdsCaption ?? newRow.gdsCaption ?? null,
+    gdsCaptionEn: serialized.gdsCaptionEn ?? newRow.gdsCaptionEn ?? null,
+    gdsColorNameZh: serialized.gdsColorNameZh ?? newRow.gdsColorNameZh ?? null,
+    gdsColorNameEn: serialized.gdsColorNameEn ?? newRow.gdsColorNameEn ?? null,
     rest: cleanRest,
   };
 

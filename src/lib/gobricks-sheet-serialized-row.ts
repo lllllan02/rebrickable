@@ -16,4 +16,8 @@ export type GobricksSheetSerializedRow = {
   gdsCaptionEn: string | null;
   gdsShelfState: string | null;
   gdsLegoColorId: string | null;
+  /** 高砖侧中文色名（color_data.name） */
+  gdsColorNameZh?: string | null;
+  /** 高砖侧英文色名（color_data.name_en） */
+  gdsColorNameEn?: string | null;
 };

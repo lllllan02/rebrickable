@@ -44,6 +44,8 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       !isOptionalExportString(o.gdsCaptionEn) ||
       !isOptionalExportString(o.gdsShelfState) ||
       !isOptionalExportString(o.gdsLegoColorId) ||
+      !isOptionalExportString(o.gdsColorNameZh) ||
+      !isOptionalExportString(o.gdsColorNameEn) ||
       typeof o.partFound !== "boolean" ||
       (o.partName !== null && typeof o.partName !== "string") ||
       (o.partCatName !== null && typeof o.partCatName !== "string") ||
@@ -78,6 +80,10 @@ export function parseExportItems(data: unknown): PartsSheetXlsxRow[] | null {
       gdsShelfState: typeof o.gdsShelfState === "string" ? o.gdsShelfState : o.gdsShelfState === null ? null : undefined,
       gdsLegoColorId:
         typeof o.gdsLegoColorId === "string" ? o.gdsLegoColorId : o.gdsLegoColorId === null ? null : undefined,
+      gdsColorNameZh:
+        typeof o.gdsColorNameZh === "string" ? o.gdsColorNameZh : o.gdsColorNameZh === null ? null : undefined,
+      gdsColorNameEn:
+        typeof o.gdsColorNameEn === "string" ? o.gdsColorNameEn : o.gdsColorNameEn === null ? null : undefined,
       rest: o.rest,
       partFound: o.partFound,
       partName: o.partName as string | null,
