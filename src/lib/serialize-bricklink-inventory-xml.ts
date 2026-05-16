@@ -1,6 +1,6 @@
 /**
  * BrickLink「心愿单 / Wanted List」批量上传用的紧凑 XML（根节点 INVENTORY）。
- * 字段与当前零件表一致：ITEMID 为零件号，COLOR 为站内解析所用的乐高色 ID（与 CSV 第二列同源）。
+ * ITEMID 为零件号；COLOR 为 BrickLink 色号（由列表中的 Rebrickable 色 ID 映射，见 `rebrickable-bricklink-color`）。
  */
 
 export type BrickLinkInventoryXmlRow = {

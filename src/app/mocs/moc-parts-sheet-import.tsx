@@ -17,6 +17,7 @@ import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/l
 import { buildPartsSheetExportStem, MAX_PARTS_SHEET_EXPORT_STEM_LEN } from "@/lib/parts-sheet-export-filename";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
+import { partsSheetRowToBrickLinkInventoryXmlRow } from "@/lib/parts-sheet-export-lego-color";
 import { serializeBrickLinkInventoryXml } from "@/lib/serialize-bricklink-inventory-xml";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 import {
@@ -579,13 +580,7 @@ export function PartsSheetImport({
 
   const onExportXml = useCallback(() => {
     if (!items || items.length === 0) return;
-    const text = serializeBrickLinkInventoryXml(
-      items.map((r) => ({
-        partNum: r.partNum,
-        colorId: r.colorId,
-        quantity: r.quantity,
-      }))
-    );
+    const text = serializeBrickLinkInventoryXml(items.map(partsSheetRowToBrickLinkInventoryXmlRow));
     downloadText(`${exportStem}.xml`, text, "application/xml;charset=utf-8");
   }, [exportStem, items]);
 
@@ -928,7 +923,7 @@ export function PartsSheetImport({
               type="button"
               className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
               disabled={loading || exportBusy || mocActionBusy}
-              title="BrickLink 心愿单 XML，零件号与色号与 CSV 一致"
+              title="BrickLink XML：COLOR 为 BrickLink 色号（由列表 Rebrickable 色 ID 映射，如绿 2→6）"
               onClick={onExportXml}
             >
               导出 XML

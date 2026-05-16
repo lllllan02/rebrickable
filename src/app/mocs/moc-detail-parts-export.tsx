@@ -13,6 +13,7 @@ import {
   countFulfillmentModifiedExportable,
   serializeFulfillmentModifiedCsv,
 } from "@/lib/fulfillment-modified-csv-export";
+import { partsSheetRowToBrickLinkInventoryXmlRow } from "@/lib/parts-sheet-export-lego-color";
 import { serializeBrickLinkInventoryXml } from "@/lib/serialize-bricklink-inventory-xml";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
@@ -150,13 +151,7 @@ export function MocDetailPartsListExportBar({
   const onExportXml = useCallback(() => {
     if (!branch || branch.items.length === 0) return;
     setExportError(null);
-    const text = serializeBrickLinkInventoryXml(
-      branch.items.map((r) => ({
-        partNum: r.partNum,
-        colorId: r.colorId,
-        quantity: r.quantity,
-      }))
-    );
+    const text = serializeBrickLinkInventoryXml(branch.items.map(partsSheetRowToBrickLinkInventoryXmlRow));
     downloadText(`${filenameStem}.xml`, text, "application/xml;charset=utf-8");
   }, [branch, filenameStem]);
 
@@ -254,7 +249,7 @@ export function MocDetailPartsListExportBar({
           title={
             !canExport
               ? `当前未选中或未上传${tabLabel}`
-              : "导出 BrickLink 心愿单 XML（零件号、色号、数量与 CSV 一致）"
+              : "导出 BrickLink 心愿单 XML（COLOR 为 BrickLink 色号；列表色 ID 为 Rebrickable，如绿 2→6）"
           }
           onClick={onExportXml}
         >
