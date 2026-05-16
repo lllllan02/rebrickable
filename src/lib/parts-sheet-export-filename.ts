@@ -1,0 +1,49 @@
+import { BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { MOC_PROFILE_MAX_DISPLAY_NAME } from "@/lib/moc-profile-parse";
+
+/** 与 {@link parseExportFilenameStem} 上限协调，避免服务端截断过多 */
+export const MAX_PARTS_SHEET_EXPORT_STEM_LEN = 200;
+
+export type PartsSheetExportBranch = "full" | "shortage" | "fulfillment";
+
+const BRANCH_LABEL: Record<PartsSheetExportBranch, string> = {
+  full: "完整零件表",
+  shortage: "缺件表",
+  fulfillment: "配货表",
+};
+
+/** 去掉路径/通配等不安全字符，并限制长度 */
+export function sanitizePartsSheetExportSegment(raw: string, maxLen: number): string {
+  let s = raw
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .replace(/[\x00-\x1f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  s = s.replace(/^\.+|\.+$/g, "").trim();
+  if (s.length > maxLen) s = s.slice(0, maxLen).trim();
+  return s;
+}
+
+/**
+ * 导出文件名的主体（不含扩展名）。
+ * 规格：`{id}-{name}-{内容}`；乐高官方套装（subjectKind=set）前加 `LEGO-`。
+ */
+export function buildPartsSheetExportStem(input: {
+  kind: BuildSubjectKind;
+  subjectId: string;
+  displayName: string;
+  branch: PartsSheetExportBranch;
+}): string {
+  const idRaw = input.subjectId.trim();
+  const id = sanitizePartsSheetExportSegment(idRaw, 128) || "unknown";
+  const nameRaw = input.displayName.trim() || "未命名";
+  const name =
+    sanitizePartsSheetExportSegment(nameRaw, MOC_PROFILE_MAX_DISPLAY_NAME) || "未命名";
+  const content = BRANCH_LABEL[input.branch];
+  const body = `${id}-${name}-${content}`;
+  const prefix = input.kind === BUILD_SUBJECT_SET ? "LEGO-" : "";
+  let stem = `${prefix}${body}`;
+  stem = sanitizePartsSheetExportSegment(stem, MAX_PARTS_SHEET_EXPORT_STEM_LEN);
+  if (!stem) stem = `${prefix}${id}-未命名-${content}`;
+  return stem;
+}

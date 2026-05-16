@@ -629,19 +629,19 @@ function GobricksDetailSection({
       >
         {item.gdsItemId?.trim() ? (
           <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品 ID</dt>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">ID</dt>
             <dd className="mt-0.5 break-all font-mono text-[var(--text)]">{item.gdsItemId.trim()}</dd>
           </div>
         ) : null}
         {item.gdsCaption?.trim() && !hideChineseCaptionRow ? (
           <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品名（中文）</dt>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称（中文）</dt>
             <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaption.trim()}</dd>
           </div>
         ) : null}
         {item.gdsCaptionEn?.trim() ? (
           <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品名（英文）</dt>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">名称（英文）</dt>
             <dd className="mt-0.5 text-[var(--text)]">{item.gdsCaptionEn.trim()}</dd>
           </div>
         ) : null}
@@ -671,7 +671,7 @@ function GobricksDetailSection({
         ) : null}
         {item.gdsPicture?.trim() && !hidePictureUrlRow ? (
           <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">商品图 URL</dt>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">图片 URL</dt>
             <dd className="mt-0.5 break-all font-mono text-xs text-[var(--muted)]">{item.gdsPicture.trim()}</dd>
           </div>
         ) : null}

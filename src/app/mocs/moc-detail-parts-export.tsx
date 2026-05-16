@@ -4,12 +4,13 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
-import { buildSubjectUi } from "@/lib/build-ui";
+import { buildPartsSheetExportStem } from "@/lib/parts-sheet-export-filename";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
+import { serializeBrickLinkInventoryXml } from "@/lib/serialize-bricklink-inventory-xml";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+function downloadText(filename: string, text: string, mimeType = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -24,6 +25,8 @@ function downloadText(filename: string, text: string) {
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
+  /** 用于导出文件名中间段；可与资料页显示名一致 */
+  exportDisplayName: string;
   listTab: "full" | "shortage" | "fulfillment";
   initialFull: InitialMocSheetFromServer | null;
   initialShortage: InitialMocSheetFromServer | null;
@@ -33,6 +36,7 @@ type Props = {
 export function MocDetailPartsListExportBar({
   subjectKind = BUILD_SUBJECT_MOC,
   subjectId,
+  exportDisplayName,
   listTab,
   initialFull,
   initialShortage,
@@ -52,10 +56,16 @@ export function MocDetailPartsListExportBar({
     writingFile: boolean;
   } | null>(null);
 
-  const filenameStem = useMemo(() => {
-    const ui = buildSubjectUi(subjectKind);
-    return ui.exportFilenameStem(subjectId, listTab);
-  }, [listTab, subjectId, subjectKind]);
+  const filenameStem = useMemo(
+    () =>
+      buildPartsSheetExportStem({
+        kind: subjectKind,
+        subjectId,
+        displayName: exportDisplayName,
+        branch: listTab,
+      }),
+    [exportDisplayName, listTab, subjectId, subjectKind]
+  );
 
   useEffect(() => {
     if (!exportProgress) return;
@@ -87,6 +97,19 @@ export function MocDetailPartsListExportBar({
       { includeHeader: branch.skippedHeader }
     );
     downloadText(`${filenameStem}.csv`, text);
+  }, [branch, filenameStem]);
+
+  const onExportXml = useCallback(() => {
+    if (!branch || branch.items.length === 0) return;
+    setExportError(null);
+    const text = serializeBrickLinkInventoryXml(
+      branch.items.map((r) => ({
+        partNum: r.partNum,
+        colorId: r.colorId,
+        quantity: r.quantity,
+      }))
+    );
+    downloadText(`${filenameStem}.xml`, text, "application/xml;charset=utf-8");
   }, [branch, filenameStem]);
 
   const onExportXlsx = useCallback(async () => {
@@ -158,6 +181,19 @@ export function MocDetailPartsListExportBar({
           onClick={onExportCsv}
         >
           CSV
+        </button>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium leading-none text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-45"
+          disabled={!canExport || exportBusy}
+          title={
+            !canExport
+              ? `当前未选中或未上传${tabLabel}`
+              : "导出 BrickLink 心愿单 XML（零件号、色号、数量与 CSV 一致）"
+          }
+          onClick={onExportXml}
+        >
+          XML
         </button>
       </div>
       <p className="text-right text-[10px] text-[var(--muted)] sm:hidden">导出「{tabLabel}」</p>

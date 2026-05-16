@@ -138,6 +138,7 @@ export default async function MocDetailPage({ params }: Props) {
 
       <MocDetailPartsSection
         subjectId={mocId}
+        exportDisplayName={initialDisplayName}
         initialFull={initialFull}
         initialShortage={initialShortage}
         initialFulfillment={initialFulfillment}

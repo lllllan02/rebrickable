@@ -258,6 +258,7 @@ export default async function SetDetailPage({ params }: Props) {
       <MocDetailPartsSection
         subjectKind={BUILD_SUBJECT_SET}
         subjectId={setNum}
+        exportDisplayName={(initialDisplayName || catalog?.name || "").trim()}
         initialFull={null}
         initialShortage={initialShortage}
         initialFulfillment={initialFulfillment}

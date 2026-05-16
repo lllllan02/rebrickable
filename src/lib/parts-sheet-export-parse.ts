@@ -1,4 +1,5 @@
 import type { PartsSheetXlsxRow } from "@/lib/build-parts-sheet-xlsx";
+import { MAX_PARTS_SHEET_EXPORT_STEM_LEN } from "@/lib/parts-sheet-export-filename";
 import type { PartsSheetTag } from "@/lib/parts-sheet-tags";
 
 export const MAX_EXPORT_ROWS = 2500;
@@ -100,7 +101,7 @@ export function parseExportFilenameStem(body: unknown): string {
     "filenameStem" in body &&
     typeof (body as { filenameStem: unknown }).filenameStem === "string"
   ) {
-    const s = (body as { filenameStem: string }).filenameStem.trim().slice(0, 120);
+    const s = (body as { filenameStem: string }).filenameStem.trim().slice(0, MAX_PARTS_SHEET_EXPORT_STEM_LEN);
     if (s) stem = s.replace(/[/\\?%*:|"<>]/g, "-");
   }
   return stem;

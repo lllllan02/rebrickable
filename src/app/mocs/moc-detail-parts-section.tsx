@@ -109,6 +109,8 @@ type Props = {
   } | null;
   /** 当前 MOC/套装主体已在「我的拥有」中标记 */
   parentSubjectOwned?: boolean;
+  /** 导出文件名用显示名（套装无自定义名时传目录名） */
+  exportDisplayName: string;
 };
 
 export function MocDetailPartsSection({
@@ -121,6 +123,7 @@ export function MocDetailPartsSection({
   initialShortageClearedAt = null,
   officialInventory = null,
   parentSubjectOwned = false,
+  exportDisplayName,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const listHref = buildSubjectListPath(subjectKind);
@@ -283,6 +286,7 @@ export function MocDetailPartsSection({
           initialFulfillmentSheet={initialFulfillment}
           initialShortageClearedAt={initialShortageClearedAt}
           initialMocLoadError={initialMocLoadError}
+          exportDisplayName={exportDisplayName}
           mocDetailEmbed
         />
 
@@ -404,6 +408,7 @@ export function MocDetailPartsSection({
                 <MocDetailPartsListExportBar
                   subjectKind={subjectKind}
                   subjectId={subjectId}
+                  exportDisplayName={exportDisplayName}
                   listTab={listTab}
                   initialFull={initialFull}
                   initialShortage={initialShortage}

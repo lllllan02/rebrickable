@@ -331,7 +331,7 @@ export async function fetchGobricksSearchItemHits(
     const hits: GobricksSearchItemHit[] = [];
     for (const [productId, { inventory, row, legoPartNum }] of bestByProduct) {
       const title = readSearchRowTitle(row);
-      const name = title || `${legoPartNum} · 商品 ${productId}`;
+      const name = title || legoPartNum;
       hits.push({
         productId,
         legoPartNum,

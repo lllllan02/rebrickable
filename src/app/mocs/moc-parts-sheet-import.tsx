@@ -14,9 +14,10 @@ import {
 } from "./moc-parts-sheet-actions";
 import { syncGobricksShortageForSubjectWithModifiedConfirm } from "./gobricks-shortage-sync-client";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
-import { buildSubjectUi } from "@/lib/build-ui";
+import { buildPartsSheetExportStem, MAX_PARTS_SHEET_EXPORT_STEM_LEN } from "@/lib/parts-sheet-export-filename";
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
+import { serializeBrickLinkInventoryXml } from "@/lib/serialize-bricklink-inventory-xml";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
 import {
   getSheetFilterOptionsFromItems,
@@ -52,8 +53,8 @@ function rowsToCsv(rows: ShortageRow[], includeHeader: boolean): string {
   );
 }
 
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+function downloadText(filename: string, text: string, mimeType = "text/csv;charset=utf-8") {
+  const blob = new Blob([text], { type: mimeType });
   downloadBlob(filename, blob);
 }
 
@@ -104,6 +105,8 @@ type PartsSheetImportProps = {
   initialMocLoadError?: string | null;
   /** 嵌在详情页：锁定主体 ID，保存后刷新本页数据 */
   mocDetailEmbed?: boolean;
+  /** 导出/展示用名称（与详情资料一致）；套装可为目录名 */
+  exportDisplayName?: string;
 };
 
 export function PartsSheetImport({
@@ -115,8 +118,8 @@ export function PartsSheetImport({
   initialShortageClearedAt = null,
   initialMocLoadError,
   mocDetailEmbed = false,
+  exportDisplayName = "",
 }: PartsSheetImportProps) {
-  const sheetUi = useMemo(() => buildSubjectUi(buildSubjectKind), [buildSubjectKind]);
   const noFullSheetForSet = buildSubjectKind === BUILD_SUBJECT_SET;
   const router = useRouter();
   const clearedByEditRef = useRef(false);
@@ -464,10 +467,19 @@ export function PartsSheetImport({
     }
   }, [colorEditRow, items, selectedColorId, skippedHeader]);
 
-  const exportStem = useMemo(
-    () => (fileName?.replace(/\.csv$/i, "") ?? "parts-sheet") + "-edited",
-    [fileName]
-  );
+  const exportStem = useMemo(() => {
+    const qid = (requestedLoadMocId ?? "").trim();
+    if (qid) {
+      return buildPartsSheetExportStem({
+        kind: buildSubjectKind,
+        subjectId: qid,
+        displayName: exportDisplayName,
+        branch: "full",
+      });
+    }
+    const base = fileName?.replace(/\.csv$/i, "").trim() || "parts-sheet";
+    return base.replace(/[/\\?%*:|"<>]/g, "-").slice(0, MAX_PARTS_SHEET_EXPORT_STEM_LEN);
+  }, [buildSubjectKind, exportDisplayName, fileName, requestedLoadMocId]);
 
   useEffect(() => {
     const qid = requestedLoadMocId?.trim();
@@ -495,7 +507,14 @@ export function PartsSheetImport({
       if (!noFullSheetForSet && initialFullSheet && initialFullSheet.subjectId === qid) {
         setFullSkippedHeader(initialFullSheet.skippedHeader);
         setFullItems(withRowIds(initialFullSheet.items));
-        setFullFileName(`${sheetUi.exportFilenameStem(qid, "full").replace(/-edited$/, "")}.csv`);
+        setFullFileName(
+          `${buildPartsSheetExportStem({
+            kind: buildSubjectKind,
+            subjectId: qid,
+            displayName: exportDisplayName,
+            branch: "full",
+          })}.csv`
+        );
       } else {
         setFullItems(null);
         setFullFileName(null);
@@ -503,7 +522,14 @@ export function PartsSheetImport({
       if (initialShortageSheet && initialShortageSheet.subjectId === qid) {
         setShortageSkippedHeader(initialShortageSheet.skippedHeader);
         setShortageItems(withRowIds(initialShortageSheet.items));
-        setShortageFileName(`${sheetUi.exportFilenameStem(qid, "shortage").replace(/-edited$/, "")}.csv`);
+        setShortageFileName(
+          `${buildPartsSheetExportStem({
+            kind: buildSubjectKind,
+            subjectId: qid,
+            displayName: exportDisplayName,
+            branch: "shortage",
+          })}.csv`
+        );
       } else {
         setShortageItems(null);
         setShortageFileName(null);
@@ -522,7 +548,14 @@ export function PartsSheetImport({
       setSkippedHeader(initialFullSheet.skippedHeader);
       setSheetListFilter("all");
       setItems(withRowIds(initialFullSheet.items));
-      setFileName(`${sheetUi.exportFilenameStem(qid, "full").replace(/-full-edited$/, "")}.csv`);
+      setFileName(
+        `${buildPartsSheetExportStem({
+          kind: buildSubjectKind,
+          subjectId: qid,
+          displayName: exportDisplayName,
+          branch: "full",
+        })}.csv`
+      );
     }
   }, [
     buildSubjectKind,
@@ -535,7 +568,7 @@ export function PartsSheetImport({
     mocDetailEmbed,
     noFullSheetForSet,
     scrollMocFeedbackIntoView,
-    sheetUi,
+    exportDisplayName,
   ]);
 
   const onExportCsv = useCallback(() => {
@@ -543,6 +576,18 @@ export function PartsSheetImport({
     const text = rowsToCsv(items, skippedHeader);
     downloadText(`${exportStem}.csv`, text);
   }, [exportStem, items, skippedHeader]);
+
+  const onExportXml = useCallback(() => {
+    if (!items || items.length === 0) return;
+    const text = serializeBrickLinkInventoryXml(
+      items.map((r) => ({
+        partNum: r.partNum,
+        colorId: r.colorId,
+        quantity: r.quantity,
+      }))
+    );
+    downloadText(`${exportStem}.xml`, text, "application/xml;charset=utf-8");
+  }, [exportStem, items]);
 
   const onExportXlsx = useCallback(async () => {
     if (!items || items.length === 0) return;
@@ -878,6 +923,15 @@ export function PartsSheetImport({
               onClick={onExportCsv}
             >
               导出 CSV（无图，可再导入）
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
+              disabled={loading || exportBusy || mocActionBusy}
+              title="BrickLink 心愿单 XML，零件号与色号与 CSV 一致"
+              onClick={onExportXml}
+            >
+              导出 XML
             </button>
           </>
         ) : null}

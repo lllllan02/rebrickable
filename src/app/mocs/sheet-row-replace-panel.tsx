@@ -31,12 +31,16 @@ type Props = {
 
 type Step = "pickPart" | "pickColor";
 
-/** 第一步：高砖商品方格；`partNum` 为内部解析用乐高设计号，主文案用 `primaryLine` 展示高砖侧信息 */
+/** 第一步：高砖方格；`partNum` 为目录设计号；`nameLine` / `idLine` 为展示用名称与编号 */
 type QuickPickTile = {
   key: string;
   partNum: string;
-  primaryLine: string;
-  subtitle: string;
+  /** 传入选色步与保存 caption 的高砖侧名称（与 API 标题一致，不含「商品」前缀文案） */
+  gobricksDisplayName: string;
+  nameLine: string;
+  idLine: string | null;
+  /** 辅文案：乐高设计号 */
+  footLine: string;
   imgUrl: string | null;
   preresolvedProductId: string | null;
   badge: string;
@@ -45,8 +49,10 @@ type QuickPickTile = {
 const PICK_GRID =
   "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-4 lg:grid-cols-5";
 
-const TILE_PRIMARY_CLASS =
-  "line-clamp-2 text-center font-mono text-[12px] font-semibold leading-tight text-[#b8e632] sm:text-[13px]";
+const TILE_NAME_CLASS =
+  "line-clamp-2 text-center text-[11px] font-medium leading-snug text-[var(--text)] sm:text-[12px]";
+const TILE_ID_CLASS =
+  "line-clamp-1 break-all text-center font-mono text-[12px] font-semibold leading-tight text-[#b8e632] sm:text-[13px]";
 const TILE_SECONDARY_CLASS =
   "line-clamp-2 text-center text-[11px] leading-snug text-[var(--muted)] sm:text-[12px]";
 
@@ -105,24 +111,34 @@ function buildGobricksQuickTile(
   const cap = caption?.trim() || captionEn?.trim() || "";
   const imgUrl = picture?.trim() || null;
   const gdsTrim = typeof gdsItemId === "string" && gdsItemId.trim() ? gdsItemId.trim() : "";
-  const primaryLine = pid ? `商品 ${pid}` : gdsTrim ? gdsTrim.slice(0, 36) : "高砖";
-  if (pid) {
+  const footLine = `乐高 ${partNum}`;
+
+  if (pid != null) {
+    const idLine = String(pid);
+    const nameLine = cap || "—";
+    const gobricksDisplayName = cap || idLine;
     return {
       key,
       partNum,
-      primaryLine,
-      subtitle: cap || `高砖商品 · ${pid}`,
+      gobricksDisplayName,
+      nameLine,
+      idLine,
+      footLine,
       imgUrl,
       preresolvedProductId: pid,
       badge,
     };
   }
-  if (imgUrl || cap) {
+  if (imgUrl || cap || gdsTrim) {
+    const nameLine = cap || gdsTrim.slice(0, 36) || "高砖";
+    const gobricksDisplayName = cap || gdsTrim.slice(0, 120) || partNum;
     return {
       key: `${key}-fallback`,
       partNum,
-      primaryLine,
-      subtitle: cap || "将按目录解析",
+      gobricksDisplayName,
+      nameLine,
+      idLine: gdsTrim && !cap ? gdsTrim.slice(0, 36) : null,
+      footLine,
       imgUrl,
       preresolvedProductId: null,
       badge,
@@ -384,7 +400,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
 
   const onPickQuickTile = useCallback(
     (t: QuickPickTile) => {
-      goToColorStep(t.partNum, t.subtitle, t.preresolvedProductId, t.imgUrl);
+      goToColorStep(t.partNum, t.gobricksDisplayName, t.preresolvedProductId, t.imgUrl);
     },
     [goToColorStep]
   );
@@ -511,8 +527,9 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                   {t.badge}
                 </span>
               </div>
-              <p className={TILE_PRIMARY_CLASS}>{t.primaryLine}</p>
-              <p className={TILE_SECONDARY_CLASS}>{t.subtitle}</p>
+              <p className={TILE_NAME_CLASS}>{t.nameLine}</p>
+              {t.idLine ? <p className={TILE_ID_CLASS}>{t.idLine}</p> : null}
+              <p className={TILE_SECONDARY_CLASS}>{t.footLine}</p>
               {accent ? (
                 <p className="text-center text-[10px] font-medium text-[var(--accent)] sm:text-[11px]">当前行</p>
               ) : null}
@@ -560,8 +577,9 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                   </span>
                 ) : null}
               </div>
-              <p className={TILE_PRIMARY_CLASS}>商品 {hit.productId}</p>
-              <p className={TILE_SECONDARY_CLASS}>{hit.name}</p>
+              <p className={TILE_NAME_CLASS}>{hit.name}</p>
+              <p className={TILE_ID_CLASS}>{hit.productId}</p>
+              <p className={TILE_SECONDARY_CLASS}>乐高 {hit.partNum}</p>
               {isCurrentRow ? (
                 <p className="text-center text-[10px] font-medium text-[var(--accent)] sm:text-[11px]">当前行</p>
               ) : null}
@@ -630,12 +648,12 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
             <div className="space-y-1.5 border-t border-[var(--border-soft)] pt-3">
               <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">搜索</span>
               <label className="block">
-                <span className="sr-only">搜索高砖商品</span>
+                <span className="sr-only">搜索高砖</span>
                 <input
                   type="search"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="商品号、名称或关键词…"
+                  placeholder="编号、名称或关键词…"
                   className="field h-10 w-full text-sm"
                   spellCheck={false}
                   autoComplete="off"

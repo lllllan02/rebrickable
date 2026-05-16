@@ -17,8 +17,6 @@ export type BuildSubjectUi = {
   /** Rebrickable 外链文案模板，需自行传入 ID */
   rbLinkLabel: (subjectId: string) => string;
   rebrickableUrl: (subjectId: string) => string;
-  /** 导出文件名前缀 */
-  exportFilenameStem: (subjectId: string, branch: "full" | "shortage" | "fulfillment") => string;
 };
 
 export function buildSubjectUi(kind: BuildSubjectKind): BuildSubjectUi {
@@ -33,8 +31,6 @@ export function buildSubjectUi(kind: BuildSubjectKind): BuildSubjectUi {
       backToListLabel: "返回 MOC 列表",
       rbLinkLabel: (id) => `在 Rebrickable 打开 MOC-${id}`,
       rebrickableUrl: (id) => `https://rebrickable.com/mocs/MOC-${encodeURIComponent(id)}/`,
-      exportFilenameStem: (id, branch) =>
-        (id.trim() ? `moc-${id.trim()}-${branch}` : `${branch}-parts`) + "-edited",
     };
   }
   return {
@@ -47,8 +43,6 @@ export function buildSubjectUi(kind: BuildSubjectKind): BuildSubjectUi {
     backToListLabel: "返回套装列表",
     rbLinkLabel: (id) => `在 Rebrickable 打开套装 ${id}`,
     rebrickableUrl: (id) => `https://rebrickable.com/sets/${encodeURIComponent(id)}/`,
-    exportFilenameStem: (id, branch) =>
-      (id.trim() ? `set-${id.trim()}-${branch}` : `${branch}-parts`) + "-edited",
   };
 }
 
