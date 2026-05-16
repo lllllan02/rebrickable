@@ -85,6 +85,8 @@ export type SheetReplaceGobricksStockColor = {
   gdsItemId: string;
   /** 高砖 color_id */
   gdsColorId: string;
+  /** 高砖网店单价（元） */
+  gdsUnitPrice: string | null;
 };
 
 export async function listPartCategoriesForSheetReplaceAction(): Promise<
@@ -454,6 +456,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         nameZh: string | null;
         nameEn: string | null;
         gdsColorId: string;
+        unitPrice: string | null;
         swatchHex: string | null;
       }
     >();
@@ -466,8 +469,11 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
           nameZh: r.colorNameZh,
           nameEn: r.colorNameEn,
           gdsColorId: r.gdsColorId,
+          unitPrice: r.unitPrice,
           swatchHex: r.swatchHex,
         });
+      } else if (prev && !prev.unitPrice && r.unitPrice) {
+        prev.unitPrice = r.unitPrice;
       }
     }
 
@@ -523,6 +529,7 @@ export async function listGobricksStockColorsForSheetReplaceAction(input: {
         inventory: agg.inventory,
         gdsColorId: agg.gdsColorId,
         gdsItemId: `GDS-${productId}-${agg.gdsColorId}`,
+        gdsUnitPrice: agg.unitPrice,
       });
     }
 

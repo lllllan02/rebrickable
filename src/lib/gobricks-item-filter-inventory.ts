@@ -365,6 +365,8 @@ export type GobricksInStockColorRow = {
   legoColorId: string;
   inventory: number;
   gdsColorId: string;
+  /** 高砖网店单价（元） */
+  unitPrice: string | null;
   /** 高砖 SKU 商品图（按颜色分图） */
   picture: string | null;
   /** 高砖中文色名 */
@@ -373,6 +375,13 @@ export type GobricksInStockColorRow = {
   /** 色块 hex，可能带或不带 # */
   swatchHex: string | null;
 };
+
+function gobricksUnitPriceFromFilterRow(row: Record<string, unknown>): string | null {
+  const raw = row.price ?? row.eshop_price;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+  return null;
+}
 
 function normalizeLegoColorIdFromColorData(v: unknown): string | null {
   if (typeof v !== "object" || v === null) return null;
@@ -470,6 +479,7 @@ export async function fetchGobricksItemFilterInStockColors(
         legoColorId,
         inventory: Math.trunc(inv),
         gdsColorId,
+        unitPrice: gobricksUnitPriceFromFilterRow(row),
         picture: readPictureUrl(row),
         colorNameZh: zh,
         colorNameEn: en,

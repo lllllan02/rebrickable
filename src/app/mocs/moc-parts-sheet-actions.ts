@@ -990,6 +990,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
   gdsLegoColorId?: string | null;
   gdsColorNameZh?: string | null;
   gdsColorNameEn?: string | null;
+  /** 选色 SKU 的高砖单价（元）；缺件并入配货时原行常无单价，须用此字段 */
+  gdsUnitPrice?: string | null;
 }): Promise<ReplaceBuildPartsSheetRowResult> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
@@ -1044,6 +1046,8 @@ export async function replaceBuildPartsSheetRowAction(input: {
   const preservedSnapshot = mergeSheetRowReplaceSnapshotForPersist(meta, old);
 
   const preservedUnit = effectiveSheetRowUnitPriceForSerialize(old);
+  const pickerUnit = trimmedSheetUnitPriceText(input.gdsUnitPrice);
+  const unitPrice = pickerUnit ?? preservedUnit;
   const pickerGdsPicture = trimGdsPictureForSheetSerialize(input.gdsPicture);
   const gdsItemIdIn = input.gdsItemId?.trim() || null;
   const gdsColorIdIn = input.gdsColorId?.trim() || null;
@@ -1055,11 +1059,11 @@ export async function replaceBuildPartsSheetRowAction(input: {
     colorId: input.colorId,
     quantity: old.quantity,
     rest: stripSheetRowReplacedMarker(old.rest),
-    gobricksUnitPrice: preservedUnit,
+    gobricksUnitPrice: unitPrice,
     gdsItemId: gdsItemIdIn,
     gdsColorId: gdsColorIdIn,
     gdsPicture: pickerGdsPicture,
-    gdsUnitPrice: preservedUnit,
+    gdsUnitPrice: unitPrice,
     gdsCaption: gdsCaptionIn,
     gdsCaptionEn: null,
     gdsShelfState: null,
@@ -1083,9 +1087,7 @@ export async function replaceBuildPartsSheetRowAction(input: {
     gdsColorNameEn: serialized.gdsColorNameEn ?? newRow.gdsColorNameEn ?? null,
     lineNumber: old.lineNumber,
     quantity: old.quantity,
-    ...(preservedUnit != null
-      ? { gobricksUnitPrice: preservedUnit, gdsUnitPrice: preservedUnit }
-      : {}),
+    ...(unitPrice != null ? { gobricksUnitPrice: unitPrice, gdsUnitPrice: unitPrice } : {}),
     rest: appendSheetRowReplacedMarker(
       input.branch === "shortage" ? stripShortageReasonTextFromRest(old.rest) : old.rest,
       preservedOriginal,
@@ -1279,17 +1281,20 @@ export async function restoreBuildPartsSheetRowAction(input: {
 
   const cleanRest = stripSheetRowReplacedMarker(old.rest);
   const preservedUnit = effectiveSheetRowUnitPriceForSerialize(old);
+  const snapshotUnit = trimmedSheetUnitPriceText(meta.originalGobricksUnitPrice);
+  const restorePickerUnit = hit ? trimmedSheetUnitPriceText(hit.gdsUnitPrice) : null;
+  const unitPrice = restorePickerUnit ?? snapshotUnit ?? preservedUnit;
 
   const serialized: GobricksSheetSerializedRow = {
     partNum,
     colorId,
     quantity: old.quantity,
     rest: cleanRest,
-    gobricksUnitPrice: preservedUnit,
+    gobricksUnitPrice: unitPrice,
     gdsItemId: restoreGdsItemId,
     gdsColorId: restoreGdsColorId,
     gdsPicture: restoreGdsPicture,
-    gdsUnitPrice: preservedUnit,
+    gdsUnitPrice: unitPrice,
     gdsCaption: meta.originalGobricksCaption?.trim() || null,
     gdsCaptionEn: meta.originalGobricksCaptionEn?.trim() || null,
     gdsShelfState: null,
@@ -1311,9 +1316,7 @@ export async function restoreBuildPartsSheetRowAction(input: {
     ...newRow,
     lineNumber: old.lineNumber,
     quantity: old.quantity,
-    ...(preservedUnit != null
-      ? { gobricksUnitPrice: preservedUnit, gdsUnitPrice: preservedUnit }
-      : {}),
+    ...(unitPrice != null ? { gobricksUnitPrice: unitPrice, gdsUnitPrice: unitPrice } : {}),
     gdsCaption: serialized.gdsCaption ?? newRow.gdsCaption ?? null,
     gdsCaptionEn: serialized.gdsCaptionEn ?? newRow.gdsCaptionEn ?? null,
     gdsColorNameZh: serialized.gdsColorNameZh ?? newRow.gdsColorNameZh ?? null,

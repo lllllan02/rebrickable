@@ -458,6 +458,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       gdsLegoColorId: String(colorId),
       gdsColorNameZh: hit?.nameZh ?? null,
       gdsColorNameEn: hit?.nameEn ?? null,
+      gdsUnitPrice: hit?.gdsUnitPrice ?? null,
     });
     setBusy(false);
     if (!res.ok) {
