@@ -249,7 +249,9 @@ export function MocDetailPartsSection({
                 <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[13px]">
                   rebrickable_parts_*_缺货表.csv
                 </code>{" "}
-                相同结构。可先上传完整零件表，保存后将自动对照高砖写入配货表与缺件表；亦可在上方手动同步。解析成功后写入本 {ui.noun}（各表互不覆盖）。下方可切换查看。新记录也可从{" "}
+                相同结构，亦支持 BrickLink Studio 2.0 零件清单 CSV（颜色按{" "}
+                <code className="rounded bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[12px]">LDrawColorId</code>{" "}
+                与目录、高砖对齐）。可先上传完整零件表，保存后将自动对照高砖写入配货表与缺件表；亦可在上方手动同步。解析成功后写入本 {ui.noun}（各表互不覆盖）。下方可切换查看。新记录也可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}

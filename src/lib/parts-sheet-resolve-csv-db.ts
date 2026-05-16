@@ -2,6 +2,10 @@ import { and, eq, inArray, isNotNull, min, ne } from "drizzle-orm";
 
 import { getCatalogDb } from "@/db/client";
 import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
+import {
+  looksLikeBrickLinkStudioPartsExport,
+  parseBrickLinkStudioPartsCsv,
+} from "@/lib/parse-bricklink-studio-csv";
 import { classifyPartsSheetRow } from "@/lib/parts-sheet-tags";
 import { parseShortageCsv } from "@/lib/parse-shortage-csv";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
@@ -183,7 +187,9 @@ export async function resolveShortageCsvInDb(csv: string): Promise<ResolveShorta
     return { ok: false, error: `CSV 过长（上限 ${MAX_CSV_CHARS} 字符）。` };
   }
 
-  const parsed = parseShortageCsv(csv);
+  const parsed = looksLikeBrickLinkStudioPartsExport(csv)
+    ? parseBrickLinkStudioPartsCsv(csv)
+    : parseShortageCsv(csv);
   if (!parsed.ok) {
     return { ok: false, error: parsed.error, lineNumber: parsed.lineNumber ?? null };
   }

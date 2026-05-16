@@ -293,11 +293,11 @@ export function BuildPartsSheetUpload({ kind, variant = "panel" }: Props) {
       <div className="flex flex-wrap items-center gap-3">
         {fileInput}
         <p className="max-w-xl text-xs leading-relaxed text-[var(--muted)]">
-          与{" "}
+          支持本站{" "}
           <code className="rounded bg-[var(--surface-3)] px-1 py-px font-mono text-[11px]">
             rebrickable_parts_*_缺货表.csv
           </code>{" "}
-          结构一致；解析成功后在本页确认 {ui.subjectIdLabel} 并写入数据库。若该 ID 已有零件表，将询问是否覆盖。
+          与 LEGO BrickLink Studio 2.0 零件清单（按 <span className="font-mono">LDrawColorId</span> 解析颜色，与 Rebrickable / 高砖一致）；解析成功后在本页确认 {ui.subjectIdLabel} 并写入数据库。若该 ID 已有零件表，将询问是否覆盖。
         </p>
       </div>
       {parseErrorBlock}
