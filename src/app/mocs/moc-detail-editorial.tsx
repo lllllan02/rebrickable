@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
 import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { MocAttachmentsPanel, type MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
+import { MocDeleteControl } from "@/app/mocs/moc-delete-control";
 import { MocImageCarousel, type MocGalleryImage } from "@/app/mocs/moc-image-carousel";
 import { MocProfileForm } from "@/app/mocs/moc-profile-form";
 import { buildSubjectListPath } from "@/lib/build-subject-paths";
@@ -61,6 +62,8 @@ export function MocDetailEditorial({
   const rbHref = ui.rebrickableUrl(subjectId);
   const listHref = buildSubjectListPath(subjectKind);
   const o = setOfficial;
+  const isMoc = subjectKind === BUILD_SUBJECT_MOC;
+  const deleteDisplayTitle = initialDisplayName.trim() || `${ui.noun} ${subjectId}`;
 
   return (
     <section className="hero-panel">
@@ -171,6 +174,8 @@ export function MocDetailEditorial({
               {ui.backToListLabel}
             </Link>
           </nav>
+
+          {isMoc ? <MocDeleteControl mocId={subjectId} displayTitle={deleteDisplayTitle} /> : null}
         </aside>
       </div>
     </section>
