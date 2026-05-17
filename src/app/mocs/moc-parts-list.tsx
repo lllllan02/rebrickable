@@ -1197,6 +1197,8 @@ type Props = {
   detailSubstituteSuggestions?: boolean;
   /** 非空时与详情共用模态框，以 tab 切换「更换零件」 */
   sheetRowReplaceContext?: SheetRowReplaceContext | null;
+  /** 缺件表行更换并入配货表后回调（用于切换到配货 Tab） */
+  onShortageRowReplacedToFulfillment?: () => void;
 };
 
 type DetailModalTab = "detail" | "replace";
@@ -1211,6 +1213,7 @@ export function MocPartsList({
   parentSubjectOwned = false,
   detailSubstituteSuggestions = false,
   sheetRowReplaceContext = null,
+  onShortageRowReplacedToFulfillment,
 }: Props) {
   const router = useRouter();
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
@@ -1286,9 +1289,12 @@ export function MocPartsList({
   }, []);
 
   const handleSheetRowReplaced = useCallback(() => {
+    if (sheetRowReplaceContext?.branch === "shortage") {
+      onShortageRowReplacedToFulfillment?.();
+    }
     closeDetail();
     router.refresh();
-  }, [closeDetail, router]);
+  }, [closeDetail, onShortageRowReplacedToFulfillment, router, sheetRowReplaceContext?.branch]);
 
   useEffect(() => {
     const d = detailDialogRef.current;
@@ -1503,7 +1509,7 @@ export function MocPartsList({
             onClick={closeDetail}
           >
             <div
-              className="flex max-h-[min(92dvh,52rem)] min-h-0 w-full max-w-[min(64rem,calc(100vw-1.25rem))] flex-col overflow-hidden overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
+              className="flex h-[min(92dvh,52rem)] max-h-[min(92dvh,52rem)] min-h-0 w-full max-w-[min(64rem,calc(100vw-1.25rem))] flex-col overflow-hidden overscroll-contain rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)] sm:rounded-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-soft)] bg-[rgba(255,255,255,0.025)] px-5 py-3 sm:px-8 sm:py-3.5">

@@ -1034,8 +1034,18 @@ export async function replaceBuildPartsSheetRowAction(input: {
   }
 
   const old = branchData.items[idx];
-  if (old.partNum === partNum && old.colorId === input.colorId) {
-    return { ok: false, error: "与当前行相同，无需更换。" };
+  const gdsItemIdIn = input.gdsItemId?.trim() || null;
+  const sameLegoPart = old.partNum === partNum && old.colorId === input.colorId;
+  if (sameLegoPart) {
+    const newSku = gdsItemIdIn?.trim();
+    const oldSku = old.gdsItemId?.trim();
+    const skuUnchanged =
+      !newSku ||
+      !oldSku ||
+      normalizeSheetGdsItemIdForCompare(newSku) === normalizeSheetGdsItemIdForCompare(oldSku);
+    if (skuUnchanged) {
+      return { ok: false, error: "与当前行相同，无需更换。" };
+    }
   }
 
   const meta = parseSheetRowReplaceMeta(old.rest);
@@ -1049,7 +1059,6 @@ export async function replaceBuildPartsSheetRowAction(input: {
   const pickerUnit = trimmedSheetUnitPriceText(input.gdsUnitPrice);
   const unitPrice = pickerUnit ?? preservedUnit;
   const pickerGdsPicture = trimGdsPictureForSheetSerialize(input.gdsPicture);
-  const gdsItemIdIn = input.gdsItemId?.trim() || null;
   const gdsColorIdIn = input.gdsColorId?.trim() || null;
   const gdsCaptionIn = input.gdsCaption?.trim() || null;
   const gdsLegoColorIdIn = input.gdsLegoColorId?.trim() || null;

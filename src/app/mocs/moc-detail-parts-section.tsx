@@ -463,6 +463,7 @@ export function MocDetailPartsSection({
                   subjectId,
                   branch: "shortage",
                 }}
+                onShortageRowReplacedToFulfillment={() => setListTab("fulfillment")}
               />
             ) : null}
             {listTab === "official" && officialInventory ? (

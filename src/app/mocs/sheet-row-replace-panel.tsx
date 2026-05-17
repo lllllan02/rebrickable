@@ -434,38 +434,59 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     return formatGobricksBilingualColorLabel({ nameZh: hit.nameZh, nameEn: hit.nameEn });
   }, [colorId, gobricksVariants]);
 
+  const canSaveReplace =
+    Boolean(pickedPart?.trim()) && Boolean(gobricksVariants?.length) && !busy;
+
+  const saveReplaceDisabledReason = useMemo(() => {
+    if (busy) return null;
+    if (!pickedPart?.trim()) return "请先选择零件并进入选色。";
+    if (colorsLoadError) return colorsLoadError;
+    if (!gobricksVariants) return "正在加载有货颜色…";
+    if (gobricksVariants.length === 0) return "高砖未返回可选颜色，无法保存。";
+    return null;
+  }, [busy, colorsLoadError, gobricksVariants, pickedPart]);
+
   const handleApply = useCallback(async () => {
     const pn = (pickedPart ?? "").trim();
     if (!pn) {
       setActionError("请先选择零件。");
       return;
     }
-    setBusy(true);
-    setActionError(null);
-    const hit = gobricksVariants?.find((c) => c.colorId === colorId);
-    const pickedPicture = hit?.picture?.trim() || null;
-    const res = await replaceBuildPartsSheetRowAction({
-      subjectKind: context.subjectKind,
-      subjectId: context.subjectId,
-      branch: context.branch,
-      lineNumber: item.lineNumber,
-      partNum: pn,
-      colorId,
-      gdsPicture: pickedPicture,
-      gdsItemId: hit?.gdsItemId ?? null,
-      gdsColorId: hit?.gdsColorId ?? null,
-      gdsCaption: pickedPartName.trim() || null,
-      gdsLegoColorId: String(colorId),
-      gdsColorNameZh: hit?.nameZh ?? null,
-      gdsColorNameEn: hit?.nameEn ?? null,
-      gdsUnitPrice: hit?.gdsUnitPrice ?? null,
-    });
-    setBusy(false);
-    if (!res.ok) {
-      setActionError(res.error);
+    if (!gobricksVariants?.length) {
+      setActionError(saveReplaceDisabledReason ?? "请先选择有货颜色。");
       return;
     }
-    onReplaced();
+    setBusy(true);
+    setActionError(null);
+    try {
+      const hit = gobricksVariants.find((c) => c.colorId === colorId);
+      const pickedPicture = hit?.picture?.trim() || null;
+      const res = await replaceBuildPartsSheetRowAction({
+        subjectKind: context.subjectKind,
+        subjectId: context.subjectId,
+        branch: context.branch,
+        lineNumber: item.lineNumber,
+        partNum: pn,
+        colorId,
+        gdsPicture: pickedPicture,
+        gdsItemId: hit?.gdsItemId ?? null,
+        gdsColorId: hit?.gdsColorId ?? null,
+        gdsCaption: pickedPartName.trim() || null,
+        gdsLegoColorId: String(colorId),
+        gdsColorNameZh: hit?.nameZh ?? null,
+        gdsColorNameEn: hit?.nameEn ?? null,
+        gdsUnitPrice: hit?.gdsUnitPrice ?? null,
+      });
+      if (!res.ok) {
+        setActionError(res.error);
+        return;
+      }
+      onReplaced();
+    } catch {
+      setActionError("保存失败，请检查网络后重试。");
+    } finally {
+      setBusy(false);
+    }
   }, [
     colorId,
     context.branch,
@@ -476,6 +497,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     onReplaced,
     pickedPart,
     pickedPartName,
+    saveReplaceDisabledReason,
   ]);
 
   const backToParts = useCallback(() => {
@@ -834,18 +856,24 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                       </ul>
                     )}
                   </div>
-                  {actionError ? <p className="mt-2 text-sm text-amber-200/90">{actionError}</p> : null}
                 </div>
               </>
             )}
           </div>
 
           <div
-            className="shrink-0 border-t border-[var(--border-soft)] bg-[var(--surface)]/95 px-0 pt-2 shadow-[0_-4px_16px_-6px_rgba(0,0,0,0.12)] backdrop-blur-md [-webkit-backdrop-filter:blur(8px)]"
+            className="relative z-10 shrink-0 border-t border-[var(--border-soft)] bg-[var(--surface)]/95 px-0 pt-2 shadow-[0_-4px_16px_-6px_rgba(0,0,0,0.12)] backdrop-blur-md [-webkit-backdrop-filter:blur(8px)]"
             style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom, 0px))" }}
             role="toolbar"
             aria-label="选色操作"
           >
+            {actionError ? (
+              <p className="mb-2 text-sm text-amber-200/90" role="alert">
+                {actionError}
+              </p>
+            ) : saveReplaceDisabledReason && !canSaveReplace ? (
+              <p className="mb-2 text-[11px] leading-snug text-[var(--muted-2)]">{saveReplaceDisabledReason}</p>
+            ) : null}
             <div className="flex w-full items-center justify-between gap-2">
               <button
                 type="button"
@@ -856,7 +884,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
               </button>
               <button
                 type="button"
-                disabled={busy || !pickedPart || !gobricksVariants?.length}
+                disabled={!canSaveReplace}
                 onClick={() => void handleApply()}
                 className="button-primary !px-3 !py-1.5 text-xs font-extrabold leading-tight disabled:opacity-50 sm:!py-2 sm:text-sm"
               >
