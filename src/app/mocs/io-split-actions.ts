@@ -72,9 +72,10 @@ function countUnresolved(items: ShortageResolveItem[]): number {
 }
 
 async function resolveDraftPlacements(
-  placements: StudioIoPlacement[]
+  placements: StudioIoPlacement[],
+  brickCatalog?: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>["brickCatalog"]
 ): Promise<{ ok: true; items: ShortageResolveItem[] } | { ok: false; error: string }> {
-  const r = await resolveStudioIoPlacementsInDb(placements);
+  const r = await resolveStudioIoPlacementsInDb(placements, { brickCatalog });
   if (!r.ok) return r;
   return { ok: true, items: r.items };
 }
@@ -97,7 +98,7 @@ async function batchesFromConfig(
 > {
   if (config.mode === "by_category") {
     const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
-    const resolved = await resolveDraftPlacements(allPlacements);
+    const resolved = await resolveDraftPlacements(allPlacements, parsed.brickCatalog);
     if (!resolved.ok) return resolved;
     const groups = splitResolvedItemsByCategory(resolved.items, parsed);
     return {
@@ -116,7 +117,7 @@ async function batchesFromConfig(
 
   if (config.mode === "by_color") {
     const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
-    const resolved = await resolveDraftPlacements(allPlacements);
+    const resolved = await resolveDraftPlacements(allPlacements, parsed.brickCatalog);
     if (!resolved.ok) return resolved;
     const byColor = new Map<number, ShortageResolveItem[]>();
     for (const row of resolved.items) {
@@ -152,7 +153,7 @@ async function batchesFromConfig(
   }[] = [];
 
   for (const d of drafts) {
-    const resolved = await resolveDraftPlacements(d.placements);
+    const resolved = await resolveDraftPlacements(d.placements, parsed.brickCatalog);
     if (!resolved.ok) return resolved;
     batches.push({
       label: d.label,
@@ -220,7 +221,7 @@ async function compareIoBomWithMocFullSheet(
   parsed: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>
 ): Promise<IoMocBomCompare> {
   const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
-  const resolved = await resolveDraftPlacements(allPlacements);
+  const resolved = await resolveDraftPlacements(allPlacements, parsed.brickCatalog);
   if (!resolved.ok) {
     return { status: "skipped", reason: `无法解析 IO 零件行：${resolved.error}` };
   }

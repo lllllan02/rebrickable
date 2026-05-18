@@ -1,3 +1,4 @@
+import { legoMechanicalPartKeysEquivalent } from "@/lib/lego-mechanical-part-key";
 import type { StudioLxfmlBrick } from "@/lib/parse-studio-lxfml";
 
 /** BrickLink Studio .io 固定 ZIP 密码（公开约定） */
@@ -52,6 +53,8 @@ export type ParsedStudioIo = {
   studioVersion: string | null;
   mainSteps: StudioIoMainStep[];
   submodels: string[];
+  /** model.lxfml 砖块目录（供 itemNos 回填） */
+  brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>;
 };
 
 /** LDraw type-1/10：color + xyz + 3×3 矩阵共 13 个字段后即为零件/子模型文件名（可含空格）。 */
@@ -65,7 +68,9 @@ function attachBrickCatalog(
 ): StudioIoPlacement {
   if (!brickCatalog || placement.brickRefId == null) return placement;
   const brick = brickCatalog.get(placement.brickRefId);
-  if (!brick) return placement;
+  if (!brick || !legoMechanicalPartKeysEquivalent(brick.designId, placement.partNum)) {
+    return placement;
+  }
   return {
     ...placement,
     legoItemNo: brick.legoItemNo,
@@ -84,16 +89,15 @@ function parsePartLine(
     if (parts.length < LDRAW_TYPE1_FILENAME_START + 1) return null;
     const rawColor = Number.parseInt(parts[1] ?? "", 10);
     if (!Number.isFinite(rawColor)) return null;
-    const color = normalizeStudioLdrawColorId(rawColor);
     const fileToken = parts.slice(LDRAW_TYPE1_FILENAME_START).join(" ").trim();
     if (!fileToken) return null;
     const isDat = fileToken.toLowerCase().endsWith(".dat");
     if (isDat) {
-      return { partNum: fileToken.replace(/\.dat$/i, ""), ldrawColorId: color, isSubmodelRef: false };
+      return { partNum: fileToken.replace(/\.dat$/i, ""), ldrawColorId: rawColor, isSubmodelRef: false };
     }
     return {
       partNum: fileToken,
-      ldrawColorId: color,
+      ldrawColorId: rawColor,
       isSubmodelRef: true,
       submodelName: fileToken,
     };
@@ -104,20 +108,19 @@ function parsePartLine(
     const rawColor = Number.parseInt(parts[1] ?? "", 10);
     const brickRefId = Number.parseInt(parts[2] ?? "", 10);
     if (!Number.isFinite(rawColor) || !Number.isFinite(brickRefId)) return null;
-    const color = normalizeStudioLdrawColorId(rawColor);
     const fileToken = parts.slice(LDRAW_TYPE11_FILENAME_START).join(" ").trim();
     if (!fileToken) return null;
     const isDat = fileToken.toLowerCase().endsWith(".dat");
     const base: StudioIoPlacement = isDat
       ? {
           partNum: fileToken.replace(/\.dat$/i, ""),
-          ldrawColorId: color,
+          ldrawColorId: rawColor,
           brickRefId,
           isSubmodelRef: false,
         }
       : {
           partNum: fileToken,
-          ldrawColorId: color,
+          ldrawColorId: rawColor,
           brickRefId,
           isSubmodelRef: true,
           submodelName: fileToken,
@@ -313,5 +316,6 @@ export function parseStudioIoLdrText(
     studioVersion,
     mainSteps,
     submodels: sections.filter((s) => s !== main).map((s) => s.name),
+    brickCatalog: brickCatalog?.size ? brickCatalog : undefined,
   };
 }
