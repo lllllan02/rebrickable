@@ -25,6 +25,8 @@ export type SheetRowReplaceContext = {
   subjectKind: BuildSubjectKind;
   subjectId: string;
   branch: "fulfillment" | "shortage";
+  /** Studio 分步分包批次；有值时写入 build_io_step_batches 而非主零件表 */
+  ioBatchId?: number;
 };
 
 type Props = {
@@ -464,6 +466,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       const res = await replaceBuildPartsSheetRowAction({
         subjectKind: context.subjectKind,
         subjectId: context.subjectId,
+        ioBatchId: context.ioBatchId,
         branch: context.branch,
         lineNumber: item.lineNumber,
         partNum: pn,

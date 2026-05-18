@@ -78,6 +78,8 @@ export type IoBatchListRow = {
   lineCount: number;
   totalPartQty: number;
   updatedAt: string;
+  /** 高砖配货参考总价（元）；未对照高砖时为 null */
+  gobricksGdsPriceCny: number | null;
 };
 
 export type IoSplitPlanGroup = {
@@ -111,13 +113,20 @@ export async function listIoStepBatchesForMoc(mocId: string): Promise<IoBatchLis
       lineCount: buildIoStepBatches.lineCount,
       totalPartQty: buildIoStepBatches.totalPartQty,
       updatedAt: buildIoStepBatches.updatedAt,
+      gobricksGdsPriceCny: buildIoStepBatches.gobricksGdsPriceCny,
     })
     .from(buildIoStepBatches)
     .where(
       and(eq(buildIoStepBatches.subjectKind, BUILD_SUBJECT_MOC), eq(buildIoStepBatches.subjectId, id))
     )
     .orderBy(asc(buildIoStepBatches.sortOrder), asc(buildIoStepBatches.id));
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    gobricksGdsPriceCny:
+      typeof r.gobricksGdsPriceCny === "number" && Number.isFinite(r.gobricksGdsPriceCny) && r.gobricksGdsPriceCny >= 0
+        ? r.gobricksGdsPriceCny
+        : null,
+  }));
 }
 
 export async function listIoSplitPlanGroupsForMoc(mocId: string): Promise<IoSplitPlanGroup[]> {
@@ -138,6 +147,7 @@ export async function listIoSplitPlanGroupsForMoc(mocId: string): Promise<IoSpli
       lineCount: buildIoStepBatches.lineCount,
       totalPartQty: buildIoStepBatches.totalPartQty,
       updatedAt: buildIoStepBatches.updatedAt,
+      gobricksGdsPriceCny: buildIoStepBatches.gobricksGdsPriceCny,
     })
     .from(buildIoStepBatches)
     .where(
@@ -195,6 +205,12 @@ export async function listIoSplitPlanGroupsForMoc(mocId: string): Promise<IoSpli
       lineCount: r.lineCount,
       totalPartQty: r.totalPartQty,
       updatedAt: r.updatedAt,
+      gobricksGdsPriceCny:
+        typeof r.gobricksGdsPriceCny === "number" &&
+        Number.isFinite(r.gobricksGdsPriceCny) &&
+        r.gobricksGdsPriceCny >= 0
+          ? r.gobricksGdsPriceCny
+          : null,
     });
   }
 
@@ -375,6 +391,104 @@ export async function loadIoBatchPartsSheetFromDb(
 }
 
 export type SaveIoBatchPartsSheetResult = { ok: true; savedAt: string } | { ok: false; error: string };
+
+function sumGobricksFulfillmentSheetTotalCny(items: readonly ShortageResolveItem[] | undefined): number {
+  if (!items?.length) return 0;
+  let s = 0;
+  for (const r of items) {
+    const raw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim().replace(/,/g, "");
+    const u = Number(raw);
+    if (!Number.isFinite(u) || u < 0) continue;
+    const q = Number.isFinite(r.quantity) ? r.quantity : 0;
+    if (!Number.isFinite(q) || q <= 0) continue;
+    s += u * q;
+  }
+  return Math.round(s * 1e4) / 1e4;
+}
+
+export type PersistIoBatchDualResult = { ok: true; savedAt: string } | { ok: false; error: string };
+
+/** 写入分包 dual payload（更换/还原零件、高砖同步后整表更新） */
+export async function persistIoBatchStoredDualSheets(
+  batchId: number,
+  dualIn: StoredMocDualSheets
+): Promise<PersistIoBatchDualResult> {
+  if (!Number.isFinite(batchId) || batchId < 1) {
+    return { ok: false, error: "批次 ID 无效。" };
+  }
+
+  const dualNorm: StoredMocDualSheets = { full: null, shortage: null, fulfillment: null };
+  if (dualIn.full) {
+    const items = parseMocSheetItems(dualIn.full.items);
+    if (!items?.length) return { ok: false, error: "完整表数据无效。" };
+    dualNorm.full = {
+      skippedHeader: dualIn.full.skippedHeader,
+      items,
+      savedAt: dualIn.full.savedAt,
+    };
+  }
+  if (dualIn.shortage) {
+    const items = parseMocSheetItems(dualIn.shortage.items);
+    if (!items?.length) dualNorm.shortage = null;
+    else {
+      dualNorm.shortage = {
+        skippedHeader: dualIn.shortage.skippedHeader,
+        items,
+        savedAt: dualIn.shortage.savedAt,
+      };
+    }
+  }
+  if (dualIn.fulfillment) {
+    const items = parseMocSheetItems(dualIn.fulfillment.items);
+    if (!items?.length) return { ok: false, error: "配货表须含至少一行有效数据。" };
+    dualNorm.fulfillment = {
+      skippedHeader: dualIn.fulfillment.skippedHeader,
+      items,
+      savedAt: dualIn.fulfillment.savedAt,
+    };
+  }
+
+  if (!dualNorm.full && !dualNorm.shortage && !dualNorm.fulfillment) {
+    return { ok: false, error: "至少须保留一种零件表数据。" };
+  }
+
+  const savedAt = new Date().toISOString();
+  const fulfillmentTotalCny = sumGobricksFulfillmentSheetTotalCny(dualNorm.fulfillment?.items);
+  const safePrice = Number.isFinite(fulfillmentTotalCny) && fulfillmentTotalCny >= 0 ? fulfillmentTotalCny : 0;
+
+  const db = getUserDb();
+  const rows = await db.select().from(buildIoStepBatches).where(batchKey(batchId)).limit(1);
+  const row = rows[0];
+  if (!row) return { ok: false, error: "未找到批次。" };
+
+  const payload = dualSheetsToPayloadV2(dualNorm);
+  const { skippedHeader, lineCount, totalPartQty } = aggregateRowFromDual(dualNorm);
+  const shortageCols = shortageSummaryColumns(dualNorm);
+  const nextShortageClearedAt: string | null = dualNorm.shortage ? null : row.shortageClearedAt;
+
+  try {
+    db.update(buildIoStepBatches)
+      .set({
+        skippedHeader,
+        payloadJson: JSON.stringify(payload),
+        lineCount,
+        totalPartQty,
+        updatedAt: savedAt,
+        shortageLineCount: shortageCols.shortageLineCount,
+        shortageTotalQty: shortageCols.shortageTotalQty,
+        shortageStatsOk: true,
+        shortageClearedAt: nextShortageClearedAt,
+        gobricksGdsPriceCny: safePrice,
+      })
+      .where(batchKey(batchId))
+      .run();
+
+    revalidateIoBatchPaths(row.subjectId, batchId);
+    return { ok: true, savedAt };
+  } catch {
+    return { ok: false, error: "写入失败。" };
+  }
+}
 
 export async function saveIoBatchPartsSheetToDb(input: {
   batchId: number;

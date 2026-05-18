@@ -22,6 +22,7 @@ import {
   buildIoPlanMergedShortageExportStem,
 } from "@/lib/parts-sheet-export-filename";
 import { ioBatchSheetLoadKey, loadIoSplitSheet } from "@/lib/io-split-sheet-cache";
+import { formatGobricksGdsPriceCny } from "@/lib/gobricks-display-caption";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
 
 type ListTab = MocPartsListTab;
@@ -64,6 +65,13 @@ function stepRangeHint(batch: IoBatchListRow): string {
   const to = batch.mainStepTo;
   if (from === to) return from === 0 ? "基础层" : `步骤 ${from}`;
   return `步骤 ${from === 0 ? "基础" : from}–${to}`;
+}
+
+function batchTabTitle(batch: IoBatchListRow, index: number): string {
+  const parts = [batchTabLabel(batch, index), stepRangeHint(batch), `${batch.totalPartQty} 片`];
+  const price = formatGobricksGdsPriceCny(batch.gobricksGdsPriceCny);
+  if (price) parts.push(`参考价 ${price}`);
+  return parts.join(" · ");
 }
 
 const navBtn =
@@ -282,7 +290,9 @@ export function MocPartsSheetBrowser({
             {" · "}
             {(() => {
               const b = activePlan.batches.find((x) => x.id === ioSecondary.batchId);
-              return b ? `${stepRangeHint(b)} · ${b.totalPartQty} 片` : null;
+              if (!b) return null;
+              const price = formatGobricksGdsPriceCny(b.gobricksGdsPriceCny);
+              return `${stepRangeHint(b)} · ${b.totalPartQty} 片${price ? ` · 参考价 ${price}` : ""}`;
             })()}
           </>
         ) : null}
@@ -497,21 +507,33 @@ export function MocPartsSheetBrowser({
           <>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-2">
-                {activePlan.batches.map((b, i) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    title={`${stepRangeHint(b)} · ${b.totalPartQty} 片`}
-                    className={`${subTabBtn} ${
-                      ioSecondary?.kind === "batch" && ioSecondary.batchId === b.id
-                        ? subTabActive
-                        : subTabIdle
-                    }`}
-                    onClick={() => setIoSecondary({ kind: "batch", batchId: b.id })}
-                  >
-                    {batchTabLabel(b, i)}
-                  </button>
-                ))}
+                {activePlan.batches.map((b, i) => {
+                  const batchPrice = formatGobricksGdsPriceCny(b.gobricksGdsPriceCny);
+                  const isActive =
+                    ioSecondary?.kind === "batch" && ioSecondary.batchId === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      title={batchTabTitle(b, i)}
+                      className={`${subTabBtn} inline-flex items-baseline gap-1.5 ${
+                        isActive ? subTabActive : subTabIdle
+                      }`}
+                      onClick={() => setIoSecondary({ kind: "batch", batchId: b.id })}
+                    >
+                      <span>{batchTabLabel(b, i)}</span>
+                      {batchPrice ? (
+                        <span
+                          className={`font-mono text-[10px] tabular-nums sm:text-[11px] ${
+                            isActive ? "text-[var(--muted)]" : "text-[var(--muted-2)]"
+                          }`}
+                        >
+                          {batchPrice}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   className={`${subTabBtn} ${
@@ -538,6 +560,8 @@ export function MocPartsSheetBrowser({
               <MocIoSplitSheetViewer
                 mode="plan-merged-shortage"
                 batchIds={activePlan.batches.map((b) => b.id)}
+                subjectKind={subjectKind}
+                subjectId={subjectId}
                 parentSubjectOwned={parentSubjectOwned}
                 onSheetLoaded={handleIoSheetLoaded}
               />
@@ -545,6 +569,8 @@ export function MocPartsSheetBrowser({
               <MocIoSplitSheetViewer
                 mode="batch-fulfillment"
                 batchId={activeBatch.id}
+                subjectKind={subjectKind}
+                subjectId={subjectId}
                 parentSubjectOwned={parentSubjectOwned}
                 onSheetLoaded={handleIoSheetLoaded}
               />

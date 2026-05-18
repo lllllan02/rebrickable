@@ -32,6 +32,7 @@ import {
   type PartSubstituteSuggestion,
 } from "@/app/mocs/part-substitute-suggestions-action";
 import { restoreBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-actions";
+import { invalidateIoSplitSheetCacheForBatch } from "@/lib/io-split-sheet-cache";
 import {
   SheetRowReplacePanel,
   type SheetRowReplaceContext,
@@ -975,6 +976,7 @@ function MocPartDetailBody({
                       const res = await restoreBuildPartsSheetRowAction({
                         subjectKind: sheetRowReplaceContext.subjectKind,
                         subjectId: sheetRowReplaceContext.subjectId,
+                        ioBatchId: sheetRowReplaceContext.ioBatchId,
                         branch: sheetRowReplaceContext.branch,
                         lineNumber: item.lineNumber,
                       });
@@ -1199,6 +1201,8 @@ type Props = {
   sheetRowReplaceContext?: SheetRowReplaceContext | null;
   /** 缺件表行更换并入配货表后回调（用于切换到配货 Tab） */
   onShortageRowReplacedToFulfillment?: () => void;
+  /** 更换/还原成功后：由父级刷新列表（如 Studio 分包客户端缓存表） */
+  onSheetRowMutated?: () => void | Promise<void>;
 };
 
 type DetailModalTab = "detail" | "replace";
@@ -1214,6 +1218,7 @@ export function MocPartsList({
   detailSubstituteSuggestions = false,
   sheetRowReplaceContext = null,
   onShortageRowReplacedToFulfillment,
+  onSheetRowMutated,
 }: Props) {
   const router = useRouter();
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
@@ -1289,12 +1294,28 @@ export function MocPartsList({
   }, []);
 
   const handleSheetRowReplaced = useCallback(() => {
-    if (sheetRowReplaceContext?.branch === "shortage") {
-      onShortageRowReplacedToFulfillment?.();
-    }
-    closeDetail();
-    router.refresh();
-  }, [closeDetail, onShortageRowReplacedToFulfillment, router, sheetRowReplaceContext?.branch]);
+    void (async () => {
+      if (sheetRowReplaceContext?.ioBatchId) {
+        invalidateIoSplitSheetCacheForBatch(sheetRowReplaceContext.ioBatchId);
+      }
+      if (sheetRowReplaceContext?.branch === "shortage") {
+        onShortageRowReplacedToFulfillment?.();
+      }
+      closeDetail();
+      try {
+        await onSheetRowMutated?.();
+      } finally {
+        router.refresh();
+      }
+    })();
+  }, [
+    closeDetail,
+    onSheetRowMutated,
+    onShortageRowReplacedToFulfillment,
+    router,
+    sheetRowReplaceContext?.branch,
+    sheetRowReplaceContext?.ioBatchId,
+  ]);
 
   useEffect(() => {
     const d = detailDialogRef.current;

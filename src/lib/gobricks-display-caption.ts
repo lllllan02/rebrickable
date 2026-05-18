@@ -61,3 +61,15 @@ export function formatGobricksColorLine(input: {
   const label = formatGobricksBilingualColorLabel(input);
   return label || "—";
 }
+
+/** 高砖整单参考价（元，`gdsPrice` 分片之和）；无效时返回 null */
+export function formatGobricksGdsPriceCny(gobricksGdsPriceCny: number | null | undefined): string | null {
+  if (
+    typeof gobricksGdsPriceCny !== "number" ||
+    !Number.isFinite(gobricksGdsPriceCny) ||
+    gobricksGdsPriceCny < 0
+  ) {
+    return null;
+  }
+  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gobricksGdsPriceCny);
+}

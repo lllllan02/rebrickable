@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   fetchIoBatchFullSheetAction,
@@ -9,41 +9,45 @@ import {
   fetchIoPlanMergedShortageAction,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
+import type { SheetRowReplaceContext } from "@/app/mocs/sheet-row-replace-panel";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import {
   getIoSplitSheetFromCache,
+  invalidateIoPlanMergedShortageCache,
+  invalidateIoSplitSheetCacheForBatch,
   ioBatchSheetLoadKey,
   ioPlanMergedShortageLoadKey,
   loadIoSplitSheet,
+  type IoSplitSheetLoadResult,
   type IoSplitSheetState,
 } from "@/lib/io-split-sheet-cache";
 
 export type { IoSplitSheetState };
 
-type Props =
+type Props = {
+  subjectKind?: BuildSubjectKind;
+  subjectId: string;
+  parentSubjectOwned?: boolean;
+  onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
+  onShortageRowReplacedToFulfillment?: () => void;
+} & (
   | {
       mode: "batch-full";
       batchId: number;
-      parentSubjectOwned?: boolean;
-      onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
     }
   | {
       mode: "batch-shortage";
       batchId: number;
-      parentSubjectOwned?: boolean;
-      onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
     }
   | {
       mode: "batch-fulfillment";
       batchId: number;
-      parentSubjectOwned?: boolean;
-      onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
     }
   | {
       mode: "plan-merged-shortage";
       batchIds: number[];
-      parentSubjectOwned?: boolean;
-      onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
-    };
+    }
+);
 
 function fetchResultToSheet(
   r: Awaited<ReturnType<typeof fetchIoBatchFullSheetAction>>,
@@ -56,8 +60,23 @@ function fetchResultToSheet(
   };
 }
 
-export function MocIoSplitSheetViewer(props: Props) {
-  const { parentSubjectOwned = false, onSheetLoaded } = props;
+function sheetRowReplaceContextForBatch(
+  subjectKind: BuildSubjectKind,
+  subjectId: string,
+  batchId: number,
+  branch: "fulfillment" | "shortage",
+): SheetRowReplaceContext {
+  return { subjectKind, subjectId, branch, ioBatchId: batchId };
+}
+
+export function MocIoSplitSheetViewer({
+  subjectKind = BUILD_SUBJECT_MOC,
+  subjectId,
+  parentSubjectOwned = false,
+  onSheetLoaded,
+  onShortageRowReplacedToFulfillment,
+  ...props
+}: Props) {
   const loadKey =
     props.mode === "plan-merged-shortage"
       ? ioPlanMergedShortageLoadKey(props.batchIds)
@@ -80,30 +99,22 @@ export function MocIoSplitSheetViewer(props: Props) {
     onSheetLoadedRef.current?.(next, err);
   };
 
-  useEffect(() => {
-    lastNotifyKeyRef.current = null;
-    let cancelled = false;
-    const cached = getIoSplitSheetFromCache(loadKey);
-    setSheet(cached ?? null);
-    setError(null);
-    setLoading(!cached);
-    if (cached) notifyLoaded(cached, null);
+  const fetchSheet = useCallback(async (): Promise<IoSplitSheetLoadResult> => {
+    const r =
+      props.mode === "batch-full"
+        ? await fetchIoBatchFullSheetAction(props.batchId)
+        : props.mode === "batch-shortage"
+          ? await fetchIoBatchShortageSheetAction(props.batchId)
+          : props.mode === "batch-fulfillment"
+            ? await fetchIoBatchFulfillmentSheetAction(props.batchId)
+            : await fetchIoPlanMergedShortageAction(props.batchIds);
+    const next = fetchResultToSheet(r);
+    if (!next) return { ok: false as const, error: r.ok ? "暂无零件数据。" : r.error };
+    return { ok: true as const, sheet: next };
+  }, [props]);
 
-    void loadIoSplitSheet(loadKey, async () => {
-      const r =
-        props.mode === "batch-full"
-          ? await fetchIoBatchFullSheetAction(props.batchId)
-          : props.mode === "batch-shortage"
-            ? await fetchIoBatchShortageSheetAction(props.batchId)
-            : props.mode === "batch-fulfillment"
-              ? await fetchIoBatchFulfillmentSheetAction(props.batchId)
-              : await fetchIoPlanMergedShortageAction(props.batchIds);
-      const next = fetchResultToSheet(r);
-      if (!next) return { ok: false as const, error: r.ok ? "暂无零件数据。" : r.error };
-      return { ok: true as const, sheet: next };
-    }).then((result) => {
-      if (cancelled) return;
-      setLoading(false);
+  const applyLoadResult = useCallback(
+    (result: IoSplitSheetLoadResult) => {
       if (result.ok) {
         setSheet(result.sheet);
         setError(null);
@@ -113,16 +124,56 @@ export function MocIoSplitSheetViewer(props: Props) {
       if (!getIoSplitSheetFromCache(loadKey)) setSheet(null);
       setError(result.error);
       notifyLoaded(getIoSplitSheetFromCache(loadKey) ?? null, result.error);
+    },
+    [loadKey],
+  );
+
+  useEffect(() => {
+    lastNotifyKeyRef.current = null;
+    let cancelled = false;
+    const cached = getIoSplitSheetFromCache(loadKey);
+    setSheet(cached ?? null);
+    setError(null);
+    setLoading(!cached);
+    if (cached) notifyLoaded(cached, null);
+
+    void loadIoSplitSheet(loadKey, fetchSheet).then((result) => {
+      if (cancelled) return;
+      setLoading(false);
+      applyLoadResult(result);
     });
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadKey 已含 mode / batchId(s)
-  }, [loadKey]);
+  }, [applyLoadResult, fetchSheet, loadKey]);
+
+  const reloadSheetAfterMutation = useCallback(async () => {
+    if (props.mode === "plan-merged-shortage") {
+      invalidateIoPlanMergedShortageCache(props.batchIds);
+    } else {
+      invalidateIoSplitSheetCacheForBatch(props.batchId);
+    }
+    lastNotifyKeyRef.current = null;
+    setLoading(true);
+    const result = await loadIoSplitSheet(loadKey, fetchSheet);
+    setLoading(false);
+    applyLoadResult(result);
+  }, [applyLoadResult, fetchSheet, loadKey, props]);
 
   const shortageMode =
     props.mode === "batch-shortage" || props.mode === "plan-merged-shortage";
+  const detailSubstituteSuggestions =
+    props.mode === "batch-fulfillment" ||
+    props.mode === "batch-shortage" ||
+    props.mode === "plan-merged-shortage";
+
+  const sheetRowReplaceContext: SheetRowReplaceContext | null =
+    props.mode === "batch-fulfillment"
+      ? sheetRowReplaceContextForBatch(subjectKind, subjectId, props.batchId, "fulfillment")
+      : props.mode === "batch-shortage"
+        ? sheetRowReplaceContextForBatch(subjectKind, subjectId, props.batchId, "shortage")
+        : null;
 
   return (
     <div className="relative min-h-[min(42vh,28rem)]">
@@ -156,6 +207,12 @@ export function MocIoSplitSheetViewer(props: Props) {
               totalPartQty={undefined}
               parentSubjectOwned={parentSubjectOwned}
               shortageListMode={shortageMode}
+              detailSubstituteSuggestions={detailSubstituteSuggestions}
+              sheetRowReplaceContext={sheetRowReplaceContext}
+              onSheetRowMutated={reloadSheetAfterMutation}
+              onShortageRowReplacedToFulfillment={
+                props.mode === "batch-shortage" ? onShortageRowReplacedToFulfillment : undefined
+              }
             />
           </div>
         </>

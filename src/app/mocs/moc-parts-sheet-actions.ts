@@ -39,6 +39,11 @@ import {
 import { stripShortageReasonTextFromRest } from "@/lib/shortage-reason-filter";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
+import {
+  loadIoBatchPartsSheetFromDb,
+  persistIoBatchStoredDualSheets,
+} from "@/app/mocs/io-batch-parts-sheet-actions";
+
 const MAX_SUBJECT_ID_LEN = 128;
 const MAX_ITEMS = 100_000;
 
@@ -211,6 +216,32 @@ function sumGobricksFulfillmentSheetTotalCny(items: readonly ShortageResolveItem
 function branchPayloadFromLoaded(loaded: BuildSheetBranchLoaded | null): MocSheetBranchPayload | null {
   if (!loaded) return null;
   return { skippedHeader: loaded.skippedHeader, items: loaded.items, savedAt: loaded.savedAt };
+}
+
+function resolveIoBatchId(ioBatchId: number | undefined): number | undefined {
+  if (ioBatchId == null || !Number.isFinite(ioBatchId) || ioBatchId < 1) return undefined;
+  return ioBatchId;
+}
+
+async function loadDualSheetsForRowOps(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+  ioBatchId?: number;
+}): Promise<LoadBuildPartsSheetResult> {
+  const batchId = resolveIoBatchId(input.ioBatchId);
+  if (batchId) return loadIoBatchPartsSheetFromDb(batchId);
+  return loadBuildPartsSheetFromDb(input.subjectKind, input.subjectId);
+}
+
+async function persistDualSheetsAfterRowOp(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+  ioBatchId?: number;
+  dual: StoredMocDualSheets;
+}): Promise<ReplaceBuildPartsSheetRowResult> {
+  const batchId = resolveIoBatchId(input.ioBatchId);
+  if (batchId) return persistIoBatchStoredDualSheets(batchId, input.dual);
+  return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, input.subjectId, input.dual);
 }
 
 /**
@@ -977,6 +1008,7 @@ export type ReplaceBuildPartsSheetRowResult = SaveBuildPartsSheetResult | { ok: 
 export async function replaceBuildPartsSheetRowAction(input: {
   subjectKind: BuildSubjectKind;
   subjectId: string;
+  ioBatchId?: number;
   branch: "fulfillment" | "shortage";
   lineNumber: number;
   partNum: string;
@@ -1017,7 +1049,11 @@ export async function replaceBuildPartsSheetRowAction(input: {
     return { ok: false, error: "零件号不能为空。" };
   }
 
-  const loaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
+  const loaded = await loadDualSheetsForRowOps({
+    subjectKind: input.subjectKind,
+    subjectId,
+    ioBatchId: input.ioBatchId,
+  });
   if (!loaded.ok) {
     return { ok: false, error: loaded.error };
   }
@@ -1129,7 +1165,12 @@ export async function replaceBuildPartsSheetRowAction(input: {
         savedAt,
       },
     };
-    return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
+    return persistDualSheetsAfterRowOp({
+      subjectKind: input.subjectKind,
+      subjectId,
+      ioBatchId: input.ioBatchId,
+      dual,
+    });
   }
 
   const nextFulfillment = [...branchData.items];
@@ -1143,7 +1184,12 @@ export async function replaceBuildPartsSheetRowAction(input: {
       savedAt,
     },
   };
-  return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
+  return persistDualSheetsAfterRowOp({
+    subjectKind: input.subjectKind,
+    subjectId,
+    ioBatchId: input.ioBatchId,
+    dual,
+  });
 }
 
 function normalizeSheetGdsItemIdForCompare(s: string): string {
@@ -1179,6 +1225,7 @@ function pickGobricksStockForRestore(
 export async function restoreBuildPartsSheetRowAction(input: {
   subjectKind: BuildSubjectKind;
   subjectId: string;
+  ioBatchId?: number;
   branch: "fulfillment" | "shortage";
   lineNumber: number;
 }): Promise<ReplaceBuildPartsSheetRowResult> {
@@ -1196,7 +1243,11 @@ export async function restoreBuildPartsSheetRowAction(input: {
     return { ok: false, error: "行号无效。" };
   }
 
-  const loaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
+  const loaded = await loadDualSheetsForRowOps({
+    subjectKind: input.subjectKind,
+    subjectId,
+    ioBatchId: input.ioBatchId,
+  });
   if (!loaded.ok) {
     return { ok: false, error: loaded.error };
   }
@@ -1350,5 +1401,10 @@ export async function restoreBuildPartsSheetRowAction(input: {
         ? { skippedHeader: branchData.skippedHeader, items: nextItems, savedAt }
         : branchPayloadFromLoaded(loaded.fulfillment),
   };
-  return persistStoredDualSheetsWithFulfillmentDerivedPrice(input.subjectKind, subjectId, dual);
+  return persistDualSheetsAfterRowOp({
+    subjectKind: input.subjectKind,
+    subjectId,
+    ioBatchId: input.ioBatchId,
+    dual,
+  });
 }

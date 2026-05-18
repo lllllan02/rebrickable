@@ -59,3 +59,21 @@ export function ioBatchSheetLoadKey(
 export function ioPlanMergedShortageLoadKey(batchIds: number[]): string {
   return `merged:${batchIds.join(",")}`;
 }
+
+const IO_BATCH_SHEET_MODES = ["batch-full", "batch-shortage", "batch-fulfillment"] as const;
+
+/** 更换/还原零件或重新上传后，丢弃该分包在内存中的零件表缓存 */
+export function invalidateIoSplitSheetCacheForBatch(batchId: number): void {
+  if (!Number.isFinite(batchId) || batchId < 1) return;
+  for (const mode of IO_BATCH_SHEET_MODES) {
+    const key = ioBatchSheetLoadKey(mode, batchId);
+    sheetCache.delete(key);
+    inflight.delete(key);
+  }
+}
+
+export function invalidateIoPlanMergedShortageCache(batchIds: number[]): void {
+  const key = ioPlanMergedShortageLoadKey(batchIds);
+  sheetCache.delete(key);
+  inflight.delete(key);
+}

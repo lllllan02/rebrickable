@@ -5,7 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
-import type { IoSplitPlanGroup } from "@/app/mocs/io-batch-parts-sheet-actions";
+import {
+  fetchIoBatchFulfillmentSheetAction,
+  fetchIoBatchShortageSheetAction,
+  type IoSplitPlanGroup,
+} from "@/app/mocs/io-batch-parts-sheet-actions";
+import { invalidateIoSplitSheetCacheForBatch } from "@/lib/io-split-sheet-cache";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { MocPartsSheetBrowser } from "@/app/mocs/moc-parts-sheet-browser";
 import { PartsSheetImport } from "@/app/mocs/moc-parts-sheet-import";
@@ -110,6 +115,7 @@ type Props = {
 function IoBatchEmbeddedList({
   subjectKind,
   subjectId,
+  ioBatchId,
   exportDisplayName,
   parentSubjectOwned,
   initialFull,
@@ -118,6 +124,7 @@ function IoBatchEmbeddedList({
 }: {
   subjectKind: BuildSubjectKind;
   subjectId: string;
+  ioBatchId: number;
   exportDisplayName: string;
   parentSubjectOwned: boolean;
   initialFull: InitialMocSheetFromServer | null;
@@ -130,6 +137,41 @@ function IoBatchEmbeddedList({
     if (initialShortage) return "shortage";
     return "full";
   });
+
+  const [fulfillmentSheet, setFulfillmentSheet] = useState(initialFulfillment);
+  const [shortageSheet, setShortageSheet] = useState(initialShortage);
+
+  useEffect(() => {
+    setFulfillmentSheet(initialFulfillment);
+  }, [initialFulfillment]);
+
+  useEffect(() => {
+    setShortageSheet(initialShortage);
+  }, [initialShortage]);
+
+  const reloadFulfillmentSheet = useCallback(async () => {
+    invalidateIoSplitSheetCacheForBatch(ioBatchId);
+    const r = await fetchIoBatchFulfillmentSheetAction(ioBatchId);
+    if (!r.ok) return;
+    setFulfillmentSheet({
+      subjectId,
+      skippedHeader: r.skippedHeader,
+      items: r.items,
+      savedAt: r.savedAt ?? new Date().toISOString(),
+    });
+  }, [ioBatchId, subjectId]);
+
+  const reloadShortageSheet = useCallback(async () => {
+    invalidateIoSplitSheetCacheForBatch(ioBatchId);
+    const r = await fetchIoBatchShortageSheetAction(ioBatchId);
+    if (!r.ok) return;
+    setShortageSheet({
+      subjectId,
+      skippedHeader: r.skippedHeader,
+      items: r.items,
+      savedAt: r.savedAt ?? new Date().toISOString(),
+    });
+  }, [ioBatchId, subjectId]);
 
   return (
     <div className="border-t border-[var(--border-soft)] pt-5">
@@ -193,25 +235,40 @@ function IoBatchEmbeddedList({
           parentSubjectOwned={parentSubjectOwned}
         />
       ) : null}
-      {listTab === "fulfillment" && initialFulfillment ? (
+      {listTab === "fulfillment" && fulfillmentSheet ? (
         <MocPartsList
-          items={initialFulfillment.items}
-          skippedHeader={initialFulfillment.skippedHeader}
-          savedAt={initialFulfillment.savedAt}
+          items={fulfillmentSheet.items}
+          skippedHeader={fulfillmentSheet.skippedHeader}
+          savedAt={fulfillmentSheet.savedAt}
           parentSubjectOwned={parentSubjectOwned}
           detailSubstituteSuggestions
-          sheetRowReplaceContext={{ subjectKind, subjectId, branch: "fulfillment" }}
+          sheetRowReplaceContext={{
+            subjectKind,
+            subjectId,
+            branch: "fulfillment",
+            ioBatchId,
+          }}
+          onSheetRowMutated={reloadFulfillmentSheet}
         />
       ) : null}
-      {listTab === "shortage" && initialShortage ? (
+      {listTab === "shortage" && shortageSheet ? (
         <MocPartsList
-          items={initialShortage.items}
-          skippedHeader={initialShortage.skippedHeader}
-          savedAt={initialShortage.savedAt}
+          items={shortageSheet.items}
+          skippedHeader={shortageSheet.skippedHeader}
+          savedAt={shortageSheet.savedAt}
           parentSubjectOwned={parentSubjectOwned}
           shortageListMode
           detailSubstituteSuggestions
-          sheetRowReplaceContext={{ subjectKind, subjectId, branch: "shortage" }}
+          sheetRowReplaceContext={{
+            subjectKind,
+            subjectId,
+            branch: "shortage",
+            ioBatchId,
+          }}
+          onSheetRowMutated={async () => {
+            await reloadShortageSheet();
+            await reloadFulfillmentSheet();
+          }}
           onShortageRowReplacedToFulfillment={() => setListTab("fulfillment")}
         />
       ) : null}
@@ -347,7 +404,7 @@ export function MocDetailPartsSection({
               <>左侧选「全部」；右侧切换完整 / 配货 / 缺件表。</>
             ) : (
               <>
-                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件，分包方案下为各包高砖可购零件与汇总缺件（保存时自动对照高砖）。亦可从{" "}
+                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件，分包方案下依次查看各包高砖可购零件与汇总缺件。亦可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}
@@ -374,6 +431,7 @@ export function MocDetailPartsSection({
           <IoBatchEmbeddedList
             subjectKind={subjectKind}
             subjectId={subjectId}
+            ioBatchId={ioBatchId}
             exportDisplayName={exportDisplayName}
             parentSubjectOwned={parentSubjectOwned}
             initialFull={initialFull}
