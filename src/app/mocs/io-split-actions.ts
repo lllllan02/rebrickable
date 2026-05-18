@@ -14,7 +14,7 @@ import { buildAttachments, buildIoStepBatches } from "@/db/schema";
 import { revalidateMocIoSplitPaths } from "@/lib/build-revalidate-paths";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId } from "@/lib/build-subject";
 import { dualSheetsToPayloadV2 } from "@/lib/parts-sheet-moc-id";
-import type { StudioIoMainStep } from "@/lib/parse-studio-io";
+import type { StudioIoMainStep, StudioIoPlacement } from "@/lib/parse-studio-io";
 import { readStudioIoFromAbsolutePath } from "@/lib/read-studio-io-from-path";
 import { resolveStudioIoPlacementsInDb } from "@/lib/resolve-studio-io-placements-in-db";
 import {
@@ -60,7 +60,7 @@ function countUnresolved(items: ShortageResolveItem[]): number {
 }
 
 async function resolveDraftPlacements(
-  placements: { partNum: string; ldrawColorId: number; isSubmodelRef: boolean; submodelName?: string }[]
+  placements: StudioIoPlacement[]
 ): Promise<{ ok: true; items: ShortageResolveItem[] } | { ok: false; error: string }> {
   const r = await resolveStudioIoPlacementsInDb(placements);
   if (!r.ok) return r;

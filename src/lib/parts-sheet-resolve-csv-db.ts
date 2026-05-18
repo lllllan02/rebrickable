@@ -270,6 +270,42 @@ export async function resolveGobricksSheetSerializedRowsInDb(
   return { ok: true, skippedHeader: true, items };
 }
 
+/** 已解析的行身份直接 enrich（不经 CSV 序列化，避免格式误判丢 ElementId）。 */
+export async function resolvePartsSheetIdentitiesInDb(
+  rows: readonly {
+    partNum: string;
+    colorId: number;
+    elementId: string | null;
+    quantity: number;
+    rest: string;
+    gobricksUnitPrice?: string | null;
+  }[]
+): Promise<ResolveShortageCsvDbResult> {
+  if (rows.length === 0) {
+    return { ok: true, skippedHeader: true, items: [] };
+  }
+  if (rows.length > MAX_SHEET_ROWS) {
+    return { ok: false, error: `行数超过上限 ${MAX_SHEET_ROWS}。`, lineNumber: null };
+  }
+
+  const identities = await resolvePartsSheetCsvRowIdentities(
+    rows.map((r) => ({
+      partNum: r.partNum,
+      colorId: r.colorId,
+      elementId: r.elementId,
+    }))
+  );
+  const sources: EnrichSourceRow[] = rows.map((r, i) => ({
+    lineNumber: i + 1,
+    quantity: r.quantity,
+    rest: r.rest,
+    gobricksUnitPrice: r.gobricksUnitPrice ?? null,
+  }));
+
+  const items = await enrichPartsSheetIdentitiesInDb(identities, sources);
+  return { ok: true, skippedHeader: true, items };
+}
+
 export async function resolveShortageCsvInDb(csv: string): Promise<ResolveShortageCsvDbResult> {
   if (csv.length > MAX_CSV_CHARS) {
     return { ok: false, error: `CSV 过长（上限 ${MAX_CSV_CHARS} 字符）。` };

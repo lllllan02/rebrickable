@@ -144,9 +144,21 @@ export function estimateIoSplitOutline(
 }
 
 function aggregatePlacements(placements: StudioIoPlacement[]): StudioIoPlacement[] {
-  const map = new Map<string, { partNum: string; ldrawColorId: number; qty: number; isSubmodelRef: boolean }>();
+  const map = new Map<
+    string,
+    {
+      partNum: string;
+      ldrawColorId: number;
+      qty: number;
+      isSubmodelRef: boolean;
+      submodelName?: string;
+      legoItemNo: string | null;
+      brickRefId?: number;
+    }
+  >();
   for (const p of placements) {
-    const key = `${p.partNum}\t${p.ldrawColorId}`;
+    const legoItemNo = p.legoItemNo?.trim() || null;
+    const key = legoItemNo ? `item:${legoItemNo}` : `${p.partNum}\t${p.ldrawColorId}`;
     const cur = map.get(key);
     if (cur) {
       cur.qty += 1;
@@ -156,6 +168,9 @@ function aggregatePlacements(placements: StudioIoPlacement[]): StudioIoPlacement
         ldrawColorId: p.ldrawColorId,
         qty: 1,
         isSubmodelRef: p.isSubmodelRef,
+        submodelName: p.submodelName,
+        legoItemNo,
+        brickRefId: p.brickRefId,
       });
     }
   }
@@ -166,6 +181,9 @@ function aggregatePlacements(placements: StudioIoPlacement[]): StudioIoPlacement
         partNum: v.partNum,
         ldrawColorId: v.ldrawColorId,
         isSubmodelRef: v.isSubmodelRef,
+        submodelName: v.submodelName,
+        legoItemNo: v.legoItemNo,
+        brickRefId: v.brickRefId,
       });
     }
   }

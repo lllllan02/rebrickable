@@ -22,7 +22,13 @@ export function looksLikeRebrickablePartsExport(text: string): boolean {
   const line = firstNonEmptyLine(text);
   if (!line) return false;
   const names = new Set(headerCells(line).map((c) => c.toLowerCase()));
-  return names.has("part") && names.has("color") && names.has("quantity") && !names.has("blitemno");
+  return (
+    names.has("part") &&
+    names.has("color") &&
+    names.has("quantity") &&
+    !names.has("blitemno") &&
+    !names.has("elementid")
+  );
 }
 
 function pickCI(row: Record<string, unknown>, key: string): string {
