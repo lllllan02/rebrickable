@@ -21,13 +21,65 @@ import {
   type SheetReplaceGobricksStockColor,
 } from "@/app/mocs/sheet-row-replace-catalog-action";
 
+export type SheetRowReplaceTarget = {
+  lineNumber: number;
+  ioBatchId?: number;
+};
+
 export type SheetRowReplaceContext = {
   subjectKind: BuildSubjectKind;
   subjectId: string;
   branch: "fulfillment" | "shortage";
   /** Studio 分步分包批次；有值时写入 build_io_step_batches 而非主零件表 */
   ioBatchId?: number;
+  /** 汇总表等：将展示行映射到单个源分包与行号 */
+  resolveReplaceTarget?: (item: ShortageResolveItem) => SheetRowReplaceTarget | null;
+  /** 汇总缺件等：同一展示行可能对应多包多行，须依次更换 */
+  resolveReplaceTargets?: (item: ShortageResolveItem) => SheetRowReplaceTarget[] | null;
 };
+
+export function resolveSheetRowReplaceTarget(
+  context: SheetRowReplaceContext,
+  item: ShortageResolveItem
+): SheetRowReplaceTarget {
+  const targets = resolveSheetRowReplaceTargets(context, item);
+  return targets[0] ?? { ioBatchId: context.ioBatchId, lineNumber: item.lineNumber };
+}
+
+/** 按分包分组、行号降序，避免更换后行号错位 */
+export function resolveSheetRowReplaceTargets(
+  context: SheetRowReplaceContext,
+  item: ShortageResolveItem
+): SheetRowReplaceTarget[] {
+  const fromMany = context.resolveReplaceTargets?.(item);
+  if (fromMany?.length) return sortSheetRowReplaceTargetsForApply(fromMany);
+
+  const one = context.resolveReplaceTarget?.(item);
+  if (one) return [one];
+
+  if (context.ioBatchId != null) {
+    return [{ ioBatchId: context.ioBatchId, lineNumber: item.lineNumber }];
+  }
+  return [{ lineNumber: item.lineNumber }];
+}
+
+function sortSheetRowReplaceTargetsForApply(
+  targets: SheetRowReplaceTarget[]
+): SheetRowReplaceTarget[] {
+  const byBatch = new Map<number, SheetRowReplaceTarget[]>();
+  for (const t of targets) {
+    const bid = t.ioBatchId ?? 0;
+    const list = byBatch.get(bid) ?? [];
+    list.push(t);
+    byBatch.set(bid, list);
+  }
+  const out: SheetRowReplaceTarget[] = [];
+  for (const list of byBatch.values()) {
+    list.sort((a, b) => b.lineNumber - a.lineNumber);
+    out.push(...list);
+  }
+  return out;
+}
 
 type Props = {
   item: ShortageResolveItem;
@@ -463,12 +515,11 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     try {
       const hit = gobricksVariants.find((c) => c.colorId === colorId);
       const pickedPicture = hit?.picture?.trim() || null;
-      const res = await replaceBuildPartsSheetRowAction({
+      const targets = resolveSheetRowReplaceTargets(context, item);
+      const replacePayload = {
         subjectKind: context.subjectKind,
         subjectId: context.subjectId,
-        ioBatchId: context.ioBatchId,
         branch: context.branch,
-        lineNumber: item.lineNumber,
         partNum: pn,
         colorId,
         gdsPicture: pickedPicture,
@@ -479,10 +530,17 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
         gdsColorNameZh: hit?.nameZh ?? null,
         gdsColorNameEn: hit?.nameEn ?? null,
         gdsUnitPrice: hit?.gdsUnitPrice ?? null,
-      });
-      if (!res.ok) {
-        setActionError(res.error);
-        return;
+      };
+      for (const target of targets) {
+        const res = await replaceBuildPartsSheetRowAction({
+          ...replacePayload,
+          ioBatchId: target.ioBatchId,
+          lineNumber: target.lineNumber,
+        });
+        if (!res.ok) {
+          setActionError(res.error);
+          return;
+        }
       }
       onReplaced();
     } catch {
@@ -492,11 +550,9 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     }
   }, [
     colorId,
-    context.branch,
-    context.subjectId,
-    context.subjectKind,
+    context,
     gobricksVariants,
-    item.lineNumber,
+    item,
     onReplaced,
     pickedPart,
     pickedPartName,

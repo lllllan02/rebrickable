@@ -1,18 +1,18 @@
 import type { ParsedStudioIo, StudioIoMainStep, StudioIoPlacement } from "@/lib/parse-studio-io";
 
-export type IoSplitMode =
-  | "step_interval"
-  | "piece_interval"
-  | "by_color"
-  | "by_category"
-  | "manual";
+export type IoSplitMode = "by_color" | "by_category" | "manual";
 
 export type IoSplitConfig =
-  | { mode: "step_interval"; everySteps: number }
-  | { mode: "piece_interval"; everyPieces: number }
   | { mode: "by_color" }
   | { mode: "by_category" }
   | { mode: "manual"; groups: { label: string; stepIndexes: number[] }[] };
+
+/** 历史分包配置（只读展示，不再在向导中创建） */
+export type IoSplitLegacyConfig =
+  | { mode: "step_interval"; everySteps: number }
+  | { mode: "piece_interval"; everyPieces: number };
+
+export type IoSplitConfigParsed = IoSplitConfig | IoSplitLegacyConfig;
 
 export type IoSplitBatchDraft = {
   label: string;
@@ -41,31 +41,10 @@ function pieceCountForStepIndexes(steps: IoSplitStepMeta[], indexes: number[]): 
   return steps.reduce((n, s) => (set.has(s.stepIndex) ? n + s.newPlacementCount : n), 0);
 }
 
-function outlineFromStepChunks(
-  steps: IoSplitStepMeta[],
-  chunks: number[][]
-): IoSplitBatchOutline[] {
-  return chunks
-    .map((chunk) => {
-      if (chunk.length === 0) return null;
-      const from = chunk[0]!;
-      const to = chunk[chunk.length - 1]!;
-      const pieceCount = pieceCountForStepIndexes(steps, chunk);
-      return {
-        label: `步骤 ${from}${to !== from ? `–${to}` : ""}`,
-        stepFrom: from,
-        stepTo: to,
-        stepIndexes: chunk,
-        pieceCount,
-      };
-    })
-    .filter((b): b is IoSplitBatchOutline => b != null && b.pieceCount > 0);
-}
-
 /** 根据主场景步骤元数据即时估算将拆成几包（不含按色/按类的具体种类数） */
 export function estimateIoSplitOutline(
   steps: IoSplitStepMeta[],
-  config: IoSplitConfig
+  config: IoSplitConfigParsed
 ): IoSplitBatchOutline[] {
   if (steps.length === 0) return [];
 
@@ -77,7 +56,21 @@ export function estimateIoSplitOutline(
     for (let i = 0; i < indexes.length; i += n) {
       chunks.push(indexes.slice(i, i + n));
     }
-    return outlineFromStepChunks(steps, chunks);
+    return chunks
+      .map((chunk) => {
+        if (chunk.length === 0) return null;
+        const from = chunk[0]!;
+        const to = chunk[chunk.length - 1]!;
+        const pieceCount = pieceCountForStepIndexes(steps, chunk);
+        return {
+          label: `步骤 ${from}${to !== from ? `–${to}` : ""}`,
+          stepFrom: from,
+          stepTo: to,
+          stepIndexes: chunk,
+          pieceCount,
+        };
+      })
+      .filter((b): b is IoSplitBatchOutline => b != null && b.pieceCount > 0);
   }
 
   if (config.mode === "piece_interval") {
@@ -85,34 +78,25 @@ export function estimateIoSplitOutline(
     const chunks: number[][] = [];
     let chunk: number[] = [];
     let chunkPieces = 0;
-    let batchNo = 1;
 
     const flush = () => {
       if (chunk.length === 0) return;
       const pieceCount = pieceCountForStepIndexes(steps, chunk);
-      if (pieceCount > 0) {
-        chunks.push([...chunk]);
-      }
+      if (pieceCount > 0) chunks.push([...chunk]);
       chunk = [];
       chunkPieces = 0;
-      batchNo += 1;
-      void batchNo;
     };
 
     for (const st of steps) {
       const count = st.newPlacementCount;
-      if (chunkPieces > 0 && chunkPieces + count > n) {
-        flush();
-      }
+      if (chunkPieces > 0 && chunkPieces + count > n) flush();
       chunk.push(st.stepIndex);
       chunkPieces += count;
-      if (chunkPieces >= n) {
-        flush();
-      }
+      if (chunkPieces >= n) flush();
     }
     flush();
 
-    return chunks.map((c, i) => {
+    return chunks.map((c) => {
       const from = c[0]!;
       const to = c[c.length - 1]!;
       const pieceCount = pieceCountForStepIndexes(steps, c);
@@ -246,14 +230,10 @@ function splitByPieceInterval(parsed: ParsedStudioIo, everyPieces: number): IoSp
 
   for (const st of parsed.mainSteps) {
     const count = st.newPlacements.length;
-    if (chunkPieces > 0 && chunkPieces + count > n) {
-      flush();
-    }
+    if (chunkPieces > 0 && chunkPieces + count > n) flush();
     chunkIndexes.push(st.stepIndex);
     chunkPieces += count;
-    if (chunkPieces >= n) {
-      flush();
-    }
+    if (chunkPieces >= n) flush();
   }
   flush();
   return batches;
@@ -307,12 +287,12 @@ export function splitResolvedItemsByCategory<T extends { partCatName: string | n
     }));
 }
 
-export function formatIoSplitConfigSummary(config: IoSplitConfig): string {
+export function formatIoSplitConfigSummary(config: IoSplitConfigParsed): string {
   switch (config.mode) {
     case "step_interval":
-      return `每 ${config.everySteps} 个主场景步骤一包`;
+      return `每 ${config.everySteps} 个主场景步骤一包（历史）`;
     case "piece_interval":
-      return `约每 ${config.everyPieces} 片一包`;
+      return `约每 ${config.everyPieces} 片一包（历史）`;
     case "by_color":
       return "按颜色分包（整模）";
     case "by_category":
@@ -324,26 +304,23 @@ export function formatIoSplitConfigSummary(config: IoSplitConfig): string {
   }
 }
 
+/** 新建分包方案时的默认名称（可在创建时覆盖） */
 export function defaultRuleLabelForConfig(config: IoSplitConfig): string {
   switch (config.mode) {
-    case "step_interval":
-      return `每 ${config.everySteps} 步一包`;
-    case "piece_interval":
-      return `每 ${config.everyPieces} 片一包`;
     case "by_color":
-      return "按颜色";
+      return "按颜色分包";
     case "by_category":
-      return "按类别";
+      return "按类别分包";
     case "manual":
-      return "手动分包";
+      return "自定义分包";
     default:
-      return "Studio 分步";
+      return "自定义分包";
   }
 }
 
-export function parseIoSplitConfigJson(json: string): IoSplitConfig | null {
+export function parseIoSplitConfigJson(json: string): IoSplitConfigParsed | null {
   try {
-    const v = JSON.parse(json) as IoSplitConfig;
+    const v = JSON.parse(json) as IoSplitConfigParsed;
     if (v && typeof v === "object" && "mode" in v) return v;
   } catch {
     /* ignore */
@@ -351,7 +328,10 @@ export function parseIoSplitConfigJson(json: string): IoSplitConfig | null {
   return null;
 }
 
-export function splitStudioIoByConfig(parsed: ParsedStudioIo, config: IoSplitConfig): IoSplitBatchDraft[] {
+export function splitStudioIoByConfig(
+  parsed: ParsedStudioIo,
+  config: IoSplitConfigParsed
+): IoSplitBatchDraft[] {
   switch (config.mode) {
     case "step_interval":
       return splitByStepInterval(parsed, config.everySteps);

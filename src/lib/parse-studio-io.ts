@@ -23,12 +23,17 @@ export type ParsedStudioIo = {
   submodels: string[];
 };
 
+/** LDraw type-1/10：color + xyz + 3×3 矩阵共 13 个字段后即为零件/子模型文件名（可含空格）。 */
+const LDRAW_PART_FILENAME_START = 14;
+
 function parsePartLine(line: string): StudioIoPlacement | null {
   const parts = line.trim().split(/\s+/);
   if (!parts.length || (parts[0] !== "1" && parts[0] !== "10")) return null;
+  if (parts.length < LDRAW_PART_FILENAME_START + 1) return null;
   const color = Number.parseInt(parts[1] ?? "", 10);
   if (!Number.isFinite(color)) return null;
-  const fileToken = parts[parts.length - 1] ?? "";
+  const fileToken = parts.slice(LDRAW_PART_FILENAME_START).join(" ").trim();
+  if (!fileToken) return null;
   const isDat = fileToken.toLowerCase().endsWith(".dat");
   if (isDat) {
     return { partNum: fileToken.replace(/\.dat$/i, ""), ldrawColorId: color, isSubmodelRef: false };
@@ -94,7 +99,7 @@ function expandPlacement(
   const key = (p.submodelName ?? p.partNum).trim();
   const sec = findSection(sectionByName, key);
   if (!sec) return [p];
-  return allPlacementsInSection(sec);
+  return expandPlacements(allPlacementsInSection(sec), sectionByName);
 }
 
 function expandPlacements(
@@ -170,7 +175,11 @@ function buildMainSteps(main: MpdSection, sectionByName: Map<string, MpdSection>
  * 解析 model.ldr 文本：主场景步骤；子模型引用展开为其内全部砖。
  */
 export function parseStudioIoLdrText(ldrText: string, studioVersion: string | null = null): ParsedStudioIo {
-  const sections = parseMpdSections(ldrText);
+  const normalized = normalizeStudioLdrText(ldrText);
+  let sections = parseMpdSections(normalized);
+  if (sections.length === 0) {
+    sections = [{ name: "model.ldr", lines: normalized.split(/\r?\n/) }];
+  }
   const sectionByName = new Map<string, MpdSection>();
   for (const s of sections) {
     sectionByName.set(s.name, s);

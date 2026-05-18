@@ -7,6 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "reac
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import {
   fetchIoBatchFulfillmentSheetAction,
+  fetchIoBatchModifiedSheetAction,
   fetchIoBatchShortageSheetAction,
   type IoSplitPlanGroup,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
@@ -111,7 +112,9 @@ type Props = {
   ioSplitPlans?: IoSplitPlanGroup[];
 };
 
-/** 单包详情页：仅横向 Tab（完整 / 配货 / 缺件） */
+type IoBatchListTab = "full" | "fulfillment" | "shortage" | "modified";
+
+/** 单包详情页：横向 Tab（完整 / 配货 / 缺件 / 修改） */
 function IoBatchEmbeddedList({
   subjectKind,
   subjectId,
@@ -131,7 +134,7 @@ function IoBatchEmbeddedList({
   initialShortage: InitialMocSheetFromServer | null;
   initialFulfillment: InitialMocSheetFromServer | null;
 }) {
-  const [listTab, setListTab] = useState<ListTab>(() => {
+  const [listTab, setListTab] = useState<IoBatchListTab>(() => {
     if (initialFull) return "full";
     if (initialFulfillment) return "fulfillment";
     if (initialShortage) return "shortage";
@@ -140,6 +143,7 @@ function IoBatchEmbeddedList({
 
   const [fulfillmentSheet, setFulfillmentSheet] = useState(initialFulfillment);
   const [shortageSheet, setShortageSheet] = useState(initialShortage);
+  const [modifiedSheet, setModifiedSheet] = useState<InitialMocSheetFromServer | null>(null);
 
   useEffect(() => {
     setFulfillmentSheet(initialFulfillment);
@@ -172,6 +176,26 @@ function IoBatchEmbeddedList({
       savedAt: r.savedAt ?? new Date().toISOString(),
     });
   }, [ioBatchId, subjectId]);
+
+  const reloadModifiedSheet = useCallback(async () => {
+    invalidateIoSplitSheetCacheForBatch(ioBatchId);
+    const r = await fetchIoBatchModifiedSheetAction(ioBatchId);
+    if (!r.ok) {
+      setModifiedSheet(null);
+      return;
+    }
+    setModifiedSheet({
+      subjectId,
+      skippedHeader: r.skippedHeader,
+      items: r.items,
+      savedAt: r.savedAt ?? new Date().toISOString(),
+    });
+  }, [ioBatchId, subjectId]);
+
+  useEffect(() => {
+    if (listTab !== "modified") return;
+    void reloadModifiedSheet();
+  }, [listTab, reloadModifiedSheet]);
 
   return (
     <div className="border-t border-[var(--border-soft)] pt-5">
@@ -212,6 +236,17 @@ function IoBatchEmbeddedList({
             onClick={() => initialShortage && setListTab("shortage")}
           >
             缺件表
+          </button>
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+              listTab === "modified"
+                ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                : "border-[var(--border-soft)] text-[var(--muted)]"
+            }`}
+            onClick={() => setListTab("modified")}
+          >
+            修改表
           </button>
         </div>
         {(listTab === "full" || listTab === "shortage" || listTab === "fulfillment") &&
@@ -268,9 +303,37 @@ function IoBatchEmbeddedList({
           onSheetRowMutated={async () => {
             await reloadShortageSheet();
             await reloadFulfillmentSheet();
+            await reloadModifiedSheet();
           }}
-          onShortageRowReplacedToFulfillment={() => setListTab("fulfillment")}
+          onShortageRowReplacedToFulfillment={() => setListTab("modified")}
         />
+      ) : null}
+      {listTab === "modified" ? (
+        modifiedSheet ? (
+          <MocPartsList
+            items={modifiedSheet.items}
+            skippedHeader={modifiedSheet.skippedHeader}
+            savedAt={modifiedSheet.savedAt}
+            parentSubjectOwned={parentSubjectOwned}
+            detailSubstituteSuggestions
+            sourceMetaLine="由缺件表更换并入配货表的行。"
+            sheetRowReplaceContext={{
+              subjectKind,
+              subjectId,
+              branch: "fulfillment",
+              ioBatchId,
+            }}
+            onSheetRowMutated={async () => {
+              await reloadModifiedSheet();
+              await reloadFulfillmentSheet();
+              await reloadShortageSheet();
+            }}
+          />
+        ) : (
+          <p className="text-sm text-[var(--muted)]">
+            尚无修改记录；请在缺件表中更换零件后，修改行会汇总到此表。
+          </p>
+        )
       ) : null}
     </div>
   );
@@ -404,7 +467,7 @@ export function MocDetailPartsSection({
               <>左侧选「全部」；右侧切换完整 / 配货 / 缺件表。</>
             ) : (
               <>
-                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件，分包方案下依次查看各包高砖可购零件与汇总缺件。亦可从{" "}
+                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件，分包方案下依次切换各分包、缺件表与修改表。亦可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}

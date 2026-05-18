@@ -54,7 +54,25 @@ export function buildPartsSheetExportStem(input: {
   return stem;
 }
 
-/** Studio 分步包导出文件名（含方案名与包名） */
+/** Studio 分包导出基础名：`{MOC ID}-{名称}-{分包方案名}-{分包名}` */
+export function buildIoSplitBatchExportStem(input: {
+  mocId: string;
+  displayName: string;
+  planLabel: string;
+  batchLabel: string;
+  /** 同包多表时追加，如「缺件表」「修改部分」 */
+  sheetSuffix?: string;
+}): string {
+  const id = sanitizePartsSheetExportSegment(input.mocId.trim(), 128) || "unknown";
+  const name = sanitizePartsSheetExportSegment(input.displayName.trim() || "未命名", 64) || "未命名";
+  const plan = sanitizePartsSheetExportSegment(input.planLabel.trim() || "分包方案", 48) || "分包方案";
+  const batch = sanitizePartsSheetExportSegment(input.batchLabel.trim() || "分包", 32) || "分包";
+  const suffix = input.sheetSuffix?.trim();
+  const body = suffix ? `${id}-${name}-${plan}-${batch}-${suffix}` : `${id}-${name}-${plan}-${batch}`;
+  return sanitizePartsSheetExportSegment(body, MAX_PARTS_SHEET_EXPORT_STEM_LEN) || `${id}-分包-未命名`;
+}
+
+/** @deprecated 使用 {@link buildIoSplitBatchExportStem} */
 export function buildIoBatchPartsSheetExportStem(input: {
   mocId: string;
   displayName: string;
@@ -63,13 +81,16 @@ export function buildIoBatchPartsSheetExportStem(input: {
   branch: PartsSheetExportBranch;
   contentLabel?: string;
 }): string {
-  const id = sanitizePartsSheetExportSegment(input.mocId.trim(), 128) || "unknown";
-  const name = sanitizePartsSheetExportSegment(input.displayName.trim() || "未命名", 64) || "未命名";
-  const plan = sanitizePartsSheetExportSegment(input.planLabel.trim() || "分包方案", 48) || "分包方案";
-  const batch = sanitizePartsSheetExportSegment(input.batchLabel.trim() || "分包", 32) || "分包";
-  const content = input.contentLabel?.trim() || BRANCH_LABEL[input.branch];
-  const body = `${id}-${name}-${plan}-${batch}-${content}`;
-  return sanitizePartsSheetExportSegment(body, MAX_PARTS_SHEET_EXPORT_STEM_LEN) || `${id}-分包-未命名-${content}`;
+  const sheetSuffix =
+    input.contentLabel?.trim() ||
+    (input.branch === "fulfillment" ? undefined : BRANCH_LABEL[input.branch]);
+  return buildIoSplitBatchExportStem({
+    mocId: input.mocId,
+    displayName: input.displayName,
+    planLabel: input.planLabel,
+    batchLabel: input.batchLabel,
+    sheetSuffix,
+  });
 }
 
 /** 方案内汇总缺件表导出文件名 */
@@ -78,11 +99,39 @@ export function buildIoPlanMergedShortageExportStem(input: {
   displayName: string;
   planLabel: string;
 }): string {
-  return buildIoBatchPartsSheetExportStem({
+  return buildIoSplitBatchExportStem({
     mocId: input.mocId,
     displayName: input.displayName,
     planLabel: input.planLabel,
     batchLabel: "汇总缺件",
-    branch: "shortage",
+  });
+}
+
+/** 方案内汇总修改表导出文件名 */
+export function buildIoPlanMergedModifiedExportStem(input: {
+  mocId: string;
+  displayName: string;
+  planLabel: string;
+}): string {
+  return buildIoSplitBatchExportStem({
+    mocId: input.mocId,
+    displayName: input.displayName,
+    planLabel: input.planLabel,
+    batchLabel: "修改表",
+    sheetSuffix: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
+  });
+}
+
+/** 方案一键导出压缩包文件名 */
+export function buildIoSplitPlanZipExportStem(input: {
+  mocId: string;
+  displayName: string;
+  planLabel: string;
+}): string {
+  return buildIoSplitBatchExportStem({
+    mocId: input.mocId,
+    displayName: input.displayName,
+    planLabel: input.planLabel,
+    batchLabel: "全部零件表",
   });
 }

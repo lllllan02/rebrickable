@@ -19,8 +19,11 @@ import {
   type StoredMocDualSheets,
 } from "@/lib/parts-sheet-moc-id";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
+import { restHasSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
+import type { IoSplitSheetRowProvenance } from "@/lib/io-split-sheet-cache";
 
 import { buildAttachments } from "@/db/schema";
+import { sumPartsSheetGobricksTotalCny } from "@/lib/parts-sheet-gobricks-price";
 import { formatIoSplitConfigSummary, parseIoSplitConfigJson } from "@/lib/studio-io-split";
 
 import type { BuildSheetBranchLoaded, InitialBuildSheetFromServer, LoadBuildPartsSheetResult } from "./moc-parts-sheet-actions";
@@ -221,22 +224,46 @@ export async function listIoSplitPlanGroupsForMoc(mocId: string): Promise<IoSpli
   });
 }
 
-function mergeShortageItems(lists: ShortageResolveItem[][]): ShortageResolveItem[] {
-  const merged = new Map<string, ShortageResolveItem>();
+function mergeShortageItemsWithProvenance(
+  lists: { batchId: number; items: ShortageResolveItem[] }[]
+): {
+  items: ShortageResolveItem[];
+  shortageProvenanceByLine: Record<number, IoSplitSheetRowProvenance[]>;
+} {
+  const merged = new Map<
+    string,
+    { item: ShortageResolveItem; sources: IoSplitSheetRowProvenance[] }
+  >();
   let lineNumber = 0;
-  for (const items of lists) {
+
+  for (const { batchId, items } of lists) {
     for (const item of items) {
       const key = `${item.partNum}\t${item.colorId}`;
+      const source: IoSplitSheetRowProvenance = {
+        batchId,
+        sourceLineNumber: item.lineNumber,
+      };
       const cur = merged.get(key);
       if (cur) {
-        cur.quantity += item.quantity;
+        cur.item.quantity += item.quantity;
+        cur.sources.push(source);
       } else {
         lineNumber += 1;
-        merged.set(key, { ...item, lineNumber });
+        merged.set(key, {
+          item: { ...item, lineNumber },
+          sources: [source],
+        });
       }
     }
   }
-  return [...merged.values()];
+
+  const items: ShortageResolveItem[] = [];
+  const shortageProvenanceByLine: Record<number, IoSplitSheetRowProvenance[]> = {};
+  for (const { item, sources } of merged.values()) {
+    items.push(item);
+    shortageProvenanceByLine[item.lineNumber] = sources;
+  }
+  return { items, shortageProvenanceByLine };
 }
 
 /** 详情页内嵌查看某一分步包的完整零件表 */
@@ -321,20 +348,21 @@ export async function fetchIoPlanMergedShortageAction(batchIds: number[]): Promi
       items: ShortageResolveItem[];
       skippedHeader: boolean;
       savedAt: string | null;
+      shortageProvenanceByLine: Record<number, IoSplitSheetRowProvenance[]>;
     }
   | { ok: false; error: string }
 > {
   const ids = batchIds.filter((id) => Number.isFinite(id) && id > 0);
   if (ids.length === 0) return { ok: false, error: "无有效分包。" };
 
-  const lists: ShortageResolveItem[][] = [];
+  const lists: { batchId: number; items: ShortageResolveItem[] }[] = [];
   let latestSavedAt: string | null = null;
   let skippedHeader = true;
 
   for (const id of ids) {
     const r = await loadIoBatchPartsSheetFromDb(id);
     if (!r.ok || !r.shortage?.items.length) continue;
-    lists.push(r.shortage.items);
+    lists.push({ batchId: id, items: r.shortage.items });
     skippedHeader = skippedHeader && r.shortage.skippedHeader;
     if (r.shortage.savedAt && (!latestSavedAt || r.shortage.savedAt > latestSavedAt)) {
       latestSavedAt = r.shortage.savedAt;
@@ -348,11 +376,91 @@ export async function fetchIoPlanMergedShortageAction(batchIds: number[]): Promi
     };
   }
 
+  const { items, shortageProvenanceByLine } = mergeShortageItemsWithProvenance(lists);
   return {
     ok: true,
-    items: mergeShortageItems(lists),
+    items,
     skippedHeader,
     savedAt: latestSavedAt,
+    shortageProvenanceByLine,
+  };
+}
+
+/** 单包配货表中经「更换零件」写入的行（修改表） */
+export async function fetchIoBatchModifiedSheetAction(batchId: number): Promise<
+  | {
+      ok: true;
+      items: ShortageResolveItem[];
+      skippedHeader: boolean;
+      savedAt: string | null;
+    }
+  | { ok: false; error: string }
+> {
+  const r = await fetchIoBatchFulfillmentSheetAction(batchId);
+  if (!r.ok) return r;
+  const items = r.items.filter((row) => restHasSheetRowReplacedMarker(row.rest));
+  if (items.length === 0) {
+    return { ok: false, error: "该包尚无修改记录；可在缺件表中更换零件后在此查看。" };
+  }
+  return {
+    ok: true,
+    items,
+    skippedHeader: r.skippedHeader,
+    savedAt: r.savedAt,
+  };
+}
+
+/** 方案内各包修改表合并（不合并数量，保留源分包行映射） */
+export async function fetchIoPlanMergedModifiedAction(batchIds: number[]): Promise<
+  | {
+      ok: true;
+      items: ShortageResolveItem[];
+      skippedHeader: boolean;
+      savedAt: string | null;
+      replaceProvenanceByLine: Record<number, IoSplitSheetRowProvenance>;
+    }
+  | { ok: false; error: string }
+> {
+  const ids = batchIds.filter((id) => Number.isFinite(id) && id > 0);
+  if (ids.length === 0) return { ok: false, error: "无有效分包。" };
+
+  const items: ShortageResolveItem[] = [];
+  const replaceProvenanceByLine: Record<number, IoSplitSheetRowProvenance> = {};
+  let latestSavedAt: string | null = null;
+  let skippedHeader = true;
+  let lineNumber = 0;
+
+  for (const id of ids) {
+    const r = await loadIoBatchPartsSheetFromDb(id);
+    if (!r.ok || !r.fulfillment?.items.length) continue;
+    skippedHeader = skippedHeader && r.fulfillment.skippedHeader;
+    if (r.fulfillment.savedAt && (!latestSavedAt || r.fulfillment.savedAt > latestSavedAt)) {
+      latestSavedAt = r.fulfillment.savedAt;
+    }
+    for (const row of r.fulfillment.items) {
+      if (!restHasSheetRowReplacedMarker(row.rest)) continue;
+      lineNumber += 1;
+      items.push({ ...row, lineNumber });
+      replaceProvenanceByLine[lineNumber] = {
+        batchId: id,
+        sourceLineNumber: row.lineNumber,
+      };
+    }
+  }
+
+  if (items.length === 0) {
+    return {
+      ok: false,
+      error: "该方案下尚无修改记录；请在各分包缺件表中更换零件，修改行将汇总到此表。",
+    };
+  }
+
+  return {
+    ok: true,
+    items,
+    skippedHeader,
+    savedAt: latestSavedAt,
+    replaceProvenanceByLine,
   };
 }
 
@@ -391,20 +499,6 @@ export async function loadIoBatchPartsSheetFromDb(
 }
 
 export type SaveIoBatchPartsSheetResult = { ok: true; savedAt: string } | { ok: false; error: string };
-
-function sumGobricksFulfillmentSheetTotalCny(items: readonly ShortageResolveItem[] | undefined): number {
-  if (!items?.length) return 0;
-  let s = 0;
-  for (const r of items) {
-    const raw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim().replace(/,/g, "");
-    const u = Number(raw);
-    if (!Number.isFinite(u) || u < 0) continue;
-    const q = Number.isFinite(r.quantity) ? r.quantity : 0;
-    if (!Number.isFinite(q) || q <= 0) continue;
-    s += u * q;
-  }
-  return Math.round(s * 1e4) / 1e4;
-}
 
 export type PersistIoBatchDualResult = { ok: true; savedAt: string } | { ok: false; error: string };
 
@@ -453,7 +547,7 @@ export async function persistIoBatchStoredDualSheets(
   }
 
   const savedAt = new Date().toISOString();
-  const fulfillmentTotalCny = sumGobricksFulfillmentSheetTotalCny(dualNorm.fulfillment?.items);
+  const fulfillmentTotalCny = sumPartsSheetGobricksTotalCny(dualNorm.fulfillment?.items);
   const safePrice = Number.isFinite(fulfillmentTotalCny) && fulfillmentTotalCny >= 0 ? fulfillmentTotalCny : 0;
 
   const db = getUserDb();

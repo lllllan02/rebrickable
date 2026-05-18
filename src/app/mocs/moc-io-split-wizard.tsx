@@ -14,7 +14,16 @@ import {
 import { buildSubjectDetailPath, mocIoBatchPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
-import { estimateIoSplitOutline, type IoSplitConfig } from "@/lib/studio-io-split";
+import {
+  buildManualIoSplitGroups,
+  formatIoMainStepLabel,
+} from "@/lib/io-split-step-display";
+import {
+  defaultRuleLabelForConfig,
+  estimateIoSplitOutline,
+  type IoSplitConfig,
+  type IoSplitMode,
+} from "@/lib/studio-io-split";
 
 type Props = {
   mocId: string;
@@ -22,7 +31,7 @@ type Props = {
   attachmentLabel: string;
 };
 
-type SplitModeUi = IoSplitConfig["mode"];
+type SplitModeUi = IoSplitMode;
 
 type EffectRow = {
   label: string;
@@ -34,21 +43,12 @@ type EffectRow = {
   unresolvedSubmodelCount: number | null;
 };
 
-function stepRangeLabel(indexes: number[]): string {
-  if (indexes.length === 0) return "—";
-  const sorted = [...indexes].sort((a, b) => a - b);
-  return sorted.map((i) => (i === 0 ? "基础层" : `步骤 ${i}`)).join("、");
-}
-
 function formatStepListLabel(s: IoSplitPreviewStep): string {
-  if (s.stepIndex === 0) return "基础层";
-  const title = s.title?.trim();
-  if (title && title !== `步骤 ${s.stepIndex}`) return `步骤 ${s.stepIndex} · ${title}`;
-  return `步骤 ${s.stepIndex}`;
+  return formatIoMainStepLabel(s.stepIndex, s.title);
 }
 
 function stepCellShortLabel(stepIndex: number): string {
-  return stepIndex === 0 ? "基" : String(stepIndex);
+  return String(Math.max(1, stepIndex));
 }
 
 const MANUAL_BATCH_CELL_STYLES = [
@@ -129,14 +129,6 @@ function applyContiguousSelect(
   return { groups: next, activeGroupIdx: gi };
 }
 
-const MODE_HINTS: Record<SplitModeUi, string> = {
-  step_interval: "按主场景步骤分组",
-  piece_interval: "按累计新增片数分组",
-  by_color: "每种 LDraw 颜色一包（整模）",
-  by_category: "每种零件类别一包（整模）",
-  manual: "按连续步骤区间分包（点击设定每包终点）",
-};
-
 export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props) {
   const router = useRouter();
   const [loadingCtx, startLoadCtx] = useTransition();
@@ -150,9 +142,9 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   const [steps, setSteps] = useState<IoSplitPreviewStep[]>([]);
   const [existingBatchCount, setExistingBatchCount] = useState(0);
 
-  const [mode, setMode] = useState<SplitModeUi>("step_interval");
-  const [everySteps, setEverySteps] = useState(3);
-  const [everyPieces, setEveryPieces] = useState(50);
+  const [mode, setMode] = useState<SplitModeUi>("by_color");
+  const [planName, setPlanName] = useState("按颜色分包");
+  const [planNameTouched, setPlanNameTouched] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(true);
 
   const [manualGroups, setManualGroups] = useState<ManualGroup[]>([
@@ -165,12 +157,28 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
 
   const mocHref = buildSubjectDetailPath(BUILD_SUBJECT_MOC, mocId);
 
+  const hasBaseLayerStep = useMemo(() => steps.some((s) => s.stepIndex === 0), [steps]);
+
+  const manualSteps = useMemo(
+    () => steps.filter((s) => s.stepIndex > 0),
+    [steps]
+  );
+
   const config = useMemo((): IoSplitConfig => {
-    if (mode === "step_interval") return { mode, everySteps: Math.max(1, everySteps) };
-    if (mode === "piece_interval") return { mode, everyPieces: Math.max(1, everyPieces) };
-    if (mode === "manual") return { mode, groups: manualGroups.filter((g) => g.stepIndexes.length > 0) };
+    if (mode === "manual") {
+      return {
+        mode,
+        groups: buildManualIoSplitGroups(manualGroups, hasBaseLayerStep),
+      };
+    }
     return { mode };
-  }, [mode, everySteps, everyPieces, manualGroups]);
+  }, [mode, manualGroups, hasBaseLayerStep]);
+
+  const defaultPlanName = useMemo(() => defaultRuleLabelForConfig(config), [config]);
+
+  useEffect(() => {
+    if (!planNameTouched) setPlanName(defaultPlanName);
+  }, [defaultPlanName, planNameTouched]);
 
   const stepMeta = useMemo(
     () => steps.map((s) => ({ stepIndex: s.stepIndex, newPlacementCount: s.newPlacementCount })),
@@ -185,14 +193,19 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   const assignedStepCount = useMemo(() => {
     const set = new Set<number>();
     for (const g of manualGroups) {
-      for (const idx of g.stepIndexes) set.add(idx);
+      for (const idx of g.stepIndexes) {
+        if (idx > 0) set.add(idx);
+      }
     }
     return set.size;
   }, [manualGroups]);
 
-  const unassignedStepCount = steps.length - assignedStepCount;
+  const unassignedStepCount = manualSteps.length - assignedStepCount;
 
-  const orderedStepIdx = useMemo(() => orderedStepIndexes(steps), [steps]);
+  const orderedStepIdx = useMemo(
+    () => orderedStepIndexes(mode === "manual" ? manualSteps : steps),
+    [mode, manualSteps, steps]
+  );
 
   const activeBatchEndPos = useMemo(() => {
     const g = manualGroups[activeManualGroupIdx];
@@ -201,27 +214,25 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   }, [manualGroups, activeManualGroupIdx, orderedStepIdx]);
 
   const effectRows: EffectRow[] = useMemo(() => {
-    const raw: Omit<EffectRow, "label">[] =
-      previewBatches && previewBatches.length > 0
-        ? previewBatches.map((p) => ({
-            stepFrom: p.stepFrom,
-            stepTo: p.stepTo,
-            stepIndexes: p.stepIndexes,
-            pieceCount: p.totalPartQty,
-            lineCount: p.lineCount,
-            unresolvedSubmodelCount: p.unresolvedSubmodelCount,
-          }))
-        : outline.map((o) => ({
-            stepFrom: o.stepFrom,
-            stepTo: o.stepTo,
-            stepIndexes: o.stepIndexes,
-            pieceCount: o.pieceCount,
-            lineCount: null,
-            unresolvedSubmodelCount: null,
-          }));
-    return raw.map((row, i) => ({
-      ...row,
-      label: ioSplitPackageLabel(i + 1),
+    if (previewBatches && previewBatches.length > 0) {
+      return previewBatches.map((p) => ({
+        label: p.label.trim() || "—",
+        stepFrom: p.stepFrom,
+        stepTo: p.stepTo,
+        stepIndexes: p.stepIndexes,
+        pieceCount: p.totalPartQty,
+        lineCount: p.lineCount,
+        unresolvedSubmodelCount: p.unresolvedSubmodelCount,
+      }));
+    }
+    return outline.map((o, i) => ({
+      label: o.label.trim() || ioSplitPackageLabel(i + 1),
+      stepFrom: o.stepFrom,
+      stepTo: o.stepTo,
+      stepIndexes: o.stepIndexes,
+      pieceCount: o.pieceCount,
+      lineCount: null,
+      unresolvedSubmodelCount: null,
     }));
   }, [previewBatches, outline]);
 
@@ -302,6 +313,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         mocId,
         attachmentId,
         config,
+        ruleLabel: planName.trim() || defaultPlanName,
         replaceExisting,
       });
       if (!r.ok) {
@@ -318,10 +330,21 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         router.refresh();
       }
     });
-  }, [mocId, attachmentId, config, replaceExisting, router, mocHref, bagCount, manualInvalid]);
+  }, [
+    mocId,
+    attachmentId,
+    config,
+    replaceExisting,
+    router,
+    mocHref,
+    bagCount,
+    manualInvalid,
+    planName,
+    defaultPlanName,
+  ]);
 
   const contiguousSelectThrough = (stepIndex: number) => {
-    const ordered = orderedStepIndexes(steps);
+    const ordered = orderedStepIndexes(mode === "manual" ? manualSteps : steps);
     const { groups: next, activeGroupIdx } = applyContiguousSelect(
       ordered,
       manualGroups,
@@ -333,12 +356,13 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   };
 
   const selectThroughLastStep = () => {
-    const last = steps[steps.length - 1]?.stepIndex;
+    const list = mode === "manual" ? manualSteps : steps;
+    const last = list[list.length - 1]?.stepIndex;
     if (last != null) contiguousSelectThrough(last);
   };
 
   const selectThroughSegmentEnd = () => {
-    const ordered = orderedStepIndexes(steps);
+    const ordered = orderedStepIndexes(mode === "manual" ? manualSteps : steps);
     const startPos = rangeStartPosForGroup(ordered, manualGroups, activeManualGroupIdx);
     let endPos = ordered.length - 1;
     for (let p = startPos; p < ordered.length; p++) {
@@ -406,11 +430,9 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         <div className="mt-3 flex flex-col gap-2 text-sm">
           {(
             [
-              ["step_interval", "按主场景步骤：每 N 步一张表"],
-              ["piece_interval", "按片数：每累计约 N 片一张表"],
               ["by_color", "按颜色：每种颜色一张表（整模）"],
               ["by_category", "按零件类别：每类一张表（整模）"],
-              ["manual", "手动：自选步骤归入各批次"],
+              ["manual", "自定义：自选步骤归入各批次"],
             ] as const
           ).map(([value, label]) => (
             <label key={value} className="flex cursor-pointer items-center gap-2">
@@ -418,47 +440,35 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
                 type="radio"
                 name="splitMode"
                 checked={mode === value}
-                onChange={() => setMode(value)}
+                onChange={() => {
+                  setMode(value);
+                  setPlanNameTouched(false);
+                }}
               />
               <span>{label}</span>
             </label>
           ))}
         </div>
 
-        {mode === "step_interval" ? (
-          <label className="mt-3 flex items-center gap-2 text-sm">
-            每
-            <input
-              type="number"
-              min={1}
-              max={99}
-              value={everySteps}
-              onChange={(e) => setEverySteps(Number(e.target.value) || 1)}
-              className="w-16 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
-            />
-            个主场景步骤
-          </label>
-        ) : null}
-
-        {mode === "piece_interval" ? (
-          <label className="mt-3 flex items-center gap-2 text-sm">
-            约每
-            <input
-              type="number"
-              min={1}
-              max={9999}
-              value={everyPieces}
-              onChange={(e) => setEveryPieces(Number(e.target.value) || 1)}
-              className="w-20 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
-            />
-            片零件
-          </label>
-        ) : null}
+        <label className="mt-4 block text-sm">
+          <span className="font-medium text-[var(--text)]">分包方案名称</span>
+          <span className="ml-2 text-xs text-[var(--muted)]">仅创建时可设置，保存后不可修改</span>
+          <input
+            type="text"
+            value={planName}
+            maxLength={48}
+            onChange={(e) => {
+              setPlanNameTouched(true);
+              setPlanName(e.target.value);
+            }}
+            className="mt-1.5 w-full max-w-md rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm"
+            placeholder={defaultPlanName}
+          />
+        </label>
 
         {mode === "manual" ? (
           <p className="mt-3 text-xs text-[var(--muted)]">请在下方「手动分包」区域点击方格划分步骤。</p>
         ) : null}
-
 
         <label className="mt-4 flex items-center gap-2 text-xs text-[var(--muted)]">
           <input
@@ -466,7 +476,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
             checked={replaceExisting}
             onChange={(e) => setReplaceExisting(e.target.checked)}
           />
-          覆盖本附件下相同拆分配置的已有分包（保存后命名为分包1、分包2…）
+          覆盖本附件下相同拆分配置的已有分包（手动分包时各包名为分包1、分包2…）
         </label>
       </section>
 
@@ -480,7 +490,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
               </p>
             </div>
             <p className="text-xs tabular-nums text-[var(--muted)]">
-              已分配 {assignedStepCount}/{steps.length} 步
+              已分配 {assignedStepCount}/{manualSteps.length} 步
               {unassignedStepCount > 0 ? ` · 未分配 ${unassignedStepCount} 步` : null}
             </p>
           </div>
@@ -552,9 +562,9 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
 
           <div className="mt-4 rounded-md border border-[var(--border-soft)] bg-[var(--surface)]/30 p-3">
             <p className="text-xs text-[var(--muted)]">
-              主场景 {steps.length} 步 · 点击方格设定当前批次终点（「基」= 基础层）
+              主场景 {manualSteps.length} 步 · 点击方格设定当前批次终点（从步骤 1 起）
             </p>
-            {steps.length === 0 ? (
+            {manualSteps.length === 0 ? (
               <p className="mt-3 py-4 text-center text-xs text-[var(--muted)]">正在加载步骤…</p>
             ) : (
               <div
@@ -562,7 +572,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
                 role="group"
                 aria-label="主场景步骤方格"
               >
-                {steps.map((s) => {
+                {manualSteps.map((s) => {
                   const pos = orderedStepIdx.indexOf(s.stepIndex);
                   const ownerIdx = findStepGroupIndex(manualGroups, s.stepIndex);
                   const isActiveEnd =
@@ -628,63 +638,25 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
           <h2 className="text-sm font-medium text-[var(--text)]">拆分效果</h2>
           <p className="text-lg font-semibold tabular-nums text-[var(--accent)]">{bagCountLabel}</p>
         </div>
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          {steps.length > 0 ? `主场景共 ${steps.length} 步` : null}
-          {steps.length > 0 ? " · " : ""}
-          {MODE_HINTS[mode]}
-        </p>
         {bagCount > 0 ? (
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            合计约 {totalPieces} 片
-            {previewReady ? " · 已按模型解析零件行数" : previewBusy ? " · 正在解析…" : " · 片数为步骤新增估算"}
-          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">合计 {totalPieces} 片</p>
         ) : null}
 
         {bagCount > 0 ? (
-          <ol className="mt-4 space-y-2">
+          <ul className="mt-3 divide-y divide-[var(--border-soft)] rounded-md border border-[var(--border-soft)] bg-[var(--surface)]/40">
             {effectRows.map((row, i) => (
               <li
                 key={`${row.label}-${i}`}
-                className="rounded-md border border-[var(--border-soft)] bg-[var(--surface)]/50 px-3 py-2.5 text-sm"
+                className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-[var(--text)]">{row.label}</span>
-                  <span className="tabular-nums text-[var(--accent)]">{row.pieceCount} 片</span>
-                </div>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {stepRangeLabel(row.stepIndexes)}
-                  {row.lineCount != null ? ` · ${row.lineCount} 行零件` : null}
-                  {row.unresolvedSubmodelCount != null && row.unresolvedSubmodelCount > 0
-                    ? ` · ${row.unresolvedSubmodelCount} 件未识别`
-                    : null}
-                </p>
-              </li>
-            ))}
-          </ol>
-        ) : null}
-
-        {mode === "step_interval" && steps.length > 0 && everySteps > 0 ? (
-          <p className="mt-3 text-xs text-[var(--muted)]">
-            每 {everySteps} 步一包：{steps.length} 步 ÷ {everySteps} → 共 {bagCount > 0 ? bagCount : Math.ceil(steps.length / everySteps)} 包
-          </p>
-        ) : null}
-      </section>
-
-      {mode !== "manual" ? (
-        <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/30 p-4">
-          <h2 className="text-sm font-medium text-[var(--text)]">主场景步骤（{steps.length}）</h2>
-          <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-xs text-[var(--muted)]">
-            {steps.map((s) => (
-              <li key={s.stepIndex}>
-                <span className="text-[var(--text)]">
-                  {s.stepIndex === 0 ? "基础层" : `步骤 ${s.stepIndex}`}
-                </span>
-                {s.title && s.stepIndex > 0 ? ` · ${s.title}` : ""} — 新增 {s.newPlacementCount} 片
+                <span className="min-w-0 truncate font-medium text-[var(--text)]">{row.label}</span>
+                <span className="shrink-0 tabular-nums text-[var(--muted)]">{row.pieceCount} 片</span>
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : null}
+
+      </section>
 
       <div className="flex flex-wrap gap-3">
         <button

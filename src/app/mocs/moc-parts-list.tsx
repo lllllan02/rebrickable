@@ -34,6 +34,7 @@ import {
 import { restoreBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-actions";
 import { invalidateIoSplitSheetCacheForBatch } from "@/lib/io-split-sheet-cache";
 import {
+  resolveSheetRowReplaceTarget,
   SheetRowReplacePanel,
   type SheetRowReplaceContext,
 } from "@/app/mocs/sheet-row-replace-panel";
@@ -973,12 +974,13 @@ function MocPartDetailBody({
                     setRestoreErr(null);
                     setRestoreBusy(true);
                     try {
+                      const target = resolveSheetRowReplaceTarget(sheetRowReplaceContext, item);
                       const res = await restoreBuildPartsSheetRowAction({
                         subjectKind: sheetRowReplaceContext.subjectKind,
                         subjectId: sheetRowReplaceContext.subjectId,
-                        ioBatchId: sheetRowReplaceContext.ioBatchId,
+                        ioBatchId: target.ioBatchId,
                         branch: sheetRowReplaceContext.branch,
-                        lineNumber: item.lineNumber,
+                        lineNumber: target.lineNumber,
                       });
                       if (!res.ok) {
                         setRestoreErr(res.error);

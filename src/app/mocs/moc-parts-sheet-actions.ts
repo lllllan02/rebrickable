@@ -21,6 +21,7 @@ import {
   type MocSheetBranchPayload,
   type StoredMocDualSheets,
 } from "@/lib/parts-sheet-moc-id";
+import { sumPartsSheetGobricksTotalCny } from "@/lib/parts-sheet-gobricks-price";
 import { resolveGobricksSheetSerializedRowsInDb } from "@/lib/parts-sheet-resolve-csv-db";
 import {
   listGobricksStockColorsForSheetReplaceAction,
@@ -198,21 +199,6 @@ function trimGdsPictureForSheetSerialize(raw: string | null | undefined): string
   return t.length > MAX_GDS_PICTURE_URL_LEN ? t.slice(0, MAX_GDS_PICTURE_URL_LEN) : t;
 }
 
-/** 配货表行：高砖单价（元）× 数量之和，用于手动更换/还原后刷新 `gobricksGdsPriceCny`。 */
-function sumGobricksFulfillmentSheetTotalCny(items: readonly ShortageResolveItem[] | undefined): number {
-  if (!items?.length) return 0;
-  let s = 0;
-  for (const r of items) {
-    const raw = ((r.gdsUnitPrice ?? r.gobricksUnitPrice) ?? "").trim().replace(/,/g, "");
-    const u = Number(raw);
-    if (!Number.isFinite(u) || u < 0) continue;
-    const q = Number.isFinite(r.quantity) ? r.quantity : 0;
-    if (!Number.isFinite(q) || q <= 0) continue;
-    s += u * q;
-  }
-  return Math.round(s * 1e4) / 1e4;
-}
-
 function branchPayloadFromLoaded(loaded: BuildSheetBranchLoaded | null): MocSheetBranchPayload | null {
   if (!loaded) return null;
   return { skippedHeader: loaded.skippedHeader, items: loaded.items, savedAt: loaded.savedAt };
@@ -291,7 +277,7 @@ async function persistStoredDualSheetsWithFulfillmentDerivedPrice(
     return { ok: false, error: "至少须保留一种零件表数据。" };
   }
 
-  const fulfillmentTotalCny = sumGobricksFulfillmentSheetTotalCny(dualNorm.fulfillment?.items);
+  const fulfillmentTotalCny = sumPartsSheetGobricksTotalCny(dualNorm.fulfillment?.items);
   const safePrice = Number.isFinite(fulfillmentTotalCny) && fulfillmentTotalCny >= 0 ? fulfillmentTotalCny : 0;
 
   try {

@@ -18,16 +18,14 @@ import type { StudioIoMainStep } from "@/lib/parse-studio-io";
 import { readStudioIoFromAbsolutePath } from "@/lib/read-studio-io-from-path";
 import { resolveStudioIoPlacementsInDb } from "@/lib/resolve-studio-io-placements-in-db";
 import {
+  defaultRuleLabelForConfig,
   splitResolvedItemsByCategory,
   splitStudioIoByConfig,
   type IoSplitConfig,
 } from "@/lib/studio-io-split";
 import { buildUploadAbsoluteDir } from "@/lib/build-upload-storage";
 import { applyGobricksSyncForIoBatch } from "@/lib/gobricks-sync-io-batch";
-import {
-  ioSplitPackageLabel,
-  normalizeIoSplitBatchLabels,
-} from "@/lib/io-split-labels";
+import { colorSplitBatchLabel, normalizeIoSplitBatchLabels } from "@/lib/io-split-labels";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 export type IoSplitPreviewStep = {
@@ -122,7 +120,7 @@ async function batchesFromConfig(
         [...byColor.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([colorId, items]) => ({
-            label: items[0]?.colorName?.trim() ? `${items[0].colorName} (${colorId})` : `颜色 ${colorId}`,
+            label: colorSplitBatchLabel(items, colorId),
             stepFrom: 0,
             stepTo: lastStep,
             stepIndexes: allIndexes,
@@ -159,8 +157,12 @@ function resolveIoSplitPlanRuleLabel(
   plans: Awaited<ReturnType<typeof listIoSplitPlanGroupsForMoc>>,
   attachmentId: number,
   configJson: string,
-  replaceExisting: boolean
+  config: IoSplitConfig,
+  replaceExisting: boolean,
+  ruleLabelInput?: string
 ): string {
+  const custom = ruleLabelInput?.trim();
+  if (custom) return custom;
   if (replaceExisting) {
     const existing = plans.find(
       (p) => p.attachmentId === attachmentId && p.splitConfigJson === configJson
@@ -168,7 +170,7 @@ function resolveIoSplitPlanRuleLabel(
     const kept = existing?.ruleLabel.trim();
     if (kept) return kept;
   }
-  return ioSplitPackageLabel(plans.length + 1);
+  return defaultRuleLabelForConfig(config);
 }
 
 async function loadIoAbsolutePath(
@@ -283,9 +285,14 @@ export async function commitIoStepSplitAction(input: {
   const savedAt = new Date().toISOString();
   const configJson = JSON.stringify(input.config);
   const plans = await listIoSplitPlanGroupsForMoc(mocId);
-  const ruleLabel =
-    input.ruleLabel?.trim() ||
-    resolveIoSplitPlanRuleLabel(plans, input.attachmentId, configJson, input.replaceExisting);
+  const ruleLabel = resolveIoSplitPlanRuleLabel(
+    plans,
+    input.attachmentId,
+    configJson,
+    input.config,
+    input.replaceExisting,
+    input.ruleLabel
+  );
   const db = getUserDb();
 
   try {

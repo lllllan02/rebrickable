@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import {
   fetchIoBatchFulfillmentSheetAction,
+  fetchIoPlanMergedModifiedAction,
   type IoBatchListRow,
   type IoSplitPlanGroup,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
@@ -18,11 +19,22 @@ import {
   type MocPartsListTab,
 } from "@/lib/moc-parts-tab-navigation";
 import {
-  buildIoBatchPartsSheetExportStem,
+  buildIoPlanMergedModifiedExportStem,
   buildIoPlanMergedShortageExportStem,
+  buildIoSplitBatchExportStem,
+  buildIoSplitPlanZipExportStem,
+  FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
 } from "@/lib/parts-sheet-export-filename";
-import { ioBatchSheetLoadKey, loadIoSplitSheet } from "@/lib/io-split-sheet-cache";
+import {
+  getIoSplitSheetFromCache,
+  ioBatchSheetLoadKey,
+  ioPlanMergedModifiedLoadKey,
+  isIoSplitSheetLoadSettled,
+  loadIoSplitSheet,
+} from "@/lib/io-split-sheet-cache";
 import { formatGobricksGdsPriceCny } from "@/lib/gobricks-display-caption";
+import { sumPartsSheetGobricksTotalCny } from "@/lib/parts-sheet-gobricks-price";
+import { downloadIoSplitPlanZip } from "@/lib/io-split-plan-zip-download";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
 
 type ListTab = MocPartsListTab;
@@ -31,7 +43,8 @@ type PrimaryPanel = { kind: "all" } | { kind: "io"; groupKey: string };
 
 type IoSecondary =
   | { kind: "batch"; batchId: number }
-  | { kind: "merged-shortage" };
+  | { kind: "merged-shortage" }
+  | { kind: "merged-modified" };
 
 type Props = {
   subjectKind: BuildSubjectKind;
@@ -52,23 +65,22 @@ type Props = {
   onAllTabChange?: (tab: ListTab) => void;
 };
 
-function planDisplayName(_plan: IoSplitPlanGroup, index: number): string {
-  return ioSplitPackageLabel(index + 1);
+function planDisplayName(plan: IoSplitPlanGroup, index: number): string {
+  return plan.ruleLabel.trim() || ioSplitPackageLabel(index + 1);
 }
 
-function batchTabLabel(_batch: IoBatchListRow, index: number): string {
-  return ioSplitPackageLabel(index + 1);
+function batchTabLabel(batch: IoBatchListRow, index: number): string {
+  return batch.label.trim() || ioSplitPackageLabel(index + 1);
 }
 
-function stepRangeHint(batch: IoBatchListRow): string {
-  const from = batch.mainStepFrom;
-  const to = batch.mainStepTo;
-  if (from === to) return from === 0 ? "基础层" : `步骤 ${from}`;
-  return `步骤 ${from === 0 ? "基础" : from}–${to}`;
+function modifiedSheetPriceCny(sheet: IoSplitSheetState | null): number | null {
+  if (!sheet?.items.length) return null;
+  const total = sheet.gobricksGdsPriceCny ?? sumPartsSheetGobricksTotalCny(sheet.items);
+  return total > 0 ? total : null;
 }
 
 function batchTabTitle(batch: IoBatchListRow, index: number): string {
-  const parts = [batchTabLabel(batch, index), stepRangeHint(batch), `${batch.totalPartQty} 片`];
+  const parts = [batchTabLabel(batch, index), `${batch.totalPartQty} 片`];
   const price = formatGobricksGdsPriceCny(batch.gobricksGdsPriceCny);
   if (price) parts.push(`参考价 ${price}`);
   return parts.join(" · ");
@@ -131,6 +143,9 @@ export function MocPartsSheetBrowser({
 
   const [ioSecondary, setIoSecondary] = useState<IoSecondary | null>(null);
   const [ioExportSheet, setIoExportSheet] = useState<IoSplitSheetState | null>(null);
+  const [zipExportBusy, startZipExport] = useTransition();
+  const [zipExportError, setZipExportError] = useState<string | null>(null);
+  const [planModifiedPriceVersion, setPlanModifiedPriceVersion] = useState(0);
 
   const activePlan = useMemo(
     () =>
@@ -156,10 +171,13 @@ export function MocPartsSheetBrowser({
     }
     const firstBatchId = activePlan.batches[0]!.id;
     setIoSecondary((prev) => {
-      if (prev?.kind === "batch" && activePlan.batches.some((b) => b.id === prev.batchId)) {
+      if (
+        prev?.kind === "batch" &&
+        activePlan.batches.some((b) => b.id === prev.batchId)
+      ) {
         return prev;
       }
-      if (prev?.kind === "merged-shortage") return prev;
+      if (prev?.kind === "merged-shortage" || prev?.kind === "merged-modified") return prev;
       return { kind: "batch", batchId: firstBatchId };
     });
   }, [activePlan, activePlanBatchIdsKey, activePlanGroupKey, primary.kind]);
@@ -176,8 +194,21 @@ export function MocPartsSheetBrowser({
     return activePlan.batches.findIndex((b) => b.id === activeBatch.id);
   }, [activeBatch, activePlan]);
 
+  const planBatchIdsKey = useMemo(
+    () => activePlan?.batches.map((b) => b.id).join(",") ?? "",
+    [activePlan],
+  );
+  const planBatchIds = useMemo(
+    () =>
+      planBatchIdsKey
+        ? planBatchIdsKey.split(",").map((s) => Number(s)).filter((id) => id > 0)
+        : [],
+    [planBatchIdsKey],
+  );
+
   const ioViewerMode = useMemo(() => {
     if (ioSecondary?.kind === "merged-shortage") return "plan-merged-shortage" as const;
+    if (ioSecondary?.kind === "merged-modified") return "plan-merged-modified" as const;
     if (ioSecondary?.kind === "batch") return "batch-fulfillment" as const;
     return null;
   }, [ioSecondary]);
@@ -185,7 +216,7 @@ export function MocPartsSheetBrowser({
   const ioExportListTab = useMemo((): "full" | "shortage" | "fulfillment" => {
     if (ioSecondary?.kind === "merged-shortage") return "shortage";
     return "fulfillment";
-  }, [ioSecondary?.kind]);
+  }, [ioSecondary]);
 
   const ioExportFilenameStem = useMemo(() => {
     if (!activePlan || activePlanIndex < 0) return undefined;
@@ -197,14 +228,19 @@ export function MocPartsSheetBrowser({
         planLabel,
       });
     }
+    if (ioSecondary?.kind === "merged-modified") {
+      return buildIoPlanMergedModifiedExportStem({
+        mocId: subjectId,
+        displayName: exportDisplayName,
+        planLabel,
+      });
+    }
     if (ioSecondary?.kind === "batch" && activeBatch && activeBatchIndex >= 0) {
-      return buildIoBatchPartsSheetExportStem({
+      return buildIoSplitBatchExportStem({
         mocId: subjectId,
         displayName: exportDisplayName,
         planLabel,
         batchLabel: batchTabLabel(activeBatch, activeBatchIndex),
-        branch: "fulfillment",
-        contentLabel: "高砖可购零件",
       });
     }
     return undefined;
@@ -218,13 +254,23 @@ export function MocPartsSheetBrowser({
         prev &&
         sheet.savedAt === prev.savedAt &&
         sheet.items.length === prev.items.length &&
-        sheet.skippedHeader === prev.skippedHeader
+        sheet.skippedHeader === prev.skippedHeader &&
+        sheet.gobricksGdsPriceCny === prev.gobricksGdsPriceCny
       ) {
         return prev;
       }
       return sheet;
     });
   }, []);
+
+  const planMergedModifiedPriceLabel = useMemo(() => {
+    if (primary.kind !== "io" || planBatchIds.length === 0) return null;
+    const sheet =
+      ioSecondary?.kind === "merged-modified" && ioExportSheet
+        ? ioExportSheet
+        : getIoSplitSheetFromCache(ioPlanMergedModifiedLoadKey(planBatchIds)) ?? null;
+    return formatGobricksGdsPriceCny(modifiedSheetPriceCny(sheet));
+  }, [ioExportSheet, ioSecondary?.kind, planBatchIds, planModifiedPriceVersion, primary.kind]);
 
   const prefetchedBatchIdsRef = useRef(new Set<number>());
 
@@ -257,6 +303,36 @@ export function MocPartsSheetBrowser({
     };
   }, [ioSecondaryBatchId, primary.kind]);
 
+  /** 预取方案级修改表（用于 Tab 参考价） */
+  useEffect(() => {
+    if (primary.kind !== "io" || planBatchIds.length === 0) return;
+    const key = ioPlanMergedModifiedLoadKey(planBatchIds);
+    if (isIoSplitSheetLoadSettled(key)) return;
+
+    let cancelled = false;
+    void loadIoSplitSheet(key, async () => {
+      const r = await fetchIoPlanMergedModifiedAction(planBatchIds);
+      if (!r.ok) return { ok: false as const, error: r.error };
+      return {
+        ok: true as const,
+        sheet: {
+          items: r.items,
+          skippedHeader: r.skippedHeader,
+          savedAt: r.savedAt,
+          gobricksGdsPriceCny: sumPartsSheetGobricksTotalCny(r.items),
+          replaceProvenanceByLine: r.replaceProvenanceByLine,
+        },
+      };
+    }).then(() => {
+      if (cancelled) return;
+      setPlanModifiedPriceVersion((v) => v + 1);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planBatchIds, planBatchIdsKey, primary.kind]);
+
   const selectPrimaryAll = useCallback(() => setPrimary({ kind: "all" }), []);
 
   const selectPrimaryPlan = useCallback((groupKey: string) => {
@@ -267,7 +343,28 @@ export function MocPartsSheetBrowser({
     setPrimary({ kind: "all" });
     setIoSecondary(null);
     setIoExportSheet(null);
+    setZipExportError(null);
   }, []);
+
+  const onExportPlanZip = useCallback(() => {
+    if (!activePlan || subjectKind !== BUILD_SUBJECT_MOC) return;
+    setZipExportError(null);
+    const planLabel = planDisplayName(activePlan, activePlanIndex >= 0 ? activePlanIndex : 0);
+    const zipFilename = `${buildIoSplitPlanZipExportStem({
+      mocId: subjectId,
+      displayName: exportDisplayName,
+      planLabel,
+    })}.zip`;
+    startZipExport(async () => {
+      const r = await downloadIoSplitPlanZip({
+        mocId: subjectId,
+        groupKey: activePlan.groupKey,
+        displayName: exportDisplayName,
+        zipFilename,
+      });
+      if (!r.ok) setZipExportError(r.error);
+    });
+  }, [activePlan, activePlanIndex, exportDisplayName, subjectId, subjectKind]);
 
   useEffect(() => {
     if (primary.kind !== "io") return;
@@ -291,8 +388,20 @@ export function MocPartsSheetBrowser({
             {(() => {
               const b = activePlan.batches.find((x) => x.id === ioSecondary.batchId);
               if (!b) return null;
+              const idx = activePlan.batches.findIndex((x) => x.id === b.id);
               const price = formatGobricksGdsPriceCny(b.gobricksGdsPriceCny);
-              return `${stepRangeHint(b)} · ${b.totalPartQty} 片${price ? ` · 参考价 ${price}` : ""}`;
+              return `${batchTabLabel(b, idx >= 0 ? idx : 0)} · ${b.totalPartQty} 片${price ? ` · 参考价 ${price}` : ""}`;
+            })()}
+          </>
+        ) : null}
+        {ioSecondary?.kind === "merged-shortage" ? <> · 缺件表</> : null}
+        {ioSecondary?.kind === "merged-modified" && ioExportSheet ? (
+          <>
+            {" · "}
+            {(() => {
+              const qty = ioExportSheet.items.reduce((n, r) => n + r.quantity, 0);
+              const price = formatGobricksGdsPriceCny(modifiedSheetPriceCny(ioExportSheet));
+              return `修改表 · ${qty} 片${price ? ` · 参考价 ${price}` : ""}`;
             })()}
           </>
         ) : null}
@@ -522,6 +631,13 @@ export function MocPartsSheetBrowser({
                       onClick={() => setIoSecondary({ kind: "batch", batchId: b.id })}
                     >
                       <span>{batchTabLabel(b, i)}</span>
+                      <span
+                        className={`tabular-nums text-[10px] sm:text-[11px] ${
+                          isActive ? "text-[var(--muted)]" : "text-[var(--muted-2)]"
+                        }`}
+                      >
+                        {b.totalPartQty} 片
+                      </span>
                       {batchPrice ? (
                         <span
                           className={`font-mono text-[10px] tabular-nums sm:text-[11px] ${
@@ -541,37 +657,92 @@ export function MocPartsSheetBrowser({
                   }`}
                   onClick={() => setIoSecondary({ kind: "merged-shortage" })}
                 >
-                  汇总缺件
+                  缺件表
+                </button>
+                <button
+                  type="button"
+                  title={
+                    planMergedModifiedPriceLabel
+                      ? `修改表 · 参考价 ${planMergedModifiedPriceLabel}`
+                      : "修改表"
+                  }
+                  className={`${subTabBtn} inline-flex items-baseline gap-1.5 ${
+                    ioSecondary?.kind === "merged-modified" ? subTabActive : subTabIdle
+                  }`}
+                  onClick={() => setIoSecondary({ kind: "merged-modified" })}
+                >
+                  <span>修改表</span>
+                  {planMergedModifiedPriceLabel ? (
+                    <span
+                      className={`font-mono text-[10px] tabular-nums sm:text-[11px] ${
+                        ioSecondary?.kind === "merged-modified"
+                          ? "text-[var(--muted)]"
+                          : "text-[var(--muted-2)]"
+                      }`}
+                    >
+                      {planMergedModifiedPriceLabel}
+                    </span>
+                  ) : null}
                 </button>
               </div>
               {subjectKind === BUILD_SUBJECT_MOC ? (
-                <MocDetailPartsListExportBar
-                  subjectKind={subjectKind}
-                  subjectId={subjectId}
-                  exportDisplayName={exportDisplayName}
-                  listTab={ioExportListTab}
-                  activeSheet={ioExportSheet}
-                  filenameStemOverride={ioExportFilenameStem}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <MocDetailPartsListExportBar
+                    subjectKind={subjectKind}
+                    subjectId={subjectId}
+                    exportDisplayName={exportDisplayName}
+                    listTab={ioExportListTab}
+                    activeSheet={ioExportSheet}
+                    filenameStemOverride={ioExportFilenameStem}
+                  />
+                  <button
+                    type="button"
+                    disabled={zipExportBusy}
+                    className="rounded-md border border-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] disabled:opacity-50"
+                    onClick={() => onExportPlanZip()}
+                  >
+                    {zipExportBusy ? "打包中…" : "一键导出全部"}
+                  </button>
+                </div>
               ) : null}
             </div>
+            {zipExportError ? (
+              <p className="mb-2 text-xs text-red-200/95" role="alert">
+                {zipExportError}
+              </p>
+            ) : null}
             {planMeta}
             {ioViewerMode === "plan-merged-shortage" ? (
               <MocIoSplitSheetViewer
                 mode="plan-merged-shortage"
-                batchIds={activePlan.batches.map((b) => b.id)}
+                batchIds={planBatchIds}
                 subjectKind={subjectKind}
                 subjectId={subjectId}
                 parentSubjectOwned={parentSubjectOwned}
+                planBatchIds={planBatchIds}
+                onSheetLoaded={handleIoSheetLoaded}
+                onShortageRowReplacedToFulfillment={() =>
+                  setIoSecondary({ kind: "merged-modified" })
+                }
+              />
+            ) : ioViewerMode === "plan-merged-modified" ? (
+              <MocIoSplitSheetViewer
+                mode="plan-merged-modified"
+                batchIds={planBatchIds}
+                subjectKind={subjectKind}
+                subjectId={subjectId}
+                parentSubjectOwned={parentSubjectOwned}
+                planBatchIds={planBatchIds}
                 onSheetLoaded={handleIoSheetLoaded}
               />
-            ) : ioSecondary?.kind === "batch" && activeBatch ? (
+            ) : ioViewerMode === "batch-fulfillment" && activeBatch ? (
               <MocIoSplitSheetViewer
                 mode="batch-fulfillment"
                 batchId={activeBatch.id}
                 subjectKind={subjectKind}
                 subjectId={subjectId}
                 parentSubjectOwned={parentSubjectOwned}
+                planBatchIds={planBatchIds}
                 onSheetLoaded={handleIoSheetLoaded}
               />
             ) : null}
