@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import {
   buildPartsSheetExportStem,
   FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
@@ -30,35 +31,70 @@ function downloadText(filename: string, text: string, mimeType = "text/csv;chars
   URL.revokeObjectURL(url);
 }
 
+export type PartsSheetExportSource = {
+  items: ShortageResolveItem[];
+  skippedHeader: boolean;
+  savedAt: string | null;
+};
+
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
   /** 用于导出文件名中间段；可与资料页显示名一致 */
   exportDisplayName: string;
   listTab: "full" | "shortage" | "fulfillment";
-  initialFull: InitialMocSheetFromServer | null;
-  initialShortage: InitialMocSheetFromServer | null;
-  initialFulfillment: InitialMocSheetFromServer | null;
+  initialFull?: InitialMocSheetFromServer | null;
+  initialShortage?: InitialMocSheetFromServer | null;
+  initialFulfillment?: InitialMocSheetFromServer | null;
+  /** 覆盖从 initial* 解析的分支数据（如 Studio 分包内嵌查看） */
+  activeSheet?: PartsSheetExportSource | null;
+  /** 配货表「修改 CSV」数据源；默认同 activeSheet / initialFulfillment */
+  fulfillmentForModified?: PartsSheetExportSource | null;
+  /** 覆盖默认文件名主体 */
+  filenameStemOverride?: string;
+  /** 覆盖「修改 CSV」文件名主体 */
+  modifiedFilenameStemOverride?: string;
 };
+
+function toExportSource(
+  sheet: InitialMocSheetFromServer | PartsSheetExportSource | null | undefined,
+): PartsSheetExportSource | null {
+  if (!sheet?.items.length) return null;
+  return {
+    items: sheet.items,
+    skippedHeader: sheet.skippedHeader,
+    savedAt: sheet.savedAt,
+  };
+}
 
 export function MocDetailPartsListExportBar({
   subjectKind = BUILD_SUBJECT_MOC,
   subjectId,
   exportDisplayName,
   listTab,
-  initialFull,
-  initialShortage,
-  initialFulfillment,
+  initialFull = null,
+  initialShortage = null,
+  initialFulfillment = null,
+  activeSheet,
+  fulfillmentForModified,
+  filenameStemOverride,
+  modifiedFilenameStemOverride,
 }: Props) {
-  const branch =
+  const branchFromInitial =
     listTab === "full" ? initialFull : listTab === "shortage" ? initialShortage : initialFulfillment;
+  const branch = activeSheet ?? toExportSource(branchFromInitial);
+  const fulfillmentBranch =
+    fulfillmentForModified ??
+    toExportSource(initialFulfillment) ??
+    (listTab === "fulfillment" ? branch : null);
+
   const canExport = Boolean(branch && branch.items.length > 0);
   const fulfillmentModifiedCounts = useMemo(() => {
-    if (listTab !== "fulfillment" || !initialFulfillment?.items.length) {
+    if (listTab !== "fulfillment" || !fulfillmentBranch?.items.length) {
       return { modified: 0, exportable: 0 };
     }
-    return countFulfillmentModifiedExportable(initialFulfillment.items);
-  }, [initialFulfillment?.items, listTab]);
+    return countFulfillmentModifiedExportable(fulfillmentBranch.items);
+  }, [fulfillmentBranch?.items, listTab]);
   const canExportModifiedCsv =
     listTab === "fulfillment" && fulfillmentModifiedCounts.exportable > 0;
   const exportProgressTitleId = useId();
@@ -74,17 +110,19 @@ export function MocDetailPartsListExportBar({
 
   const filenameStem = useMemo(
     () =>
+      filenameStemOverride ??
       buildPartsSheetExportStem({
         kind: subjectKind,
         subjectId,
         displayName: exportDisplayName,
         branch: listTab,
       }),
-    [exportDisplayName, listTab, subjectId, subjectKind]
+    [exportDisplayName, filenameStemOverride, listTab, subjectId, subjectKind]
   );
 
   const modifiedFilenameStem = useMemo(
     () =>
+      modifiedFilenameStemOverride ??
       buildPartsSheetExportStem({
         kind: subjectKind,
         subjectId,
@@ -92,7 +130,7 @@ export function MocDetailPartsListExportBar({
         branch: "fulfillment",
         contentLabel: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
       }),
-    [exportDisplayName, subjectId, subjectKind]
+    [exportDisplayName, modifiedFilenameStemOverride, subjectId, subjectKind]
   );
 
   useEffect(() => {
@@ -128,9 +166,9 @@ export function MocDetailPartsListExportBar({
   }, [branch, filenameStem]);
 
   const onExportModifiedCsv = useCallback(() => {
-    if (!initialFulfillment || initialFulfillment.items.length === 0) return;
+    if (!fulfillmentBranch || fulfillmentBranch.items.length === 0) return;
     setExportError(null);
-    const { modified, exportable } = countFulfillmentModifiedExportable(initialFulfillment.items);
+    const { modified, exportable } = countFulfillmentModifiedExportable(fulfillmentBranch.items);
     if (exportable === 0) {
       setExportError(
         modified > 0
@@ -139,14 +177,14 @@ export function MocDetailPartsListExportBar({
       );
       return;
     }
-    const text = serializeFulfillmentModifiedCsv(initialFulfillment.items);
+    const text = serializeFulfillmentModifiedCsv(fulfillmentBranch.items);
     downloadText(`${modifiedFilenameStem}.csv`, text);
     if (exportable < modified) {
       setExportError(
         `已导出 ${exportable.toLocaleString("zh-CN")} 行；另有 ${(modified - exportable).toLocaleString("zh-CN")} 行缺少 GDS 商品编号已跳过。`
       );
     }
-  }, [initialFulfillment, modifiedFilenameStem]);
+  }, [fulfillmentBranch, modifiedFilenameStem]);
 
   const onExportXml = useCallback(() => {
     if (!branch || branch.items.length === 0) return;

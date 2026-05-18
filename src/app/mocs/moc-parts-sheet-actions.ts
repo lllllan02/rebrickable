@@ -101,6 +101,8 @@ export type LoadBuildPartsSheetResult =
       shortageClearedAt: string | null;
       /** 高砖整单参考价（元），来自接口根字段 `gdsPrice` 分片之和；未对照时为 null */
       gobricksGdsPriceCny: number | null;
+      /** 最近一次高砖缺件/配货对照时间（分包批次等） */
+      gobricksShortageSyncAt?: string | null;
     }
   | { ok: false; error: string };
 

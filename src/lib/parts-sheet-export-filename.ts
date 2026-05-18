@@ -53,3 +53,36 @@ export function buildPartsSheetExportStem(input: {
   if (!stem) stem = `${prefix}${id}-未命名-${content}`;
   return stem;
 }
+
+/** Studio 分步包导出文件名（含方案名与包名） */
+export function buildIoBatchPartsSheetExportStem(input: {
+  mocId: string;
+  displayName: string;
+  planLabel: string;
+  batchLabel: string;
+  branch: PartsSheetExportBranch;
+  contentLabel?: string;
+}): string {
+  const id = sanitizePartsSheetExportSegment(input.mocId.trim(), 128) || "unknown";
+  const name = sanitizePartsSheetExportSegment(input.displayName.trim() || "未命名", 64) || "未命名";
+  const plan = sanitizePartsSheetExportSegment(input.planLabel.trim() || "分包方案", 48) || "分包方案";
+  const batch = sanitizePartsSheetExportSegment(input.batchLabel.trim() || "分包", 32) || "分包";
+  const content = input.contentLabel?.trim() || BRANCH_LABEL[input.branch];
+  const body = `${id}-${name}-${plan}-${batch}-${content}`;
+  return sanitizePartsSheetExportSegment(body, MAX_PARTS_SHEET_EXPORT_STEM_LEN) || `${id}-分包-未命名-${content}`;
+}
+
+/** 方案内汇总缺件表导出文件名 */
+export function buildIoPlanMergedShortageExportStem(input: {
+  mocId: string;
+  displayName: string;
+  planLabel: string;
+}): string {
+  return buildIoBatchPartsSheetExportStem({
+    mocId: input.mocId,
+    displayName: input.displayName,
+    planLabel: input.planLabel,
+    batchLabel: "汇总缺件",
+    branch: "shortage",
+  });
+}

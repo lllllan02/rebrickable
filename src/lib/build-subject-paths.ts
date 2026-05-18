@@ -8,3 +8,12 @@ export function buildSubjectListPath(kind: BuildSubjectKind): "/mocs" | "/sets" 
 export function buildSubjectDetailPath(kind: BuildSubjectKind, subjectId: string): string {
   return `${buildSubjectListPath(kind)}/${encodeURIComponent(subjectId)}`;
 }
+
+/** Studio .io 分步导出向导（Client / Server 均可引用） */
+export function mocIoSplitPath(mocId: string): string {
+  return `${buildSubjectDetailPath(BUILD_SUBJECT_MOC, mocId)}/io-split`;
+}
+
+export function mocIoBatchPath(mocId: string, batchId: number): string {
+  return `${buildSubjectDetailPath(BUILD_SUBJECT_MOC, mocId)}/io-batches/${batchId}`;
+}

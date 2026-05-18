@@ -8,6 +8,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { postResolvePartsSheetCsv } from "@/lib/parts-sheet-post-resolve";
 import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
+import { saveIoBatchPartsSheetToDb } from "@/app/mocs/io-batch-parts-sheet-actions";
 import {
   type InitialMocSheetFromServer,
   saveBuildPartsSheetToDb,
@@ -108,6 +109,8 @@ type PartsSheetImportProps = {
   mocDetailEmbed?: boolean;
   /** 导出/展示用名称（与详情资料一致）；套装可为目录名 */
   exportDisplayName?: string;
+  /** Studio .io 分步批次 ID（写入 build_io_step_batches） */
+  ioBatchId?: number;
 };
 
 export function PartsSheetImport({
@@ -120,6 +123,7 @@ export function PartsSheetImport({
   initialMocLoadError,
   mocDetailEmbed = false,
   exportDisplayName = "",
+  ioBatchId,
 }: PartsSheetImportProps) {
   const noFullSheetForSet = buildSubjectKind === BUILD_SUBJECT_SET;
   const router = useRouter();
@@ -263,17 +267,26 @@ export function PartsSheetImport({
       setMocLocalMessage(null);
       setMocActionBusy(true);
       try {
-        const result = await saveBuildPartsSheetToDb({
-          subjectKind: buildSubjectKind,
-          subjectId: trimmed,
-          kind,
-          skippedHeader: nextSkippedHeader,
-          sourceFileName,
-          items: rows.map(({ rowId, ...rest }) => {
-            void rowId;
-            return rest;
-          }),
+        const payloadItems = rows.map(({ rowId, ...rest }) => {
+          void rowId;
+          return rest;
         });
+        const result =
+          ioBatchId != null && ioBatchId > 0
+            ? await saveIoBatchPartsSheetToDb({
+                batchId: ioBatchId,
+                kind,
+                skippedHeader: nextSkippedHeader,
+                items: payloadItems,
+              })
+            : await saveBuildPartsSheetToDb({
+                subjectKind: buildSubjectKind,
+                subjectId: trimmed,
+                kind,
+                skippedHeader: nextSkippedHeader,
+                sourceFileName,
+                items: payloadItems,
+              });
         if (!result.ok) {
           setError(result.error);
           setLineNumber(null);
@@ -299,7 +312,7 @@ export function PartsSheetImport({
         setMocActionBusy(false);
       }
     },
-    [buildSubjectKind, router, scrollMocFeedbackIntoView]
+    [buildSubjectKind, ioBatchId, router, scrollMocFeedbackIntoView]
   );
 
   const onFile = useCallback(
@@ -362,6 +375,7 @@ export function PartsSheetImport({
                 const sync = await syncGobricksShortageForSubjectWithModifiedConfirm({
                   subjectKind: buildSubjectKind,
                   subjectId: mid,
+                  ioBatchId,
                 });
                 if (sync.ok) {
                   setMocLocalMessage(sync.message);
@@ -386,7 +400,7 @@ export function PartsSheetImport({
         setLoading(false);
       }
     },
-    [buildSubjectKind, mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, router, saveSheetToMocDbCore]
+    [buildSubjectKind, ioBatchId, mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, router, saveSheetToMocDbCore]
   );
 
   const fetchShortageFromGobricks = useCallback(async () => {
@@ -411,6 +425,7 @@ export function PartsSheetImport({
       const sync = await syncGobricksShortageForSubjectWithModifiedConfirm({
         subjectKind: buildSubjectKind,
         subjectId: mid,
+        ioBatchId,
       });
       if (!sync.ok) {
         if (!sync.cancelled) setError(sync.error);
@@ -424,7 +439,7 @@ export function PartsSheetImport({
     } finally {
       setGobricksBusy(false);
     }
-  }, [buildSubjectKind, fullItems, mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, router]);
+  }, [buildSubjectKind, fullItems, ioBatchId, mocDetailEmbed, noFullSheetForSet, requestedLoadMocId, router]);
 
   const applyColorChange = useCallback(async () => {
     const editing = colorEditRow;

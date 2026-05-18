@@ -9,6 +9,7 @@ import {
   buildAttachments,
   buildFavoriteSubjects,
   buildImages,
+  buildIoStepBatches,
   buildOwnedSubjects,
   buildProfiles,
   buildSavedPartsSheets,
@@ -61,6 +62,9 @@ export async function deleteBuildSubjectAction(
         .run();
       tx.delete(buildAttachments)
         .where(and(eq(buildAttachments.subjectKind, key.kind), eq(buildAttachments.subjectId, key.id)))
+        .run();
+      tx.delete(buildIoStepBatches)
+        .where(and(eq(buildIoStepBatches.subjectKind, key.kind), eq(buildIoStepBatches.subjectId, key.id)))
         .run();
       tx.delete(buildOwnedSubjects)
         .where(and(eq(buildOwnedSubjects.subjectKind, key.kind), eq(buildOwnedSubjects.subjectId, key.id)))

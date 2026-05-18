@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { and, asc, eq } from "drizzle-orm";
 
+import { listIoSplitPlanGroupsForMoc } from "@/app/mocs/io-batch-parts-sheet-actions";
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
@@ -36,7 +37,7 @@ export default async function MocDetailPage({ params }: Props) {
     eq(buildFavoriteSubjects.subjectId, mocId)
   );
 
-  const [imgRows, attRows, sheet, profileRow, ownedRow, favoriteRow] = await Promise.all([
+  const [imgRows, attRows, sheet, profileRow, ownedRow, favoriteRow, ioSplitPlans] = await Promise.all([
     db
       .select({
         id: buildImages.id,
@@ -62,6 +63,7 @@ export default async function MocDetailPage({ params }: Props) {
     db.select().from(buildProfiles).where(mocProfKey).limit(1),
     db.select().from(buildOwnedSubjects).where(mocOwnedKey).limit(1),
     db.select().from(buildFavoriteSubjects).where(mocFavoriteKey).limit(1),
+    listIoSplitPlanGroupsForMoc(mocId),
   ]);
 
   const profile = profileRow[0];
@@ -147,6 +149,7 @@ export default async function MocDetailPage({ params }: Props) {
           initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
           initialMocLoadError={initialMocLoadError}
           parentSubjectOwned={initialOwned}
+          ioSplitPlans={ioSplitPlans}
         />
       </Suspense>
     </div>

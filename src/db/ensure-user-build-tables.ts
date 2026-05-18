@@ -114,7 +114,45 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       PRIMARY KEY (subject_kind, subject_id)
     );
     CREATE INDEX IF NOT EXISTS build_favorite_kind_idx ON build_favorite_subjects(subject_kind);
+
+    CREATE TABLE IF NOT EXISTS build_io_step_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_kind TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      attachment_id INTEGER NOT NULL,
+      rule_label TEXT NOT NULL DEFAULT '',
+      label TEXT NOT NULL,
+      sort_order INTEGER NOT NULL,
+      split_mode TEXT NOT NULL,
+      split_config_json TEXT NOT NULL,
+      main_step_from INTEGER NOT NULL,
+      main_step_to INTEGER NOT NULL,
+      main_step_indexes_json TEXT NOT NULL,
+      skipped_header INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      line_count INTEGER NOT NULL,
+      total_part_qty INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      first_saved_at TEXT,
+      shortage_line_count INTEGER,
+      shortage_total_qty INTEGER,
+      shortage_stats_ok INTEGER NOT NULL DEFAULT 0,
+      shortage_cleared_at TEXT,
+      gobricks_shortage_sync_at TEXT,
+      gobricks_gds_price_cny REAL
+    );
+    CREATE INDEX IF NOT EXISTS build_io_batches_subject_idx ON build_io_step_batches(subject_kind, subject_id);
+    CREATE INDEX IF NOT EXISTS build_io_batches_attachment_idx ON build_io_step_batches(attachment_id);
   `);
+
+  if (tableExists(sqlite, "build_io_step_batches")) {
+    const ioCols = tableColumnNames(sqlite, "build_io_step_batches");
+    if (!ioCols.has("rule_label")) {
+      sqlite.exec(
+        `ALTER TABLE build_io_step_batches ADD COLUMN rule_label TEXT NOT NULL DEFAULT ''`
+      );
+    }
+  }
 
   if (tableExists(sqlite, "build_owned_subjects")) {
     const cols = tableColumnNames(sqlite, "build_owned_subjects");

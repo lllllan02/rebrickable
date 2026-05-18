@@ -12,6 +12,7 @@ export type { SyncGobricksShortageForSubjectOk };
 export async function syncGobricksShortageForSubjectWithModifiedConfirm(input: {
   subjectKind: BuildSubjectKind;
   subjectId: string;
+  ioBatchId?: number;
 }): Promise<SyncGobricksShortageForSubjectOk | { ok: false; error: string; cancelled?: boolean }> {
   let confirmOverwriteModified = false;
   for (;;) {

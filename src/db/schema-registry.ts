@@ -18,6 +18,7 @@ export const catalogSchema = {
 /** Drizzle：仅用户表（rebrickable-user.db） */
 export const userSchema = {
   buildSavedPartsSheets: schema.buildSavedPartsSheets,
+  buildIoStepBatches: schema.buildIoStepBatches,
   buildProfiles: schema.buildProfiles,
   buildImages: schema.buildImages,
   buildAttachments: schema.buildAttachments,

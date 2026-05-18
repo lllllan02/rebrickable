@@ -231,6 +231,44 @@ export const buildImages = sqliteTable(
   (t) => [index("build_images_subject_idx").on(t.subjectKind, t.subjectId)]
 );
 
+/**
+ * Studio .io 分步拆出的零件表批次（每批独立 full/shortage/fulfillment JSON，与主 MOC 零件表并存）。
+ */
+export const buildIoStepBatches = sqliteTable(
+  "build_io_step_batches",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    attachmentId: integer("attachment_id").notNull(),
+    /** 同一 .io 下可并存多套分包方案 */
+    ruleLabel: text("rule_label").notNull().default(""),
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+    splitMode: text("split_mode").notNull(),
+    splitConfigJson: text("split_config_json").notNull(),
+    mainStepFrom: integer("main_step_from").notNull(),
+    mainStepTo: integer("main_step_to").notNull(),
+    mainStepIndexesJson: text("main_step_indexes_json").notNull(),
+    skippedHeader: integer("skipped_header", { mode: "boolean" }).notNull(),
+    payloadJson: text("payload_json").notNull(),
+    lineCount: integer("line_count").notNull(),
+    totalPartQty: integer("total_part_qty").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    firstSavedAt: text("first_saved_at"),
+    shortageLineCount: integer("shortage_line_count"),
+    shortageTotalQty: integer("shortage_total_qty"),
+    shortageStatsOk: integer("shortage_stats_ok", { mode: "boolean" }).notNull().default(false),
+    shortageClearedAt: text("shortage_cleared_at"),
+    gobricksShortageSyncAt: text("gobricks_shortage_sync_at"),
+    gobricksGdsPriceCny: real("gobricks_gds_price_cny"),
+  },
+  (t) => [
+    index("build_io_batches_subject_idx").on(t.subjectKind, t.subjectId),
+    index("build_io_batches_attachment_idx").on(t.attachmentId),
+  ]
+);
+
 /** 说明书 PDF、Studio .io 等 */
 export const buildAttachments = sqliteTable(
   "build_attachments",

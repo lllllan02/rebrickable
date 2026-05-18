@@ -8,6 +8,7 @@ import {
   uploadBuildAttachmentAction,
 } from "@/app/mocs/moc-attachment-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 
 export type MocAttachmentRow = {
   id: number;
@@ -16,6 +17,12 @@ export type MocAttachmentRow = {
   byteSize: number;
   createdAt: string;
 };
+
+function isIoAttachment(name: string | null, url: string): boolean {
+  const n = (name ?? "").toLowerCase();
+  if (n.endsWith(".io")) return true;
+  return url.toLowerCase().includes(".io");
+}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -111,7 +118,15 @@ export function MocAttachmentsPanel({
                 <p className="min-w-0 break-all font-medium leading-snug text-[var(--text)]">{label}</p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
                   <span className="tabular-nums text-[var(--muted)]">{formatBytes(a.byteSize)}</span>
-                  <span className="flex shrink-0 gap-3">
+                  <span className="flex shrink-0 flex-wrap gap-3">
+                    {subjectKind === BUILD_SUBJECT_MOC && isIoAttachment(a.originalName, a.url) ? (
+                      <a
+                        href={`${buildSubjectDetailPath(BUILD_SUBJECT_MOC, subjectId)}/io-split?attachmentId=${a.id}`}
+                        className="text-[var(--accent)] underline underline-offset-2"
+                      >
+                        分步导出零件表
+                      </a>
+                    ) : null}
                     <a href={a.url} className="text-[var(--accent)] underline underline-offset-2" download>
                       下载
                     </a>
