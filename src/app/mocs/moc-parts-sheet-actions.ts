@@ -33,6 +33,7 @@ import {
 } from "@/lib/gobricks-item-filter-inventory";
 import {
   appendSheetRowReplacedMarker,
+  fulfillmentItemsOnlyModified,
   mergeSheetRowReplaceSnapshotForPersist,
   parseSheetRowReplaceMeta,
   stripSheetRowReplacedMarker,
@@ -428,6 +429,47 @@ export async function loadBuildPartsSheetFromDb(
 
 export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMocPartsSheetResult> {
   return loadBuildPartsSheetFromDb(BUILD_SUBJECT_MOC, mocIdRaw);
+}
+
+/** 主体配货表中经「更换零件」写入的行（修改表） */
+export async function fetchBuildModifiedSheetAction(input: {
+  subjectKind: BuildSubjectKind;
+  subjectId: string;
+}): Promise<
+  | {
+      ok: true;
+      items: ShortageResolveItem[];
+      skippedHeader: boolean;
+      savedAt: string | null;
+    }
+  | { ok: false; error: string }
+> {
+  const subjectId = input.subjectId.trim();
+  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
+    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
+  }
+  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
+    return { ok: false, error: "主体 ID 含有非法字符。" };
+  }
+
+  const loaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
+  if (!loaded.ok) return loaded;
+  if (!loaded.fulfillment?.items.length) {
+    return { ok: false, error: "尚无配货表。" };
+  }
+  const items = fulfillmentItemsOnlyModified(loaded.fulfillment.items);
+  if (items.length === 0) {
+    return {
+      ok: false,
+      error: "尚无修改记录；请在缺件表中更换零件后，修改行会汇总到此表。",
+    };
+  }
+  return {
+    ok: true,
+    items,
+    skippedHeader: loaded.fulfillment.skippedHeader,
+    savedAt: loaded.fulfillment.savedAt,
+  };
 }
 
 export type SaveBuildPartsSheetResult = { ok: true; savedAt: string } | { ok: false; error: string };

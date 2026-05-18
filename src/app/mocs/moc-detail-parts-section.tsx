@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import { fulfillmentItemsExcludingModified } from "@/lib/sheet-row-replaced-marker";
 import {
   fetchIoBatchFulfillmentSheetAction,
   fetchIoBatchModifiedSheetAction,
@@ -141,13 +142,22 @@ function IoBatchEmbeddedList({
     return "full";
   });
 
-  const [fulfillmentSheet, setFulfillmentSheet] = useState(initialFulfillment);
+  const toDisplayFulfillment = useCallback((sheet: InitialMocSheetFromServer | null) => {
+    if (!sheet) return null;
+    const items = fulfillmentItemsExcludingModified(sheet.items);
+    if (!items.length) return null;
+    return { ...sheet, items };
+  }, []);
+
+  const [fulfillmentSheet, setFulfillmentSheet] = useState(() =>
+    toDisplayFulfillment(initialFulfillment),
+  );
   const [shortageSheet, setShortageSheet] = useState(initialShortage);
   const [modifiedSheet, setModifiedSheet] = useState<InitialMocSheetFromServer | null>(null);
 
   useEffect(() => {
-    setFulfillmentSheet(initialFulfillment);
-  }, [initialFulfillment]);
+    setFulfillmentSheet(toDisplayFulfillment(initialFulfillment));
+  }, [initialFulfillment, toDisplayFulfillment]);
 
   useEffect(() => {
     setShortageSheet(initialShortage);
@@ -215,13 +225,13 @@ function IoBatchEmbeddedList({
           </button>
           <button
             type="button"
-            disabled={!initialFulfillment}
+            disabled={!fulfillmentSheet}
             className={`rounded-full border px-3 py-1 text-xs font-medium ${
               listTab === "fulfillment"
                 ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
                 : "border-[var(--border-soft)] text-[var(--muted)]"
-            } ${!initialFulfillment ? "cursor-not-allowed opacity-45" : ""}`}
-            onClick={() => initialFulfillment && setListTab("fulfillment")}
+            } ${!fulfillmentSheet ? "cursor-not-allowed opacity-45" : ""}`}
+            onClick={() => fulfillmentSheet && setListTab("fulfillment")}
           >
             配货表
           </button>
@@ -258,7 +268,7 @@ function IoBatchEmbeddedList({
             listTab={listTab}
             initialFull={initialFull}
             initialShortage={initialShortage}
-            initialFulfillment={initialFulfillment}
+            initialFulfillment={fulfillmentSheet ?? initialFulfillment}
           />
         ) : null}
       </div>
@@ -269,6 +279,11 @@ function IoBatchEmbeddedList({
           savedAt={initialFull.savedAt}
           parentSubjectOwned={parentSubjectOwned}
         />
+      ) : null}
+      {listTab === "fulfillment" && !fulfillmentSheet && initialFulfillment ? (
+        <p className="text-sm text-[var(--muted)]">
+          配货零件均已归入修改表，请在「修改表」查看。
+        </p>
       ) : null}
       {listTab === "fulfillment" && fulfillmentSheet ? (
         <MocPartsList
@@ -467,7 +482,7 @@ export function MocDetailPartsSection({
               <>左侧选「全部」；右侧切换完整 / 配货 / 缺件表。</>
             ) : (
               <>
-                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件，分包方案下依次切换各分包、缺件表与修改表。亦可从{" "}
+                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件 / 修改表，分包方案下依次切换各分包、缺件表与修改表。亦可从{" "}
                 <Link href={listHref} className="text-[var(--accent)] underline">
                   {ui.noun} 列表
                 </Link>{" "}

@@ -19,7 +19,11 @@ import {
   type StoredMocDualSheets,
 } from "@/lib/parts-sheet-moc-id";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
-import { restHasSheetRowReplacedMarker } from "@/lib/sheet-row-replaced-marker";
+import {
+  fulfillmentItemsExcludingModified,
+  fulfillmentItemsOnlyModified,
+  restHasSheetRowReplacedMarker,
+} from "@/lib/sheet-row-replaced-marker";
 import type { IoSplitSheetRowProvenance } from "@/lib/io-split-sheet-cache";
 
 import { buildAttachments } from "@/db/schema";
@@ -310,9 +314,16 @@ export async function fetchIoBatchFulfillmentSheetAction(batchId: number): Promi
           : "该包尚无高砖零件数据，请保存分包后自动同步或使用「从高砖同步」。",
     };
   }
+  const items = fulfillmentItemsExcludingModified(r.fulfillment.items);
+  if (items.length === 0) {
+    return {
+      ok: false,
+      error: "该包配货零件均已归入修改表，请在「修改表」查看或继续从缺件表更换。",
+    };
+  }
   return {
     ok: true,
-    items: r.fulfillment.items,
+    items,
     skippedHeader: r.fulfillment.skippedHeader,
     savedAt: r.fulfillment.savedAt,
   };
@@ -396,17 +407,20 @@ export async function fetchIoBatchModifiedSheetAction(batchId: number): Promise<
     }
   | { ok: false; error: string }
 > {
-  const r = await fetchIoBatchFulfillmentSheetAction(batchId);
+  const r = await loadIoBatchPartsSheetFromDb(batchId);
   if (!r.ok) return r;
-  const items = r.items.filter((row) => restHasSheetRowReplacedMarker(row.rest));
+  if (!r.fulfillment?.items.length) {
+    return { ok: false, error: "该包尚无配货表。" };
+  }
+  const items = fulfillmentItemsOnlyModified(r.fulfillment.items);
   if (items.length === 0) {
     return { ok: false, error: "该包尚无修改记录；可在缺件表中更换零件后在此查看。" };
   }
   return {
     ok: true,
     items,
-    skippedHeader: r.skippedHeader,
-    savedAt: r.savedAt,
+    skippedHeader: r.fulfillment.skippedHeader,
+    savedAt: r.fulfillment.savedAt,
   };
 }
 

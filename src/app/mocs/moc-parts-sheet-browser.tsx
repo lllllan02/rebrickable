@@ -12,7 +12,11 @@ import { MocIoSplitPlanDeleteButton } from "@/app/mocs/moc-io-split-plan-delete"
 import { MocIoSplitSheetViewer, type IoSplitSheetState } from "@/app/mocs/moc-io-split-sheet-viewer";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import {
+  fetchBuildModifiedSheetAction,
+  type InitialMocSheetFromServer,
+} from "@/app/mocs/moc-parts-sheet-actions";
+import { fulfillmentItemsExcludingModified } from "@/lib/sheet-row-replaced-marker";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import {
   MOC_PARTS_TAB_HASH,
@@ -23,6 +27,7 @@ import {
   buildIoPlanMergedShortageExportStem,
   buildIoSplitBatchExportStem,
   buildIoSplitPlanZipExportStem,
+  buildPartsSheetExportStem,
   FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
 } from "@/lib/parts-sheet-export-filename";
 import {
@@ -38,6 +43,7 @@ import { downloadIoSplitPlanZip } from "@/lib/io-split-plan-zip-download";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
 
 type ListTab = MocPartsListTab;
+type AllSheetViewTab = ListTab | "modified";
 
 type PrimaryPanel = { kind: "all" } | { kind: "io"; groupKey: string };
 
@@ -140,6 +146,40 @@ export function MocPartsSheetBrowser({
     },
     [onAllTabChange],
   );
+
+  const [allViewTab, setAllViewTab] = useState<AllSheetViewTab>(allTab);
+  useEffect(() => {
+    if (allViewTab === "modified") return;
+    setAllViewTab(allTab);
+  }, [allTab, allViewTab]);
+
+  const allFulfillmentDisplay = useMemo(() => {
+    if (!initialFulfillment) return null;
+    const items = fulfillmentItemsExcludingModified(initialFulfillment.items);
+    if (!items.length) return null;
+    return { ...initialFulfillment, items };
+  }, [initialFulfillment]);
+
+  const [allModifiedSheet, setAllModifiedSheet] = useState<InitialMocSheetFromServer | null>(null);
+
+  const reloadAllModifiedSheet = useCallback(async () => {
+    const r = await fetchBuildModifiedSheetAction({ subjectKind, subjectId });
+    if (!r.ok) {
+      setAllModifiedSheet(null);
+      return;
+    }
+    setAllModifiedSheet({
+      subjectId,
+      skippedHeader: r.skippedHeader,
+      items: r.items,
+      savedAt: r.savedAt ?? new Date().toISOString(),
+    });
+  }, [subjectId, subjectKind]);
+
+  useEffect(() => {
+    if (primary.kind !== "all" || allViewTab !== "modified") return;
+    void reloadAllModifiedSheet();
+  }, [allViewTab, primary.kind, reloadAllModifiedSheet]);
 
   const [ioSecondary, setIoSecondary] = useState<IoSecondary | null>(null);
   const [ioExportSheet, setIoExportSheet] = useState<IoSplitSheetState | null>(null);
@@ -506,32 +546,54 @@ export function MocPartsSheetBrowser({
                     <button
                       type="button"
                       disabled={!initialFull}
-                      className={`${subTabBtn} ${allTab === "full" ? subTabActive : subTabIdle} ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
-                      onClick={() => initialFull && setAllTab("full")}
+                      className={`${subTabBtn} ${allViewTab === "full" ? subTabActive : subTabIdle} ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (!initialFull) return;
+                        setAllViewTab("full");
+                        setAllTab("full");
+                      }}
                     >
                       完整零件表
                     </button>
                     <button
                       type="button"
-                      disabled={!initialFulfillment}
-                      className={`${subTabBtn} ${allTab === "fulfillment" ? subTabActive : subTabIdle} ${!initialFulfillment ? "cursor-not-allowed opacity-45" : ""}`}
-                      onClick={() => initialFulfillment && setAllTab("fulfillment")}
+                      disabled={!allFulfillmentDisplay}
+                      className={`${subTabBtn} ${allViewTab === "fulfillment" ? subTabActive : subTabIdle} ${!allFulfillmentDisplay ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (!allFulfillmentDisplay) return;
+                        setAllViewTab("fulfillment");
+                        setAllTab("fulfillment");
+                      }}
                     >
                       配货表
                     </button>
                     <button
                       type="button"
                       disabled={!initialShortage}
-                      className={`${subTabBtn} ${allTab === "shortage" ? subTabActive : subTabIdle} ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
-                      onClick={() => initialShortage && setAllTab("shortage")}
+                      className={`${subTabBtn} ${allViewTab === "shortage" ? subTabActive : subTabIdle} ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => {
+                        if (!initialShortage) return;
+                        setAllViewTab("shortage");
+                        setAllTab("shortage");
+                      }}
                     >
                       缺件表
+                    </button>
+                    <button
+                      type="button"
+                      className={`${subTabBtn} ${allViewTab === "modified" ? subTabActive : subTabIdle}`}
+                      onClick={() => setAllViewTab("modified")}
+                    >
+                      修改表
                     </button>
                     {hasOfficial ? (
                       <button
                         type="button"
-                        className={`${subTabBtn} ${allTab === "official" ? subTabActive : subTabIdle}`}
-                        onClick={() => setAllTab("official")}
+                        className={`${subTabBtn} ${allViewTab === "official" ? subTabActive : subTabIdle}`}
+                        onClick={() => {
+                          setAllViewTab("official");
+                          setAllTab("official");
+                        }}
                       >
                         官方清单
                       </button>
@@ -539,22 +601,37 @@ export function MocPartsSheetBrowser({
                   </>
                 )}
               </div>
-              {(allTab === "full" || allTab === "shortage" || allTab === "fulfillment") &&
+              {(allViewTab === "full" ||
+                allViewTab === "shortage" ||
+                allViewTab === "fulfillment" ||
+                allViewTab === "modified") &&
               subjectKind === BUILD_SUBJECT_MOC ? (
                 <MocDetailPartsListExportBar
                   subjectKind={subjectKind}
                   subjectId={subjectId}
                   exportDisplayName={exportDisplayName}
-                  listTab={allTab}
+                  listTab={allViewTab === "modified" ? "fulfillment" : allViewTab}
                   initialFull={initialFull}
                   initialShortage={initialShortage}
-                  initialFulfillment={initialFulfillment}
+                  initialFulfillment={allFulfillmentDisplay ?? initialFulfillment}
+                  activeSheet={allViewTab === "modified" ? allModifiedSheet : undefined}
+                  filenameStemOverride={
+                    allViewTab === "modified"
+                      ? buildPartsSheetExportStem({
+                          kind: subjectKind,
+                          subjectId,
+                          displayName: exportDisplayName,
+                          branch: "fulfillment",
+                          contentLabel: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
+                        })
+                      : undefined
+                  }
                 />
               ) : null}
             </div>
 
-            <div id={!isSetSubject ? MOC_PARTS_TAB_HASH[allTab] : undefined}>
-              {allTab === "full" && initialFull ? (
+            <div id={!isSetSubject && allViewTab !== "modified" ? MOC_PARTS_TAB_HASH[allTab] : undefined}>
+              {allViewTab === "full" && initialFull ? (
                 <MocPartsList
                   items={initialFull.items}
                   skippedHeader={initialFull.skippedHeader}
@@ -562,11 +639,11 @@ export function MocPartsSheetBrowser({
                   parentSubjectOwned={parentSubjectOwned}
                 />
               ) : null}
-              {allTab === "fulfillment" && initialFulfillment ? (
+              {allViewTab === "fulfillment" && allFulfillmentDisplay ? (
                 <MocPartsList
-                  items={initialFulfillment.items}
-                  skippedHeader={initialFulfillment.skippedHeader}
-                  savedAt={initialFulfillment.savedAt}
+                  items={allFulfillmentDisplay.items}
+                  skippedHeader={allFulfillmentDisplay.skippedHeader}
+                  savedAt={allFulfillmentDisplay.savedAt}
                   parentSubjectOwned={parentSubjectOwned}
                   detailSubstituteSuggestions
                   sheetRowReplaceContext={{
@@ -574,9 +651,10 @@ export function MocPartsSheetBrowser({
                     subjectId,
                     branch: "fulfillment",
                   }}
+                  onSheetRowMutated={reloadAllModifiedSheet}
                 />
               ) : null}
-              {allTab === "shortage" && initialShortage ? (
+              {allViewTab === "shortage" && initialShortage ? (
                 <MocPartsList
                   items={initialShortage.items}
                   skippedHeader={initialShortage.skippedHeader}
@@ -585,10 +663,33 @@ export function MocPartsSheetBrowser({
                   shortageListMode
                   detailSubstituteSuggestions
                   sheetRowReplaceContext={{ subjectKind, subjectId, branch: "shortage" }}
-                  onShortageRowReplacedToFulfillment={() => setAllTab("fulfillment")}
+                  onSheetRowMutated={reloadAllModifiedSheet}
+                  onShortageRowReplacedToFulfillment={() => setAllViewTab("modified")}
                 />
               ) : null}
-              {allTab === "official" && officialInventory ? (
+              {allViewTab === "modified" ? (
+                allModifiedSheet ? (
+                  <MocPartsList
+                    items={allModifiedSheet.items}
+                    skippedHeader={allModifiedSheet.skippedHeader}
+                    savedAt={allModifiedSheet.savedAt}
+                    parentSubjectOwned={parentSubjectOwned}
+                    detailSubstituteSuggestions
+                    sourceMetaLine="由缺件表更换并入配货表的行。"
+                    sheetRowReplaceContext={{
+                      subjectKind,
+                      subjectId,
+                      branch: "fulfillment",
+                    }}
+                    onSheetRowMutated={reloadAllModifiedSheet}
+                  />
+                ) : (
+                  <p className="text-sm text-[var(--muted)]">
+                    尚无修改记录；请在缺件表中更换零件后，修改行会汇总到此表。
+                  </p>
+                )
+              ) : null}
+              {allViewTab === "official" && officialInventory ? (
                 officialInventory.items.length > 0 ? (
                   <MocPartsList
                     items={officialInventory.items}
@@ -601,13 +702,17 @@ export function MocPartsSheetBrowser({
                   <p className="text-sm text-[var(--muted)]">本地库存中暂无该套装的零件行。</p>
                 )
               ) : null}
-              {allTab === "full" && !initialFull ? (
+              {allViewTab === "full" && !initialFull ? (
                 <p className="text-sm text-[var(--muted)]">尚未上传完整零件表。</p>
               ) : null}
-              {allTab === "fulfillment" && !initialFulfillment ? (
-                <p className="text-sm text-[var(--muted)]">尚无配货表。</p>
+              {allViewTab === "fulfillment" && !allFulfillmentDisplay ? (
+                <p className="text-sm text-[var(--muted)]">
+                  {initialFulfillment
+                    ? "配货零件均已归入修改表，请在「修改表」查看。"
+                    : "尚无配货表。"}
+                </p>
               ) : null}
-              {allTab === "shortage" && !initialShortage ? (
+              {allViewTab === "shortage" && !initialShortage ? (
                 <p className="text-sm text-[var(--muted)]">尚无缺件表。</p>
               ) : null}
             </div>

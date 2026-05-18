@@ -1263,19 +1263,7 @@ export function MocPartsList({
     [listAfterShortageReason, sheetListFilter]
   );
 
-  /** 配货表：有「更换零件」标记的行置顶，便于核对 */
-  const listDisplayed = useMemo(() => {
-    if (sheetRowReplaceContext?.branch !== "fulfillment") return listFiltered;
-    const modified: ShortageResolveItem[] = [];
-    const rest: ShortageResolveItem[] = [];
-    for (const r of listFiltered) {
-      (restHasSheetRowReplacedMarker(r.rest) ? modified : rest).push(r);
-    }
-    const byLine = (a: ShortageResolveItem, b: ShortageResolveItem) => a.lineNumber - b.lineNumber;
-    modified.sort(byLine);
-    rest.sort(byLine);
-    return [...modified, ...rest];
-  }, [listFiltered, sheetRowReplaceContext?.branch]);
+  const listDisplayed = listFiltered;
 
   const totalPartQty = useMemo(() => {
     if (!shortageListMode && typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
