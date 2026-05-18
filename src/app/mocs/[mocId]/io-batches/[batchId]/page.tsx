@@ -4,6 +4,7 @@ import { loadIoBatchPartsSheetFromDb } from "@/app/mocs/io-batch-parts-sheet-act
 import { MocIoBatchPartsSection } from "@/app/mocs/moc-io-batch-parts-section";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
+import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,7 @@ export default async function MocIoBatchPage({ params }: Props) {
     initialFulfillment = {
       subjectId: mocId,
       skippedHeader: sheet.fulfillment.skippedHeader,
-      items: sheet.fulfillment.items,
+      items: fulfillmentItemsForDisplay(sheet.fulfillment.items),
       savedAt: sheet.fulfillment.savedAt,
     };
   }

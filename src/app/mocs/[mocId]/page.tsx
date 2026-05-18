@@ -11,6 +11,7 @@ import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
+import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 
 import { MocDetailEditorial } from "../moc-detail-editorial";
 import type { MocAttachmentRow } from "../moc-attachments-panel";
@@ -117,7 +118,7 @@ export default async function MocDetailPage({ params }: Props) {
       initialFulfillment = {
         subjectId: sheet.subjectId,
         skippedHeader: sheet.fulfillment.skippedHeader,
-        items: sheet.fulfillment.items,
+        items: fulfillmentItemsForDisplay(sheet.fulfillment.items),
         savedAt: sheet.fulfillment.savedAt,
       };
     }

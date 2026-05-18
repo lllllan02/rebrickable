@@ -35,6 +35,7 @@ import { restoreBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-acti
 import { invalidateIoSplitSheetCacheForBatch } from "@/lib/io-split-sheet-cache";
 import {
   resolveSheetRowReplaceTarget,
+  resolveSheetRowReplaceTargets,
   SheetRowReplacePanel,
   type SheetRowReplaceContext,
 } from "@/app/mocs/sheet-row-replace-panel";
@@ -1201,8 +1202,8 @@ type Props = {
   detailSubstituteSuggestions?: boolean;
   /** 非空时与详情共用模态框，以 tab 切换「更换零件」 */
   sheetRowReplaceContext?: SheetRowReplaceContext | null;
-  /** 缺件表行更换并入配货表后回调（用于切换到配货 Tab） */
-  onShortageRowReplacedToFulfillment?: () => void;
+  /** 缺件表行更换并入配货表后回调（`ioBatchId` 为写入的分包，用于切换到该包配货 Tab） */
+  onShortageRowReplacedToFulfillment?: (ioBatchId?: number) => void;
   /** 更换/还原成功后：由父级刷新列表（如 Studio 分包客户端缓存表） */
   onSheetRowMutated?: () => void | Promise<void>;
 };
@@ -1284,12 +1285,19 @@ export function MocPartsList({
   }, []);
 
   const handleSheetRowReplaced = useCallback(() => {
+    const replacedItem = detailItem;
     void (async () => {
-      if (sheetRowReplaceContext?.ioBatchId) {
-        invalidateIoSplitSheetCacheForBatch(sheetRowReplaceContext.ioBatchId);
+      const ctx = sheetRowReplaceContext;
+      let targetBatchId = ctx?.ioBatchId;
+      if (ctx?.branch === "shortage" && replacedItem) {
+        const targets = resolveSheetRowReplaceTargets(ctx, replacedItem);
+        if (targets[0]?.ioBatchId) targetBatchId = targets[0].ioBatchId;
       }
-      if (sheetRowReplaceContext?.branch === "shortage") {
-        onShortageRowReplacedToFulfillment?.();
+      if (targetBatchId) {
+        invalidateIoSplitSheetCacheForBatch(targetBatchId);
+      }
+      if (ctx?.branch === "shortage") {
+        onShortageRowReplacedToFulfillment?.(targetBatchId);
       }
       closeDetail();
       try {
@@ -1300,11 +1308,11 @@ export function MocPartsList({
     })();
   }, [
     closeDetail,
+    detailItem,
     onSheetRowMutated,
     onShortageRowReplacedToFulfillment,
     router,
-    sheetRowReplaceContext?.branch,
-    sheetRowReplaceContext?.ioBatchId,
+    sheetRowReplaceContext,
   ]);
 
   useEffect(() => {

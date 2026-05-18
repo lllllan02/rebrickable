@@ -1,18 +1,14 @@
 import type { IoSplitPlanGroup } from "@/app/mocs/io-batch-parts-sheet-actions";
 import {
   fetchIoBatchFulfillmentSheetAction,
-  fetchIoBatchModifiedSheetAction,
   fetchIoBatchShortageSheetAction,
-  fetchIoPlanMergedModifiedAction,
   fetchIoPlanMergedShortageAction,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
 import { buildPartsSheetXlsxBuffer, type PartsSheetXlsxRow } from "@/lib/build-parts-sheet-xlsx";
 import { buildIoSplitPlanZipBuffer, type IoSplitPlanZipEntry } from "@/lib/build-io-split-plan-zip";
 import {
-  buildIoPlanMergedModifiedExportStem,
   buildIoPlanMergedShortageExportStem,
   buildIoSplitBatchExportStem,
-  FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
 } from "@/lib/parts-sheet-export-filename";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
@@ -47,19 +43,6 @@ export async function collectAndBuildIoSplitPlanZip(input: {
         await xlsxEntry(buildIoSplitBatchExportStem({ ...base, sheetSuffix: "缺件表" }), shortage.items)
       );
     }
-
-    const modified = await fetchIoBatchModifiedSheetAction(batch.id);
-    if (modified.ok && modified.items.length > 0) {
-      entries.push(
-        await xlsxEntry(
-          buildIoSplitBatchExportStem({
-            ...base,
-            sheetSuffix: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
-          }),
-          modified.items
-        )
-      );
-    }
   }
 
   if (batchIds.length > 0) {
@@ -69,16 +52,6 @@ export async function collectAndBuildIoSplitPlanZip(input: {
         await xlsxEntry(
           buildIoPlanMergedShortageExportStem({ mocId, displayName, planLabel }),
           mergedShortage.items
-        )
-      );
-    }
-
-    const mergedModified = await fetchIoPlanMergedModifiedAction(batchIds);
-    if (mergedModified.ok && mergedModified.items.length > 0) {
-      entries.push(
-        await xlsxEntry(
-          buildIoPlanMergedModifiedExportStem({ mocId, displayName, planLabel }),
-          mergedModified.items
         )
       );
     }

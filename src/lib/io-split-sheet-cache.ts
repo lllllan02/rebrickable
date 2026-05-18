@@ -13,10 +13,6 @@ export type IoSplitSheetState = {
   items: ShortageResolveItem[];
   skippedHeader: boolean;
   savedAt: string | null;
-  /** 修改表等：行单价×数量合计（元） */
-  gobricksGdsPriceCny?: number | null;
-  /** plan-merged-modified：展示行 → 源分包配货行 */
-  replaceProvenanceByLine?: Record<number, IoSplitSheetRowProvenance>;
   /** plan-merged-shortage：展示行 → 源分包缺件行（同零件+色可能来自多包） */
   shortageProvenanceByLine?: Record<number, IoSplitSheetRowProvenance[]>;
 };
@@ -37,7 +33,7 @@ export function getIoSplitSheetErrorFromCache(loadKey: string): string | undefin
   return sheetErrorCache.get(loadKey);
 }
 
-/** 已成功加载或已记录失败（如无修改行），无需再次请求 */
+/** 已成功加载或已记录失败（如无数据），无需再次请求 */
 export function isIoSplitSheetLoadSettled(loadKey: string): boolean {
   return sheetCache.has(loadKey) || sheetErrorCache.has(loadKey);
 }
@@ -83,7 +79,7 @@ export function loadIoSplitSheet(
 }
 
 export function ioBatchSheetLoadKey(
-  mode: "batch-full" | "batch-shortage" | "batch-fulfillment" | "batch-modified",
+  mode: "batch-full" | "batch-shortage" | "batch-fulfillment",
   batchId: number,
 ): string {
   return `${mode}:${batchId}`;
@@ -93,16 +89,7 @@ export function ioPlanMergedShortageLoadKey(batchIds: number[]): string {
   return `merged-shortage:${batchIds.join(",")}`;
 }
 
-export function ioPlanMergedModifiedLoadKey(batchIds: number[]): string {
-  return `merged-modified:${batchIds.join(",")}`;
-}
-
-const IO_BATCH_SHEET_MODES = [
-  "batch-full",
-  "batch-shortage",
-  "batch-fulfillment",
-  "batch-modified",
-] as const;
+const IO_BATCH_SHEET_MODES = ["batch-full", "batch-shortage", "batch-fulfillment"] as const;
 
 /** 更换/还原零件或重新上传后，丢弃该分包在内存中的零件表缓存 */
 function dropIoSplitSheetCacheEntry(loadKey: string): void {
@@ -122,13 +109,8 @@ export function invalidateIoPlanMergedShortageCache(batchIds: number[]): void {
   dropIoSplitSheetCacheEntry(ioPlanMergedShortageLoadKey(batchIds));
 }
 
-export function invalidateIoPlanMergedModifiedCache(batchIds: number[]): void {
-  dropIoSplitSheetCacheEntry(ioPlanMergedModifiedLoadKey(batchIds));
-}
-
-/** 分包行变更后，同时丢弃方案级汇总缺件 / 修改表缓存 */
+/** 分包行变更后，同时丢弃方案级汇总缺件缓存 */
 export function invalidateIoPlanCachesForBatches(batchIds: number[]): void {
   if (batchIds.length === 0) return;
   invalidateIoPlanMergedShortageCache(batchIds);
-  invalidateIoPlanMergedModifiedCache(batchIds);
 }

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 
 import {
   fetchIoBatchFulfillmentSheetAction,
-  fetchIoPlanMergedModifiedAction,
   type IoBatchListRow,
   type IoSplitPlanGroup,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
@@ -12,45 +11,27 @@ import { MocIoSplitPlanDeleteButton } from "@/app/mocs/moc-io-split-plan-delete"
 import { MocIoSplitSheetViewer, type IoSplitSheetState } from "@/app/mocs/moc-io-split-sheet-viewer";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
-import {
-  fetchBuildModifiedSheetAction,
-  type InitialMocSheetFromServer,
-} from "@/app/mocs/moc-parts-sheet-actions";
-import { fulfillmentItemsExcludingModified } from "@/lib/sheet-row-replaced-marker";
+import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import {
   MOC_PARTS_TAB_HASH,
   type MocPartsListTab,
 } from "@/lib/moc-parts-tab-navigation";
 import {
-  buildIoPlanMergedModifiedExportStem,
   buildIoPlanMergedShortageExportStem,
   buildIoSplitBatchExportStem,
   buildIoSplitPlanZipExportStem,
-  buildPartsSheetExportStem,
-  FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
 } from "@/lib/parts-sheet-export-filename";
-import {
-  getIoSplitSheetFromCache,
-  ioBatchSheetLoadKey,
-  ioPlanMergedModifiedLoadKey,
-  isIoSplitSheetLoadSettled,
-  loadIoSplitSheet,
-} from "@/lib/io-split-sheet-cache";
+import { ioBatchSheetLoadKey, isIoSplitSheetLoadSettled, loadIoSplitSheet } from "@/lib/io-split-sheet-cache";
 import { formatGobricksGdsPriceCny } from "@/lib/gobricks-display-caption";
-import { sumPartsSheetGobricksTotalCny } from "@/lib/parts-sheet-gobricks-price";
 import { downloadIoSplitPlanZip } from "@/lib/io-split-plan-zip-download";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
 
 type ListTab = MocPartsListTab;
-type AllSheetViewTab = ListTab | "modified";
-
 type PrimaryPanel = { kind: "all" } | { kind: "io"; groupKey: string };
 
-type IoSecondary =
-  | { kind: "batch"; batchId: number }
-  | { kind: "merged-shortage" }
-  | { kind: "merged-modified" };
+type IoSecondary = { kind: "batch"; batchId: number } | { kind: "merged-shortage" };
 
 type Props = {
   subjectKind: BuildSubjectKind;
@@ -77,12 +58,6 @@ function planDisplayName(plan: IoSplitPlanGroup, index: number): string {
 
 function batchTabLabel(batch: IoBatchListRow, index: number): string {
   return batch.label.trim() || ioSplitPackageLabel(index + 1);
-}
-
-function modifiedSheetPriceCny(sheet: IoSplitSheetState | null): number | null {
-  if (!sheet?.items.length) return null;
-  const total = sheet.gobricksGdsPriceCny ?? sumPartsSheetGobricksTotalCny(sheet.items);
-  return total > 0 ? total : null;
 }
 
 function batchTabTitle(batch: IoBatchListRow, index: number): string {
@@ -147,45 +122,17 @@ export function MocPartsSheetBrowser({
     [onAllTabChange],
   );
 
-  const [allViewTab, setAllViewTab] = useState<AllSheetViewTab>(allTab);
-  useEffect(() => {
-    if (allViewTab === "modified") return;
-    setAllViewTab(allTab);
-  }, [allTab, allViewTab]);
-
   const allFulfillmentDisplay = useMemo(() => {
     if (!initialFulfillment) return null;
-    const items = fulfillmentItemsExcludingModified(initialFulfillment.items);
+    const items = fulfillmentItemsForDisplay(initialFulfillment.items);
     if (!items.length) return null;
     return { ...initialFulfillment, items };
   }, [initialFulfillment]);
-
-  const [allModifiedSheet, setAllModifiedSheet] = useState<InitialMocSheetFromServer | null>(null);
-
-  const reloadAllModifiedSheet = useCallback(async () => {
-    const r = await fetchBuildModifiedSheetAction({ subjectKind, subjectId });
-    if (!r.ok) {
-      setAllModifiedSheet(null);
-      return;
-    }
-    setAllModifiedSheet({
-      subjectId,
-      skippedHeader: r.skippedHeader,
-      items: r.items,
-      savedAt: r.savedAt ?? new Date().toISOString(),
-    });
-  }, [subjectId, subjectKind]);
-
-  useEffect(() => {
-    if (primary.kind !== "all" || allViewTab !== "modified") return;
-    void reloadAllModifiedSheet();
-  }, [allViewTab, primary.kind, reloadAllModifiedSheet]);
 
   const [ioSecondary, setIoSecondary] = useState<IoSecondary | null>(null);
   const [ioExportSheet, setIoExportSheet] = useState<IoSplitSheetState | null>(null);
   const [zipExportBusy, startZipExport] = useTransition();
   const [zipExportError, setZipExportError] = useState<string | null>(null);
-  const [planModifiedPriceVersion, setPlanModifiedPriceVersion] = useState(0);
 
   const activePlan = useMemo(
     () =>
@@ -217,7 +164,7 @@ export function MocPartsSheetBrowser({
       ) {
         return prev;
       }
-      if (prev?.kind === "merged-shortage" || prev?.kind === "merged-modified") return prev;
+      if (prev?.kind === "merged-shortage") return prev;
       return { kind: "batch", batchId: firstBatchId };
     });
   }, [activePlan, activePlanBatchIdsKey, activePlanGroupKey, primary.kind]);
@@ -248,7 +195,6 @@ export function MocPartsSheetBrowser({
 
   const ioViewerMode = useMemo(() => {
     if (ioSecondary?.kind === "merged-shortage") return "plan-merged-shortage" as const;
-    if (ioSecondary?.kind === "merged-modified") return "plan-merged-modified" as const;
     if (ioSecondary?.kind === "batch") return "batch-fulfillment" as const;
     return null;
   }, [ioSecondary]);
@@ -263,13 +209,6 @@ export function MocPartsSheetBrowser({
     const planLabel = planDisplayName(activePlan, activePlanIndex);
     if (ioSecondary?.kind === "merged-shortage") {
       return buildIoPlanMergedShortageExportStem({
-        mocId: subjectId,
-        displayName: exportDisplayName,
-        planLabel,
-      });
-    }
-    if (ioSecondary?.kind === "merged-modified") {
-      return buildIoPlanMergedModifiedExportStem({
         mocId: subjectId,
         displayName: exportDisplayName,
         planLabel,
@@ -294,23 +233,13 @@ export function MocPartsSheetBrowser({
         prev &&
         sheet.savedAt === prev.savedAt &&
         sheet.items.length === prev.items.length &&
-        sheet.skippedHeader === prev.skippedHeader &&
-        sheet.gobricksGdsPriceCny === prev.gobricksGdsPriceCny
+        sheet.skippedHeader === prev.skippedHeader
       ) {
         return prev;
       }
       return sheet;
     });
   }, []);
-
-  const planMergedModifiedPriceLabel = useMemo(() => {
-    if (primary.kind !== "io" || planBatchIds.length === 0) return null;
-    const sheet =
-      ioSecondary?.kind === "merged-modified" && ioExportSheet
-        ? ioExportSheet
-        : getIoSplitSheetFromCache(ioPlanMergedModifiedLoadKey(planBatchIds)) ?? null;
-    return formatGobricksGdsPriceCny(modifiedSheetPriceCny(sheet));
-  }, [ioExportSheet, ioSecondary?.kind, planBatchIds, planModifiedPriceVersion, primary.kind]);
 
   const prefetchedBatchIdsRef = useRef(new Set<number>());
 
@@ -342,36 +271,6 @@ export function MocPartsSheetBrowser({
       cancelled = true;
     };
   }, [ioSecondaryBatchId, primary.kind]);
-
-  /** 预取方案级修改表（用于 Tab 参考价） */
-  useEffect(() => {
-    if (primary.kind !== "io" || planBatchIds.length === 0) return;
-    const key = ioPlanMergedModifiedLoadKey(planBatchIds);
-    if (isIoSplitSheetLoadSettled(key)) return;
-
-    let cancelled = false;
-    void loadIoSplitSheet(key, async () => {
-      const r = await fetchIoPlanMergedModifiedAction(planBatchIds);
-      if (!r.ok) return { ok: false as const, error: r.error };
-      return {
-        ok: true as const,
-        sheet: {
-          items: r.items,
-          skippedHeader: r.skippedHeader,
-          savedAt: r.savedAt,
-          gobricksGdsPriceCny: sumPartsSheetGobricksTotalCny(r.items),
-          replaceProvenanceByLine: r.replaceProvenanceByLine,
-        },
-      };
-    }).then(() => {
-      if (cancelled) return;
-      setPlanModifiedPriceVersion((v) => v + 1);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [planBatchIds, planBatchIdsKey, primary.kind]);
 
   const selectPrimaryAll = useCallback(() => setPrimary({ kind: "all" }), []);
 
@@ -435,16 +334,6 @@ export function MocPartsSheetBrowser({
           </>
         ) : null}
         {ioSecondary?.kind === "merged-shortage" ? <> · 缺件表</> : null}
-        {ioSecondary?.kind === "merged-modified" && ioExportSheet ? (
-          <>
-            {" · "}
-            {(() => {
-              const qty = ioExportSheet.items.reduce((n, r) => n + r.quantity, 0);
-              const price = formatGobricksGdsPriceCny(modifiedSheetPriceCny(ioExportSheet));
-              return `修改表 · ${qty} 片${price ? ` · 参考价 ${price}` : ""}`;
-            })()}
-          </>
-        ) : null}
       </p>
     ) : null;
 
@@ -546,54 +435,32 @@ export function MocPartsSheetBrowser({
                     <button
                       type="button"
                       disabled={!initialFull}
-                      className={`${subTabBtn} ${allViewTab === "full" ? subTabActive : subTabIdle} ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
-                      onClick={() => {
-                        if (!initialFull) return;
-                        setAllViewTab("full");
-                        setAllTab("full");
-                      }}
+                      className={`${subTabBtn} ${allTab === "full" ? subTabActive : subTabIdle} ${!initialFull ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => initialFull && setAllTab("full")}
                     >
                       完整零件表
                     </button>
                     <button
                       type="button"
                       disabled={!allFulfillmentDisplay}
-                      className={`${subTabBtn} ${allViewTab === "fulfillment" ? subTabActive : subTabIdle} ${!allFulfillmentDisplay ? "cursor-not-allowed opacity-45" : ""}`}
-                      onClick={() => {
-                        if (!allFulfillmentDisplay) return;
-                        setAllViewTab("fulfillment");
-                        setAllTab("fulfillment");
-                      }}
+                      className={`${subTabBtn} ${allTab === "fulfillment" ? subTabActive : subTabIdle} ${!allFulfillmentDisplay ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => allFulfillmentDisplay && setAllTab("fulfillment")}
                     >
                       配货表
                     </button>
                     <button
                       type="button"
                       disabled={!initialShortage}
-                      className={`${subTabBtn} ${allViewTab === "shortage" ? subTabActive : subTabIdle} ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
-                      onClick={() => {
-                        if (!initialShortage) return;
-                        setAllViewTab("shortage");
-                        setAllTab("shortage");
-                      }}
+                      className={`${subTabBtn} ${allTab === "shortage" ? subTabActive : subTabIdle} ${!initialShortage ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => initialShortage && setAllTab("shortage")}
                     >
                       缺件表
-                    </button>
-                    <button
-                      type="button"
-                      className={`${subTabBtn} ${allViewTab === "modified" ? subTabActive : subTabIdle}`}
-                      onClick={() => setAllViewTab("modified")}
-                    >
-                      修改表
                     </button>
                     {hasOfficial ? (
                       <button
                         type="button"
-                        className={`${subTabBtn} ${allViewTab === "official" ? subTabActive : subTabIdle}`}
-                        onClick={() => {
-                          setAllViewTab("official");
-                          setAllTab("official");
-                        }}
+                        className={`${subTabBtn} ${allTab === "official" ? subTabActive : subTabIdle}`}
+                        onClick={() => setAllTab("official")}
                       >
                         官方清单
                       </button>
@@ -601,37 +468,22 @@ export function MocPartsSheetBrowser({
                   </>
                 )}
               </div>
-              {(allViewTab === "full" ||
-                allViewTab === "shortage" ||
-                allViewTab === "fulfillment" ||
-                allViewTab === "modified") &&
+              {(allTab === "full" || allTab === "shortage" || allTab === "fulfillment") &&
               subjectKind === BUILD_SUBJECT_MOC ? (
                 <MocDetailPartsListExportBar
                   subjectKind={subjectKind}
                   subjectId={subjectId}
                   exportDisplayName={exportDisplayName}
-                  listTab={allViewTab === "modified" ? "fulfillment" : allViewTab}
+                  listTab={allTab}
                   initialFull={initialFull}
                   initialShortage={initialShortage}
                   initialFulfillment={allFulfillmentDisplay ?? initialFulfillment}
-                  activeSheet={allViewTab === "modified" ? allModifiedSheet : undefined}
-                  filenameStemOverride={
-                    allViewTab === "modified"
-                      ? buildPartsSheetExportStem({
-                          kind: subjectKind,
-                          subjectId,
-                          displayName: exportDisplayName,
-                          branch: "fulfillment",
-                          contentLabel: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
-                        })
-                      : undefined
-                  }
                 />
               ) : null}
             </div>
 
-            <div id={!isSetSubject && allViewTab !== "modified" ? MOC_PARTS_TAB_HASH[allTab] : undefined}>
-              {allViewTab === "full" && initialFull ? (
+            <div id={!isSetSubject ? MOC_PARTS_TAB_HASH[allTab] : undefined}>
+              {allTab === "full" && initialFull ? (
                 <MocPartsList
                   items={initialFull.items}
                   skippedHeader={initialFull.skippedHeader}
@@ -639,7 +491,7 @@ export function MocPartsSheetBrowser({
                   parentSubjectOwned={parentSubjectOwned}
                 />
               ) : null}
-              {allViewTab === "fulfillment" && allFulfillmentDisplay ? (
+              {allTab === "fulfillment" && allFulfillmentDisplay ? (
                 <MocPartsList
                   items={allFulfillmentDisplay.items}
                   skippedHeader={allFulfillmentDisplay.skippedHeader}
@@ -651,10 +503,9 @@ export function MocPartsSheetBrowser({
                     subjectId,
                     branch: "fulfillment",
                   }}
-                  onSheetRowMutated={reloadAllModifiedSheet}
                 />
               ) : null}
-              {allViewTab === "shortage" && initialShortage ? (
+              {allTab === "shortage" && initialShortage ? (
                 <MocPartsList
                   items={initialShortage.items}
                   skippedHeader={initialShortage.skippedHeader}
@@ -663,33 +514,10 @@ export function MocPartsSheetBrowser({
                   shortageListMode
                   detailSubstituteSuggestions
                   sheetRowReplaceContext={{ subjectKind, subjectId, branch: "shortage" }}
-                  onSheetRowMutated={reloadAllModifiedSheet}
-                  onShortageRowReplacedToFulfillment={() => setAllViewTab("modified")}
+                  onShortageRowReplacedToFulfillment={() => setAllTab("fulfillment")}
                 />
               ) : null}
-              {allViewTab === "modified" ? (
-                allModifiedSheet ? (
-                  <MocPartsList
-                    items={allModifiedSheet.items}
-                    skippedHeader={allModifiedSheet.skippedHeader}
-                    savedAt={allModifiedSheet.savedAt}
-                    parentSubjectOwned={parentSubjectOwned}
-                    detailSubstituteSuggestions
-                    sourceMetaLine="由缺件表更换并入配货表的行。"
-                    sheetRowReplaceContext={{
-                      subjectKind,
-                      subjectId,
-                      branch: "fulfillment",
-                    }}
-                    onSheetRowMutated={reloadAllModifiedSheet}
-                  />
-                ) : (
-                  <p className="text-sm text-[var(--muted)]">
-                    尚无修改记录；请在缺件表中更换零件后，修改行会汇总到此表。
-                  </p>
-                )
-              ) : null}
-              {allViewTab === "official" && officialInventory ? (
+              {allTab === "official" && officialInventory ? (
                 officialInventory.items.length > 0 ? (
                   <MocPartsList
                     items={officialInventory.items}
@@ -702,17 +530,17 @@ export function MocPartsSheetBrowser({
                   <p className="text-sm text-[var(--muted)]">本地库存中暂无该套装的零件行。</p>
                 )
               ) : null}
-              {allViewTab === "full" && !initialFull ? (
+              {allTab === "full" && !initialFull ? (
                 <p className="text-sm text-[var(--muted)]">尚未上传完整零件表。</p>
               ) : null}
-              {allViewTab === "fulfillment" && !allFulfillmentDisplay ? (
+              {allTab === "fulfillment" && !allFulfillmentDisplay ? (
                 <p className="text-sm text-[var(--muted)]">
                   {initialFulfillment
-                    ? "配货零件均已归入修改表，请在「修改表」查看。"
+                    ? "该包尚无配货零件行。"
                     : "尚无配货表。"}
                 </p>
               ) : null}
-              {allViewTab === "shortage" && !initialShortage ? (
+              {allTab === "shortage" && !initialShortage ? (
                 <p className="text-sm text-[var(--muted)]">尚无缺件表。</p>
               ) : null}
             </div>
@@ -764,31 +592,6 @@ export function MocPartsSheetBrowser({
                 >
                   缺件表
                 </button>
-                <button
-                  type="button"
-                  title={
-                    planMergedModifiedPriceLabel
-                      ? `修改表 · 参考价 ${planMergedModifiedPriceLabel}`
-                      : "修改表"
-                  }
-                  className={`${subTabBtn} inline-flex items-baseline gap-1.5 ${
-                    ioSecondary?.kind === "merged-modified" ? subTabActive : subTabIdle
-                  }`}
-                  onClick={() => setIoSecondary({ kind: "merged-modified" })}
-                >
-                  <span>修改表</span>
-                  {planMergedModifiedPriceLabel ? (
-                    <span
-                      className={`font-mono text-[10px] tabular-nums sm:text-[11px] ${
-                        ioSecondary?.kind === "merged-modified"
-                          ? "text-[var(--muted)]"
-                          : "text-[var(--muted-2)]"
-                      }`}
-                    >
-                      {planMergedModifiedPriceLabel}
-                    </span>
-                  ) : null}
-                </button>
               </div>
               {subjectKind === BUILD_SUBJECT_MOC ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -826,19 +629,13 @@ export function MocPartsSheetBrowser({
                 parentSubjectOwned={parentSubjectOwned}
                 planBatchIds={planBatchIds}
                 onSheetLoaded={handleIoSheetLoaded}
-                onShortageRowReplacedToFulfillment={() =>
-                  setIoSecondary({ kind: "merged-modified" })
-                }
-              />
-            ) : ioViewerMode === "plan-merged-modified" ? (
-              <MocIoSplitSheetViewer
-                mode="plan-merged-modified"
-                batchIds={planBatchIds}
-                subjectKind={subjectKind}
-                subjectId={subjectId}
-                parentSubjectOwned={parentSubjectOwned}
-                planBatchIds={planBatchIds}
-                onSheetLoaded={handleIoSheetLoaded}
+                onShortageRowReplacedToFulfillment={(ioBatchId) => {
+                  const batchId =
+                    ioBatchId && activePlan?.batches.some((b) => b.id === ioBatchId)
+                      ? ioBatchId
+                      : activePlan?.batches[0]?.id;
+                  if (batchId) setIoSecondary({ kind: "batch", batchId });
+                }}
               />
             ) : ioViewerMode === "batch-fulfillment" && activeBatch ? (
               <MocIoSplitSheetViewer

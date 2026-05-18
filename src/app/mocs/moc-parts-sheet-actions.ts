@@ -33,7 +33,6 @@ import {
 } from "@/lib/gobricks-item-filter-inventory";
 import {
   appendSheetRowReplacedMarker,
-  fulfillmentItemsOnlyModified,
   mergeSheetRowReplaceSnapshotForPersist,
   parseSheetRowReplaceMeta,
   stripSheetRowReplacedMarker,
@@ -429,47 +428,6 @@ export async function loadBuildPartsSheetFromDb(
 
 export async function loadMocPartsSheetFromDb(mocIdRaw: string): Promise<LoadMocPartsSheetResult> {
   return loadBuildPartsSheetFromDb(BUILD_SUBJECT_MOC, mocIdRaw);
-}
-
-/** 主体配货表中经「更换零件」写入的行（修改表） */
-export async function fetchBuildModifiedSheetAction(input: {
-  subjectKind: BuildSubjectKind;
-  subjectId: string;
-}): Promise<
-  | {
-      ok: true;
-      items: ShortageResolveItem[];
-      skippedHeader: boolean;
-      savedAt: string | null;
-    }
-  | { ok: false; error: string }
-> {
-  const subjectId = input.subjectId.trim();
-  if (!subjectId || subjectId.length > MAX_SUBJECT_ID_LEN) {
-    return { ok: false, error: `主体 ID 须为非空且不超过 ${MAX_SUBJECT_ID_LEN} 字符。` };
-  }
-  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
-    return { ok: false, error: "主体 ID 含有非法字符。" };
-  }
-
-  const loaded = await loadBuildPartsSheetFromDb(input.subjectKind, subjectId);
-  if (!loaded.ok) return loaded;
-  if (!loaded.fulfillment?.items.length) {
-    return { ok: false, error: "尚无配货表。" };
-  }
-  const items = fulfillmentItemsOnlyModified(loaded.fulfillment.items);
-  if (items.length === 0) {
-    return {
-      ok: false,
-      error: "尚无修改记录；请在缺件表中更换零件后，修改行会汇总到此表。",
-    };
-  }
-  return {
-    ok: true,
-    items,
-    skippedHeader: loaded.fulfillment.skippedHeader,
-    savedAt: loaded.fulfillment.savedAt,
-  };
 }
 
 export type SaveBuildPartsSheetResult = { ok: true; savedAt: string } | { ok: false; error: string };
@@ -1176,10 +1134,11 @@ export async function replaceBuildPartsSheetRowAction(input: {
     const nextShortage = branchData.items.filter((_, i) => i !== idx);
     const ful = loaded.fulfillment;
     const baseFulfillmentItems = ful?.items ?? [];
-    const nextLine =
-      baseFulfillmentItems.length > 0
-        ? Math.max(...baseFulfillmentItems.map((r) => r.lineNumber)) + 1
-        : 1;
+    const nextLine = fulfillmentLineNumberForShortageReplace(
+      loaded.full?.items,
+      baseFulfillmentItems,
+      old
+    );
     const moved: ShortageResolveItem = { ...merged, lineNumber: nextLine };
     const fulfillmentItems = [...baseFulfillmentItems, moved];
     const dual: StoredMocDualSheets = {
@@ -1222,6 +1181,25 @@ export async function replaceBuildPartsSheetRowAction(input: {
 
 function normalizeSheetGdsItemIdForCompare(s: string): string {
   return s.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+/** 缺件更换并入配货：优先占用完整表中同零件+色的行号，否则追加到表尾 */
+function fulfillmentLineNumberForShortageReplace(
+  fullItems: readonly ShortageResolveItem[] | undefined,
+  fulfillmentItems: readonly ShortageResolveItem[],
+  shortageRow: ShortageResolveItem
+): number {
+  const taken = new Set(fulfillmentItems.map((r) => r.lineNumber));
+  if (fullItems?.length) {
+    const fullRow = fullItems.find(
+      (r) => r.partNum === shortageRow.partNum && r.colorId === shortageRow.colorId
+    );
+    if (fullRow && !taken.has(fullRow.lineNumber)) {
+      return fullRow.lineNumber;
+    }
+  }
+  if (fulfillmentItems.length === 0) return 1;
+  return Math.max(...fulfillmentItems.map((r) => r.lineNumber)) + 1;
 }
 
 /** 优先有货 + 乐高色；否则按快照 GDS SKU；再否则仅乐高色（可与 includeZeroInventory 配合） */

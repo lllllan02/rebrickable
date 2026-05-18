@@ -25,6 +25,7 @@ import {
 } from "@/db/schema";
 import { officialInventoryRowsToShortageResolveItems } from "@/lib/official-inventory-to-resolve-items";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
+import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
@@ -206,7 +207,7 @@ export default async function SetDetailPage({ params }: Props) {
       initialFulfillment = {
         subjectId: sheet.subjectId,
         skippedHeader: sheet.fulfillment.skippedHeader,
-        items: sheet.fulfillment.items,
+        items: fulfillmentItemsForDisplay(sheet.fulfillment.items),
         savedAt: sheet.fulfillment.savedAt,
       };
     }

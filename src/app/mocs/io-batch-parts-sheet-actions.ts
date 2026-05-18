@@ -19,11 +19,7 @@ import {
   type StoredMocDualSheets,
 } from "@/lib/parts-sheet-moc-id";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
-import {
-  fulfillmentItemsExcludingModified,
-  fulfillmentItemsOnlyModified,
-  restHasSheetRowReplacedMarker,
-} from "@/lib/sheet-row-replaced-marker";
+import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import type { IoSplitSheetRowProvenance } from "@/lib/io-split-sheet-cache";
 
 import { buildAttachments } from "@/db/schema";
@@ -314,11 +310,11 @@ export async function fetchIoBatchFulfillmentSheetAction(batchId: number): Promi
           : "该包尚无高砖零件数据，请保存分包后自动同步或使用「从高砖同步」。",
     };
   }
-  const items = fulfillmentItemsExcludingModified(r.fulfillment.items);
+  const items = fulfillmentItemsForDisplay(r.fulfillment.items);
   if (items.length === 0) {
     return {
       ok: false,
-      error: "该包配货零件均已归入修改表，请在「修改表」查看或继续从缺件表更换。",
+      error: "该包尚无配货零件行，请从高砖同步或从缺件表更换零件。",
     };
   }
   return {
@@ -394,87 +390,6 @@ export async function fetchIoPlanMergedShortageAction(batchIds: number[]): Promi
     skippedHeader,
     savedAt: latestSavedAt,
     shortageProvenanceByLine,
-  };
-}
-
-/** 单包配货表中经「更换零件」写入的行（修改表） */
-export async function fetchIoBatchModifiedSheetAction(batchId: number): Promise<
-  | {
-      ok: true;
-      items: ShortageResolveItem[];
-      skippedHeader: boolean;
-      savedAt: string | null;
-    }
-  | { ok: false; error: string }
-> {
-  const r = await loadIoBatchPartsSheetFromDb(batchId);
-  if (!r.ok) return r;
-  if (!r.fulfillment?.items.length) {
-    return { ok: false, error: "该包尚无配货表。" };
-  }
-  const items = fulfillmentItemsOnlyModified(r.fulfillment.items);
-  if (items.length === 0) {
-    return { ok: false, error: "该包尚无修改记录；可在缺件表中更换零件后在此查看。" };
-  }
-  return {
-    ok: true,
-    items,
-    skippedHeader: r.fulfillment.skippedHeader,
-    savedAt: r.fulfillment.savedAt,
-  };
-}
-
-/** 方案内各包修改表合并（不合并数量，保留源分包行映射） */
-export async function fetchIoPlanMergedModifiedAction(batchIds: number[]): Promise<
-  | {
-      ok: true;
-      items: ShortageResolveItem[];
-      skippedHeader: boolean;
-      savedAt: string | null;
-      replaceProvenanceByLine: Record<number, IoSplitSheetRowProvenance>;
-    }
-  | { ok: false; error: string }
-> {
-  const ids = batchIds.filter((id) => Number.isFinite(id) && id > 0);
-  if (ids.length === 0) return { ok: false, error: "无有效分包。" };
-
-  const items: ShortageResolveItem[] = [];
-  const replaceProvenanceByLine: Record<number, IoSplitSheetRowProvenance> = {};
-  let latestSavedAt: string | null = null;
-  let skippedHeader = true;
-  let lineNumber = 0;
-
-  for (const id of ids) {
-    const r = await loadIoBatchPartsSheetFromDb(id);
-    if (!r.ok || !r.fulfillment?.items.length) continue;
-    skippedHeader = skippedHeader && r.fulfillment.skippedHeader;
-    if (r.fulfillment.savedAt && (!latestSavedAt || r.fulfillment.savedAt > latestSavedAt)) {
-      latestSavedAt = r.fulfillment.savedAt;
-    }
-    for (const row of r.fulfillment.items) {
-      if (!restHasSheetRowReplacedMarker(row.rest)) continue;
-      lineNumber += 1;
-      items.push({ ...row, lineNumber });
-      replaceProvenanceByLine[lineNumber] = {
-        batchId: id,
-        sourceLineNumber: row.lineNumber,
-      };
-    }
-  }
-
-  if (items.length === 0) {
-    return {
-      ok: false,
-      error: "该方案下尚无修改记录；请在各分包缺件表中更换零件，修改行将汇总到此表。",
-    };
-  }
-
-  return {
-    ok: true,
-    items,
-    skippedHeader,
-    savedAt: latestSavedAt,
-    replaceProvenanceByLine,
   };
 }
 

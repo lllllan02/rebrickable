@@ -118,19 +118,28 @@ export function restHasSheetRowReplacedMarker(rest: string): boolean {
   return rest.includes("‖sheetRowReplaced");
 }
 
-/** 配货表展示用：排除已归入修改表的行（保留原 lineNumber 供更换/还原定位） */
-export function fulfillmentItemsExcludingModified<T extends { rest: string }>(
+/** 有更换记录的配货行排在列表最前，其余保持相对顺序 */
+export function sortFulfillmentItemsReplacedFirst<T extends { rest: string }>(
   items: readonly T[],
 ): T[] {
-  return items.filter((row) => !restHasSheetRowReplacedMarker(row.rest));
+  const modified: T[] = [];
+  const rest: T[] = [];
+  for (const row of items) {
+    if (restHasSheetRowReplacedMarker(row.rest)) modified.push(row);
+    else rest.push(row);
+  }
+  return [...modified, ...rest];
 }
 
-/** 修改表：仅含经「更换零件」标记的配货行 */
-export function fulfillmentItemsOnlyModified<T extends { rest: string }>(
+/** 配货表展示用：含更换行，且更换行置顶（保留原 lineNumber 供更换/还原定位） */
+export function fulfillmentItemsForDisplay<T extends { rest: string }>(
   items: readonly T[],
 ): T[] {
-  return items.filter((row) => restHasSheetRowReplacedMarker(row.rest));
+  return sortFulfillmentItemsReplacedFirst(items);
 }
+
+/** @deprecated 使用 {@link fulfillmentItemsForDisplay} */
+export const fulfillmentItemsExcludingModified = fulfillmentItemsForDisplay;
 
 export function stripSheetRowReplacedMarker(rest: string): string {
   return rest.replace(TOKEN_STRIP_RE, "").replace(/\s{2,}/g, " ").trim();
