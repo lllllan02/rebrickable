@@ -8,6 +8,8 @@ export type ShortageCsvRow = {
   lineNumber: number;
   partNum: string;
   colorId: number;
+  /** LEGO element_id；Studio 导出或目录回填 */
+  elementId: string | null;
   quantity: number;
   /** 高砖 `info.price` 等（元）；旧版 CSV 无此列时为 null */
   gobricksUnitPrice: string | null;
@@ -163,6 +165,7 @@ export function parseShortageCsv(text: string): ParseShortageCsvResult {
       lineNumber,
       partNum,
       colorId,
+      elementId: null,
       quantity,
       gobricksUnitPrice,
       rest,

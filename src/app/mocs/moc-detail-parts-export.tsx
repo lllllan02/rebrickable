@@ -91,6 +91,7 @@ export function MocDetailPartsListExportBar({
       branch.items.map((r) => ({
         partNum: r.partNum,
         colorId: r.colorId,
+        elementId: r.elementId,
         quantity: r.quantity,
         gobricksUnitPrice: r.gobricksUnitPrice,
         gdsUnitPrice: r.gdsUnitPrice ?? r.gobricksUnitPrice,

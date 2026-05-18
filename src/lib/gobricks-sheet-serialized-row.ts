@@ -4,6 +4,7 @@
 export type GobricksSheetSerializedRow = {
   partNum: string;
   colorId: number;
+  elementId?: string | null;
   quantity: number;
   rest: string;
   /** 与 `gdsUnitPrice` 对齐，兼容旧 CSV/导出 */

@@ -4,6 +4,8 @@ export type ShortageResolveItem = {
   lineNumber: number;
   partNum: string;
   colorId: number;
+  /** LEGO element_id；导入时优先用于对照目录 part_num / color_id */
+  elementId?: string | null;
   quantity: number;
   /** @deprecated 请使用 {@link ShortageResolveItem.gdsUnitPrice}；旧 JSON 或未走 GDS 解析时可能仍有值 */
   gobricksUnitPrice?: string | null;

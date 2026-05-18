@@ -59,6 +59,7 @@ export function parseBrickLinkStudioPartsCsv(text: string): ParseShortageCsvResu
   for (let i = 0; i < records.length; i++) {
     const record = records[i]!;
     const partNum = pickCI(record, "BLItemNo").trim();
+    const elementIdRaw = pickCI(record, "ElementId").trim();
     const ldrawColorStr = pickCI(record, "LDrawColorId").trim();
     const blColorStr = pickCI(record, "BLColorId").trim();
     const qtyStr = pickCI(record, "Qty").trim();
@@ -102,10 +103,13 @@ export function parseBrickLinkStudioPartsCsv(text: string): ParseShortageCsvResu
     if (weight) restBits.push(`重量 ${weight}`);
     if (blColorStr) restBits.push(`BrickLink 色号 ${blColorStr}`);
 
+    const elementId = elementIdRaw.length > 0 ? elementIdRaw : null;
+
     rows.push({
       lineNumber,
       partNum,
       colorId,
+      elementId,
       quantity,
       gobricksUnitPrice: null,
       rest: restBits.join(" · "),

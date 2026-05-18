@@ -46,6 +46,7 @@ function rowsToCsv(rows: ShortageRow[], includeHeader: boolean): string {
     rows.map((r) => ({
       partNum: r.partNum,
       colorId: r.colorId,
+      elementId: r.elementId,
       quantity: r.quantity,
       gobricksUnitPrice: r.gobricksUnitPrice,
       gdsUnitPrice: r.gdsUnitPrice ?? r.gobricksUnitPrice,
