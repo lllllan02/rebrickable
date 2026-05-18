@@ -24,7 +24,13 @@ import {
   type IoSplitConfig,
 } from "@/lib/studio-io-split";
 import { buildUploadAbsoluteDir } from "@/lib/build-upload-storage";
+import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { applyGobricksSyncForIoBatch } from "@/lib/gobricks-sync-io-batch";
+import {
+  comparePartsSheetBomsViaGobricks,
+  type PartsSheetBomCompareSummary,
+  type PartsSheetBomDiffRow,
+} from "@/lib/compare-parts-sheet-bom";
 import { colorSplitBatchLabel, normalizeIoSplitBatchLabels } from "@/lib/io-split-labels";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
@@ -54,6 +60,12 @@ export type IoSplitPreviewResult =
       batches: IoSplitPreviewBatch[];
     }
   | { ok: false; error: string };
+
+export type IoMocBomCompareRow = PartsSheetBomDiffRow;
+
+export type IoMocBomCompare =
+  | { status: "skipped"; reason: string }
+  | ({ status: "compared" } & PartsSheetBomCompareSummary);
 
 function countUnresolved(items: ShortageResolveItem[]): number {
   return items.filter((r) => r.rest.includes("子组件") || !r.partFound).length;
@@ -201,6 +213,47 @@ async function loadIoAbsolutePath(
     return { ok: false, error: "附件文件缺失。" };
   }
   return { ok: true, absPath };
+}
+
+async function compareIoBomWithMocFullSheet(
+  mocId: string,
+  parsed: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>
+): Promise<IoMocBomCompare> {
+  const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
+  const resolved = await resolveDraftPlacements(allPlacements);
+  if (!resolved.ok) {
+    return { status: "skipped", reason: `无法解析 IO 零件行：${resolved.error}` };
+  }
+
+  const mocSheet = await loadMocPartsSheetFromDb(mocId);
+  if (!mocSheet.ok) {
+    return { status: "skipped", reason: "无法读取该 MOC 的零件表。" };
+  }
+  if (!mocSheet.full?.items.length) {
+    return {
+      status: "skipped",
+      reason: "该 MOC 尚无完整零件表，无法对照；请先在零件表页导入或保存完整表。",
+    };
+  }
+  if (!mocSheet.fulfillment?.items.length) {
+    return {
+      status: "skipped",
+      reason:
+        "该 MOC 尚无配货表（高砖可购零件）。请先在零件表页上传完整表并同步高砖后再对照。",
+    };
+  }
+
+  try {
+    const compared = await comparePartsSheetBomsViaGobricks(
+      resolved.items,
+      mocSheet.full.items,
+      mocSheet.fulfillment.items
+    );
+    return { status: "compared", ...compared };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "高砖接口请求失败";
+    return { status: "skipped", reason: `高砖零件对照失败：${msg}` };
+  }
 }
 
 export async function previewIoStepSplitAction(input: {
@@ -394,6 +447,7 @@ export async function loadIoSplitContextAction(input: {
       studioVersion: string | null;
       steps: IoSplitPreviewStep[];
       existingBatchCount: number;
+      mocBomCompare: IoMocBomCompare;
     }
   | { ok: false; error: string }
 > {
@@ -423,6 +477,8 @@ export async function loadIoSplitContextAction(input: {
       )
     );
 
+  const mocBomCompare = await compareIoBomWithMocFullSheet(mocId, parsed);
+
   return {
     ok: true,
     modelName: parsed.modelName,
@@ -434,6 +490,7 @@ export async function loadIoSplitContextAction(input: {
       newPlacementCount: s.newPlacements.length,
     })),
     existingBatchCount: existing.length,
+    mocBomCompare,
   };
 }
 

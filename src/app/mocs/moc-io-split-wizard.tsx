@@ -8,9 +8,12 @@ import {
   commitIoStepSplitAction,
   loadIoSplitContextAction,
   previewIoStepSplitAction,
+  type IoMocBomCompare,
+  type IoMocBomCompareRow,
   type IoSplitPreviewBatch,
   type IoSplitPreviewStep,
 } from "@/app/mocs/io-split-actions";
+import { formatPartsSheetBomLineLabel } from "@/lib/compare-parts-sheet-bom";
 import { buildSubjectDetailPath, mocIoBatchPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
@@ -83,6 +86,142 @@ function orderedStepIndexes(steps: IoSplitPreviewStep[]): number[] {
   return steps.map((s) => s.stepIndex);
 }
 
+function DiffRowList({
+  title,
+  rows,
+  totalCount,
+  qtyColumns,
+}: {
+  title: string;
+  rows: IoMocBomCompareRow[];
+  totalCount: number;
+  qtyColumns: "io-only" | "moc-only" | "both";
+}) {
+  if (totalCount === 0) return null;
+  return (
+    <div className="mt-3">
+      <h3 className="text-xs font-medium text-[var(--text)]">
+        {title}
+        <span className="ml-1 font-normal text-[var(--muted)]">（{totalCount} 行）</span>
+      </h3>
+      <ul className="mt-1.5 max-h-40 overflow-y-auto rounded border border-[var(--border-soft)] bg-[var(--surface)]/50 text-xs">
+        {rows.map((r) => (
+          <li
+            key={`${r.partNum}-${r.colorId}-${qtyColumns}`}
+            className="flex justify-between gap-2 border-b border-[var(--border-soft)] px-2 py-1.5 last:border-b-0"
+          >
+            <span className="min-w-0 truncate text-[var(--text)]">
+              {formatPartsSheetBomLineLabel(r)}
+            </span>
+            <span className="shrink-0 tabular-nums text-[var(--muted)]">
+              {qtyColumns === "io-only" ? (
+                <>IO {r.ioQty}</>
+              ) : qtyColumns === "moc-only" ? (
+                <>MOC {r.mocQty}</>
+              ) : (
+                <>
+                  IO {r.ioQty} / MOC {r.mocQty}
+                </>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {totalCount > rows.length ? (
+        <p className="mt-1 text-[10px] text-[var(--muted)]">仅显示前 {rows.length} 行</p>
+      ) : null}
+    </div>
+  );
+}
+
+function MocBomComparePanel({
+  compare,
+  acknowledged,
+  onAcknowledgedChange,
+}: {
+  compare: IoMocBomCompare;
+  acknowledged: boolean;
+  onAcknowledgedChange: (v: boolean) => void;
+}) {
+  if (compare.status === "skipped") {
+    return (
+      <p className="mt-2 text-xs text-[var(--muted)]">{compare.reason}</p>
+    );
+  }
+
+  if (compare.match) {
+    return (
+      <p className="mt-2 text-xs text-emerald-200/90">
+        与 MOC 完整零件表一致（高砖 SKU {compare.ioLineCount} 行 · 合计 {compare.ioTotalQty}{" "}
+        片）。
+      </p>
+    );
+  }
+
+  const truncated =
+    compare.onlyInIoCount > compare.onlyInIo.length ||
+    compare.onlyInMocCount > compare.onlyInMoc.length ||
+    compare.qtyMismatchCount > compare.qtyMismatch.length;
+
+  return (
+  <div className="mt-3 space-y-2">
+      <p className="text-xs text-amber-100/95">
+        IO 解析结果与当前 MOC 完整零件表不一致。IO 侧提交高砖解析 SKU，MOC 侧使用已存配货表
+        的 gds 字段，按高砖 SKU（如 3040 / 3040b 归同一商品）汇总完整表数量；继续拆分将按
+        IO 内容生成分包，不会自动修改 MOC 完整表。
+      </p>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-[var(--muted)] sm:grid-cols-4">
+        <div>
+          <dt>IO 行数</dt>
+          <dd className="tabular-nums text-[var(--text)]">{compare.ioLineCount}</dd>
+        </div>
+        <div>
+          <dt>MOC 行数</dt>
+          <dd className="tabular-nums text-[var(--text)]">{compare.mocLineCount}</dd>
+        </div>
+        <div>
+          <dt>IO 总片数</dt>
+          <dd className="tabular-nums text-[var(--text)]">{compare.ioTotalQty}</dd>
+        </div>
+        <div>
+          <dt>MOC 总片数</dt>
+          <dd className="tabular-nums text-[var(--text)]">{compare.mocTotalQty}</dd>
+        </div>
+      </dl>
+      <DiffRowList
+        title="仅在 IO 中"
+        rows={compare.onlyInIo}
+        totalCount={compare.onlyInIoCount}
+        qtyColumns="io-only"
+      />
+      <DiffRowList
+        title="仅在 MOC 完整表中"
+        rows={compare.onlyInMoc}
+        totalCount={compare.onlyInMocCount}
+        qtyColumns="moc-only"
+      />
+      <DiffRowList
+        title="数量不一致"
+        rows={compare.qtyMismatch}
+        totalCount={compare.qtyMismatchCount}
+        qtyColumns="both"
+      />
+      {truncated ? (
+        <p className="text-[10px] text-[var(--muted)]">差异较多时仅列出部分样例行。</p>
+      ) : null}
+      <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm text-[var(--text)]">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={acknowledged}
+          onChange={(e) => onAcknowledgedChange(e.target.checked)}
+        />
+        <span>我已了解上述差异，仍要继续拆分</span>
+      </label>
+    </div>
+  );
+}
+
 /** 当前批次允许连选的起始位置（须紧接在前序批次之后） */
 function rangeStartPosForGroup(ordered: number[], groups: ManualGroup[], groupIdx: number): number {
   if (groupIdx <= 0) return 0;
@@ -141,6 +280,8 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   const [studioVersion, setStudioVersion] = useState<string | null>(null);
   const [steps, setSteps] = useState<IoSplitPreviewStep[]>([]);
   const [existingBatchCount, setExistingBatchCount] = useState(0);
+  const [mocBomCompare, setMocBomCompare] = useState<IoMocBomCompare | null>(null);
+  const [ackBomDiff, setAckBomDiff] = useState(false);
 
   const [mode, setMode] = useState<SplitModeUi>("by_color");
   const [planName, setPlanName] = useState("按颜色分包");
@@ -240,6 +381,8 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   const totalPieces = effectRows.reduce((n, r) => n + r.pieceCount, 0);
   const previewReady = previewBatches != null && previewBatches.length > 0;
   const needsServerPreview = mode === "by_color" || mode === "by_category";
+  const bomDiffBlocksCommit =
+    mocBomCompare?.status === "compared" && !mocBomCompare.match && !ackBomDiff;
   const bagCountLabel =
     bagCount === 0
       ? manualInvalid
@@ -263,6 +406,8 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
       setStudioVersion(r.studioVersion);
       setSteps(r.steps);
       setExistingBatchCount(r.existingBatchCount);
+      setMocBomCompare(r.mocBomCompare);
+      setAckBomDiff(false);
     });
   }, [mocId, attachmentId]);
 
@@ -304,6 +449,10 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   const onCommit = useCallback(() => {
     setError(null);
     setMessage(null);
+    if (bomDiffBlocksCommit) {
+      setError("请先勾选「我已了解上述差异，仍要继续拆分」。");
+      return;
+    }
     if (bagCount === 0) {
       setError(manualInvalid ? "请至少为一组选择主场景步骤。" : "当前设置无法拆分出有效包。");
       return;
@@ -341,6 +490,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
     manualInvalid,
     planName,
     defaultPlanName,
+    bomDiffBlocksCommit,
   ]);
 
   const contiguousSelectThrough = (stepIndex: number) => {
@@ -658,6 +808,30 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
 
       </section>
 
+      {loadingCtx && !mocBomCompare ? (
+        <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-4">
+          <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            正在解析 IO、查询高砖并对照 MOC 配货表…
+          </p>
+        </section>
+      ) : mocBomCompare ? (
+        <section
+          className={`rounded-lg border p-4 ${
+            mocBomCompare.status === "compared" && !mocBomCompare.match
+              ? "border-amber-400/45 bg-amber-500/10"
+              : "border-[var(--border-soft)] bg-[var(--surface-2)]/50"
+          }`}
+        >
+          <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
+          <MocBomComparePanel
+            compare={mocBomCompare}
+            acknowledged={ackBomDiff}
+            onAcknowledgedChange={setAckBomDiff}
+          />
+        </section>
+      ) : null}
+
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -669,7 +843,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         </button>
         <button
           type="button"
-          disabled={pending || bagCount === 0}
+          disabled={pending || bagCount === 0 || bomDiffBlocksCommit}
           className="rounded-md border border-[var(--accent)] px-4 py-2 text-sm text-[var(--accent)] disabled:opacity-50"
           onClick={() => void onCommit()}
         >

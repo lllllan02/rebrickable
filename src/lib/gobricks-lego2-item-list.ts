@@ -1,3 +1,7 @@
+import {
+  parseGdsColorSegmentFromGdsItemId,
+  parseGobricksProductIdFromGdsItemId,
+} from "@/lib/gobricks-item-filter-inventory";
 import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
 import { readColorNamesFromLego2ApiRow } from "@/lib/gobricks-color-data";
 import { serializeShortageCsv } from "@/lib/serialize-shortage-csv";
@@ -110,6 +114,75 @@ function emptyGdsSnapshot(): GdsSnapshot {
     gdsColorNameZh: null,
     gdsColorNameEn: null,
   };
+}
+
+/** BOM 对照用：高砖 `product_id` + 色段（与 `GDS-{product}-{color}` 一致）。 */
+export function gobricksBomSkuKeyFromGds(
+  gds: Pick<GdsSnapshot, "gdsItemId" | "gdsColorId">
+): string | null {
+  const pid = parseGobricksProductIdFromGdsItemId(gds.gdsItemId);
+  if (!pid) return null;
+  const color =
+    gds.gdsColorId?.trim() || parseGdsColorSegmentFromGdsItemId(gds.gdsItemId) || "";
+  return color ? `${pid}\t${color}` : pid;
+}
+
+export function gobricksBomSkuDisplayLabel(
+  gds: Pick<GdsSnapshot, "gdsItemId" | "gdsColorId" | "gdsCaption" | "gdsCaptionEn">,
+  skuKey: string
+): string {
+  const caption = gds.gdsCaptionEn?.trim() || gds.gdsCaption?.trim();
+  if (caption) return caption;
+  const gdsId = gds.gdsItemId?.trim();
+  if (gdsId && /^GDS-/i.test(gdsId)) return gdsId;
+  const tab = skuKey.indexOf("\t");
+  const pid = tab >= 0 ? skuKey.slice(0, tab) : skuKey;
+  const color = tab >= 0 ? skuKey.slice(tab + 1) : "";
+  return color ? `GDS-${pid}-${color}` : `GDS-${pid}`;
+}
+
+const LEGO2_SKU_MAP_LIST_KEYS = [
+  "itemList",
+  "missList",
+  "inventoryDeficiency",
+  "colorDeficiency",
+  "buyLimitList",
+  "noSellList",
+] as const;
+
+function legoDesignColorLookupKey(designid: string, colorid: string): string {
+  return `${designid.trim().toLowerCase()}\t${colorid.trim()}`;
+}
+
+/**
+ * 从高砖 `lego2ItemList` 合并返回体建立「乐高 design+色 → 高砖 SKU」映射。
+ * 3040 / 3040b 等若高砖解析为同一 `product_id`，将落到同一 SKU 键。
+ */
+export function buildLegoDesignColorToGobricksSkuMap(payload: unknown): {
+  legoToSku: Map<string, string>;
+  skuLabels: Map<string, string>;
+} {
+  const legoToSku = new Map<string, string>();
+  const skuLabels = new Map<string, string>();
+  if (typeof payload !== "object" || payload === null) {
+    return { legoToSku, skuLabels };
+  }
+  const p = payload as Record<string, unknown>;
+  for (const listKey of LEGO2_SKU_MAP_LIST_KEYS) {
+    for (const row of asRecordArray(p[listKey])) {
+      const base = readDesignColorQty(row);
+      if (!base) continue;
+      const gds = gdsSnapshotFromApiRow(row, base);
+      const sku = gobricksBomSkuKeyFromGds(gds);
+      if (!sku) continue;
+      const legoKey = legoDesignColorLookupKey(base.designid, base.colorid);
+      legoToSku.set(legoKey, sku);
+      if (!skuLabels.has(sku)) {
+        skuLabels.set(sku, gobricksBomSkuDisplayLabel(gds, sku));
+      }
+    }
+  }
+  return { legoToSku, skuLabels };
 }
 
 function gdsSnapshotFromApiRow(

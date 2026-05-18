@@ -3,6 +3,7 @@ import {
   fetchGobricksLego2ItemListJson,
   type GobricksTestListItem,
 } from "@/lib/gobricks-lego2-item-list";
+import { legoDesignQueryMatchesToken } from "@/lib/lego-mechanical-part-key";
 import type { GobricksSheetSerializedRow } from "@/lib/gobricks-sheet-serialized-row";
 
 export { readGobricksColorDataNames } from "@/lib/gobricks-color-data";
@@ -116,33 +117,6 @@ function ldrawTokens(ldrawRaw: unknown): string[] {
     .split(",")
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
-}
-
-/**
- * 查询串是否为「乐高式」设计号：纯数字或数字+少量尾字母（如 3005a）。
- * 用于区分「30104」与中文关键词，避免对中文走数字专用规则。
- */
-function isLegoNumericDesignQuery(s: string): boolean {
-  return /^\d{1,6}[a-z]?$/i.test(s.trim());
-}
-
-/**
- * 乐高设计号与 `ldraw_no` 中某一 token 是否匹配（如 30104 与 30104a/30104b；排除 gds 前缀自编号）。
- */
-function legoDesignQueryMatchesToken(queryLower: string, token: string): boolean {
-  const q = queryLower.trim().toLowerCase();
-  const t = token.trim().toLowerCase();
-  if (!q || !t) return false;
-  if (t === q) return true;
-  if (t.startsWith("gds")) return false;
-  if (!isLegoNumericDesignQuery(q)) {
-    return t.includes(q) || q.includes(t);
-  }
-  if (/^\d/.test(t) && t.startsWith(q)) {
-    const rest = t.slice(q.length);
-    return rest === "" || /^[a-z]{1,3}$/i.test(rest);
-  }
-  return false;
 }
 
 function readSearchRowTitle(row: Record<string, unknown>): string {
