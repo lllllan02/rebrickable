@@ -1,12 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 
 import { saveBuildProfileAction } from "@/app/mocs/moc-profile-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
+import { mocListHref } from "@/lib/moc-list-href";
 import {
   MOC_PROFILE_MAX_DISPLAY_NAME,
   MOC_PROFILE_MAX_TAG_LEN,
@@ -56,6 +58,7 @@ export function MocProfileForm({
   tagsRef.current = tags;
 
   const isSidebar = variant === "sidebar";
+  const tagListHref = subjectKind === BUILD_SUBJECT_MOC ? (tag: string) => mocListHref({ tag }) : null;
 
   const tagsSyncKey = initialTags.join("\u0001");
   const optimisticTagsKey = optimistic?.tags.join("\u0001") ?? "";
@@ -192,14 +195,24 @@ export function MocProfileForm({
           <p className="mt-1.5 text-xs text-[var(--muted-2)]">暂无标签</p>
         ) : (
           <div className="mt-1.5 flex flex-wrap gap-1">
-            {viewTags.map((t, i) => (
-              <span
-                key={`${t}-${i}`}
-                className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] text-[var(--text)]"
-              >
-                {t}
-              </span>
-            ))}
+            {viewTags.map((t, i) =>
+              tagListHref != null ? (
+                <Link
+                  key={`${t}-${i}`}
+                  href={tagListHref(t)}
+                  className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] text-[var(--text)] underline-offset-2 hover:border-[var(--accent)]/40 hover:underline"
+                >
+                  {t}
+                </Link>
+              ) : (
+                <span
+                  key={`${t}-${i}`}
+                  className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] text-[var(--text)]"
+                >
+                  {t}
+                </span>
+              ),
+            )}
           </div>
         )}
       </div>
