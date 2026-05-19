@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
+import { RemoteCoverImage } from "@/components/remote-cover-image";
+
 import {
   commitIoStepSplitAction,
   loadIoSplitContextAction,
@@ -89,6 +91,31 @@ function diffRowKey(r: IoMocBomCompareRow, suffix: string): string {
   return `${r.elementId ?? ""}-${r.partNum}-${r.colorId}-${suffix}`;
 }
 
+function DiffRowThumbnail({ imgUrl, partNum }: { imgUrl: string | null; partNum: string }) {
+  return (
+    <div className="relative mx-auto h-9 w-9 shrink-0 overflow-hidden rounded border border-[var(--border-soft)] bg-white">
+      {imgUrl ? (
+        <RemoteCoverImage
+          src={imgUrl}
+          width={36}
+          height={36}
+          className="h-full w-full object-contain p-0.5"
+          sizes="36px"
+          fallbackLabel="无图"
+          fallbackClassName="!text-[8px]"
+        />
+      ) : (
+        <span
+          className="flex h-full w-full items-center justify-center text-[8px] leading-none text-[var(--muted)]"
+          title={partNum ? `${partNum} 暂无缩略图` : undefined}
+        >
+          无图
+        </span>
+      )}
+    </div>
+  );
+}
+
 function sumDiffRowQty(rows: IoMocBomCompareRow[], side: "io" | "moc"): number {
   let n = 0;
   for (const r of rows) {
@@ -143,6 +170,7 @@ function DiffRowTable({
         <table className="w-full min-w-[36rem] border-collapse text-left text-xs">
           <thead className="sticky top-0 z-[1] bg-[var(--surface)] text-[var(--muted)]">
             <tr className="border-b border-[var(--border-soft)]">
+              <th className="w-11 px-1 py-1.5 text-center font-medium">图</th>
               <th className="whitespace-nowrap px-2 py-1.5 font-medium">Element ID</th>
               <th className="whitespace-nowrap px-2 py-1.5 font-medium">零件号</th>
               <th className="min-w-[8rem] px-2 py-1.5 font-medium">零件名称</th>
@@ -167,6 +195,9 @@ function DiffRowTable({
                   key={diffRowKey(r, mode)}
                   className="border-b border-[var(--border-soft)] last:border-b-0"
                 >
+                  <td className="px-1 py-1 align-middle">
+                    <DiffRowThumbnail imgUrl={r.imgUrl} partNum={r.partNum} />
+                  </td>
                   <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[11px] text-[var(--muted)]">
                     {r.elementId ?? "—"}
                   </td>

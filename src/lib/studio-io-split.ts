@@ -1,4 +1,4 @@
-import type { ParsedStudioIo, StudioIoMainStep, StudioIoPlacement } from "@/lib/parse-studio-io";
+import type { ParsedStudioIo, StudioIoPlacement } from "@/lib/parse-studio-io";
 
 export type IoSplitMode = "by_color" | "by_category" | "manual";
 
@@ -190,15 +190,29 @@ function aggregatePlacements(placements: StudioIoPlacement[]): StudioIoPlacement
   return out;
 }
 
-function placementsForSteps(steps: StudioIoMainStep[], indexes: number[]): StudioIoPlacement[] {
+function stepIndexesCoverAllMainSteps(parsed: ParsedStudioIo, indexes: readonly number[]): boolean {
+  const all = parsed.mainSteps.map((s) => s.stepIndex);
+  if (all.length === 0) return false;
+  const set = new Set(indexes);
+  return all.every((idx) => set.has(idx));
+}
+
+function placementsForSteps(parsed: ParsedStudioIo, indexes: number[]): StudioIoPlacement[] {
   const set = new Set(indexes);
   const raw: StudioIoPlacement[] = [];
-  for (const st of steps) {
+  for (const st of parsed.mainSteps) {
     if (set.has(st.stepIndex)) {
       raw.push(...st.newPlacements);
     }
   }
-  return aggregatePlacements(raw);
+  const fromSteps = aggregatePlacements(raw);
+  if (!stepIndexesCoverAllMainSteps(parsed, indexes)) return fromSteps;
+
+  // 整模对照以 lxfml BOM 为准（含 itemNos）；全选分步时与 MOC 对照同源，避免误用分步 LDR 色码。
+  const bom = parsed.bomPlacements;
+  if (parsed.brickCatalog?.size && bom.length) return aggregatePlacements(bom);
+  if (bom.length > fromSteps.length) return aggregatePlacements(bom);
+  return fromSteps;
 }
 
 function splitByStepInterval(parsed: ParsedStudioIo, everySteps: number): IoSplitBatchDraft[] {
@@ -214,7 +228,7 @@ function splitByStepInterval(parsed: ParsedStudioIo, everySteps: number): IoSpli
       stepFrom: from,
       stepTo: to,
       stepIndexes: chunk,
-      placements: placementsForSteps(parsed.mainSteps, chunk),
+      placements: placementsForSteps(parsed, chunk),
     });
   }
   return batches.filter((b) => b.placements.length > 0);
@@ -231,7 +245,7 @@ function splitByPieceInterval(parsed: ParsedStudioIo, everyPieces: number): IoSp
     if (chunkIndexes.length === 0) return;
     const from = chunkIndexes[0]!;
     const to = chunkIndexes[chunkIndexes.length - 1]!;
-    const placements = placementsForSteps(parsed.mainSteps, chunkIndexes);
+    const placements = placementsForSteps(parsed, chunkIndexes);
     if (placements.length > 0) {
       batches.push({
         label: `批次 ${batchNo}（约 ${placements.length} 片）`,
@@ -259,7 +273,7 @@ function splitByPieceInterval(parsed: ParsedStudioIo, everyPieces: number): IoSp
 
 function splitByColor(parsed: ParsedStudioIo): IoSplitBatchDraft[] {
   const all = placementsForSteps(
-    parsed.mainSteps,
+    parsed,
     parsed.mainSteps.map((s) => s.stepIndex)
   );
   const byColor = new Map<number, StudioIoPlacement[]>();
@@ -365,7 +379,7 @@ export function splitStudioIoByConfig(
           stepTo: parsed.mainSteps[parsed.mainSteps.length - 1]?.stepIndex ?? 0,
           stepIndexes: parsed.mainSteps.map((s) => s.stepIndex),
           placements: placementsForSteps(
-            parsed.mainSteps,
+            parsed,
             parsed.mainSteps.map((s) => s.stepIndex)
           ),
         },
@@ -374,7 +388,7 @@ export function splitStudioIoByConfig(
       return config.groups
         .map((g, i) => {
           const indexes = [...new Set(g.stepIndexes)].sort((a, b) => a - b);
-          const placements = placementsForSteps(parsed.mainSteps, indexes);
+          const placements = placementsForSteps(parsed, indexes);
           return {
             label: g.label.trim() || `自定义 ${i + 1}`,
             stepFrom: indexes[0] ?? 0,

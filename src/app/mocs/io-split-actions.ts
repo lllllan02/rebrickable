@@ -122,7 +122,10 @@ async function batchesFromConfig(
   | { ok: false; error: string }
 > {
   if (config.mode === "by_category") {
-    const allPlacements = pickStudioIoBomPlacements(parsed);
+    const allPlacements =
+      parsed.bomPlacements.length > 0
+        ? parsed.bomPlacements
+        : pickStudioIoBomPlacements(parsed);
     const resolved = await resolveDraftPlacements(allPlacements, {
       brickCatalog: parsed.brickCatalog,
       mocFullItems,
@@ -144,7 +147,10 @@ async function batchesFromConfig(
   }
 
   if (config.mode === "by_color") {
-    const allPlacements = pickStudioIoBomPlacements(parsed);
+    const allPlacements =
+      parsed.bomPlacements.length > 0
+        ? parsed.bomPlacements
+        : pickStudioIoBomPlacements(parsed);
     const resolved = await resolveDraftPlacements(allPlacements, {
       brickCatalog: parsed.brickCatalog,
       mocFullItems,
@@ -265,7 +271,10 @@ async function compareIoBomWithMocFullSheet(
     };
   }
 
-  const allPlacements = pickStudioIoBomPlacements(parsed);
+  const allPlacements =
+    parsed.bomPlacements.length > 0
+      ? parsed.bomPlacements
+      : pickStudioIoBomPlacements(parsed);
   const resolved = await resolveDraftPlacements(allPlacements, {
     brickCatalog: parsed.brickCatalog,
     anchorToMocFull: false,

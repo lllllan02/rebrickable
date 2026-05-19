@@ -217,11 +217,37 @@ function isSubModelGroupSectionName(name: string): boolean {
   return SUBMODEL_GROUP_SECTION_RE.test(name.trim());
 }
 
-/** 无顶层 .io、仅多个 SubModel Group 段（如 MOC 223467） */
+function countSectionSteps(section: MpdSection): number {
+  return section.lines.filter((l) => l.trim() === "0 STEP").length;
+}
+
+/** 可作为搭建说明的 MPD 段（排除 SubModel Group 与零件库 .dat 段） */
+function isMainInstructionSectionName(name: string): boolean {
+  const trimmed = name.trim();
+  if (isSubModelGroupSectionName(trimmed)) return false;
+  if (/\.dat$/i.test(trimmed)) return false;
+  return true;
+}
+
+/**
+ * 无顶层 .io、且非主场景段上的 0 STEP 明显少于各 SubModel Group 合并步数时（如 MOC 223467），
+ * 才用 Group 段拼主场景步骤；若存在步数充足的主场景段（如 238538-rivendell）则仍走主场景分步。
+ */
 function studioIoUsesSubModelGroupSectionsOnly(sections: MpdSection[]): boolean {
   if (sections.length < 2) return false;
   if (sections.some((s) => s.name.toLowerCase().endsWith(".io"))) return false;
-  return sections.filter((s) => isSubModelGroupSectionName(s.name)).length >= 2;
+  const groupSections = sections.filter((s) => isSubModelGroupSectionName(s.name));
+  if (groupSections.length < 2) return false;
+
+  const groupStepTotal = groupSections.reduce((n, s) => n + countSectionSteps(s), 0);
+  let bestMainSceneSteps = 0;
+  for (const s of sections) {
+    if (!isMainInstructionSectionName(s.name)) continue;
+    bestMainSceneSteps = Math.max(bestMainSceneSteps, countSectionSteps(s));
+  }
+
+  if (bestMainSceneSteps < 2) return true;
+  return groupStepTotal > bestMainSceneSteps;
 }
 
 function collectStudioIoSubModelGroupPlacements(
@@ -325,6 +351,10 @@ type SupplementLxfmlBomFromLdrOptions = {
   brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>;
   /** 与 `ParseStudioIoOptions.elementLookup` 相同，用于 brickRef 与 .dat 的 element_id 去重 */
   elementLookup?: StudioIoElementLookup;
+  /**
+   * 为 true（默认）时用主场景 LDR 补 lxfml 缺口；为 false 时仅在主场景片数多于分步时用主场景，否则用各步 per-part 最大值（SubModel Group 合步）。
+   */
+  supplementFromMainScene?: boolean;
 };
 
 function lxfmlBomItemNos(lxfmlBom: readonly StudioIoPlacement[]): Set<string> {
@@ -382,10 +412,11 @@ function supplementLxfmlBomFromLdrSteps(
   );
   const stepPlacementCount = mainSteps.reduce((n, s) => n + s.newPlacements.length, 0);
   const mainScene = options?.mainScenePlacements;
+  const supplementFromMainScene = options?.supplementFromMainScene ?? true;
   const useMainScene =
     mainScene != null &&
     mainScene.length > 0 &&
-    mainScene.length > stepPlacementCount;
+    (supplementFromMainScene || mainScene.length > stepPlacementCount);
 
   const qtyByPartColor = new Map<string, { placement: StudioIoPlacement; count: number }>();
 
@@ -473,29 +504,7 @@ function supplementLxfmlBomFromLdrSteps(
   return [...lxfmlBom, ...extra];
 }
 
-/**
- * 与 MOC 完整表对照 / 按色·按类分包时选用全模砖表。
- * 默认取片数较多的一侧；若分步明显多于 lxfml BOM（多 SubModel Group 重复计步），则改用 BOM。
- */
-export function pickStudioIoBomPlacements(parsed: ParsedStudioIo): StudioIoPlacement[] {
-  const fromSteps = parsed.mainSteps.flatMap((s) => s.newPlacements);
-  const fromBom = parsed.bomPlacements;
-  if (!fromBom.length) return fromSteps;
-  if (!fromSteps.length) return fromBom;
-
-  const stepN = fromSteps.length;
-  const bomN = fromBom.length;
-  if (
-    parsed.brickCatalog?.size &&
-    bomN > 0 &&
-    stepN > bomN &&
-    (stepN - bomN) / bomN > 0.05
-  ) {
-    return fromBom;
-  }
-
-  return fromBom.length >= fromSteps.length ? fromBom : fromSteps;
-}
+export { pickStudioIoBomPlacements } from "@/lib/pick-studio-io-bom";
 
 function allPlacementsInSection(
   section: MpdSection,
@@ -643,6 +652,7 @@ export function parseStudioIoLdrText(
       mainScenePlacements,
       brickCatalog,
       elementLookup,
+      supplementFromMainScene: !multiGroupOnly,
     });
   }
 

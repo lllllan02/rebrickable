@@ -22,6 +22,8 @@ export type PartsSheetBomDiffRow = {
   partName: string | null;
   colorId: number;
   colorName: string | null;
+  /** Rebrickable inventory 缩略图（零件+色） */
+  imgUrl: string | null;
   ioQty: number;
   mocQty: number;
 };
@@ -60,7 +62,16 @@ type BomCompareBucket = {
   colorId: number;
   quantity: number;
   colorName: string | null;
+  imgUrl: string | null;
 };
+
+function pickBucketImgUrl(
+  current: string | null | undefined,
+  next: string | null | undefined
+): string | null {
+  if (current?.trim()) return current.trim();
+  return next?.trim() || null;
+}
 
 function primaryPartNum(partNums: Set<string>): string {
   const sorted = [...partNums]
@@ -78,7 +89,7 @@ function joinElementIds(ids: Set<string>): string | null {
 
 function bucketToDiffBase(bucket: BomCompareBucket): Pick<
   PartsSheetBomDiffRow,
-  "elementId" | "partNum" | "partName" | "colorId" | "colorName"
+  "elementId" | "partNum" | "partName" | "colorId" | "colorName" | "imgUrl"
 > {
   const partNum = primaryPartNum(bucket.partNums);
   return {
@@ -87,6 +98,7 @@ function bucketToDiffBase(bucket: BomCompareBucket): Pick<
     partName: bucket.partName?.trim() || null,
     colorId: bucket.colorId,
     colorName: bucket.colorName,
+    imgUrl: bucket.imgUrl,
   };
 }
 
@@ -98,12 +110,14 @@ function mergeIoBuckets(buckets: readonly BomCompareBucket[]): BomCompareBucket 
   let quantity = 0;
   let partName = first.partName;
   let colorName = first.colorName;
+  let imgUrl = first.imgUrl;
   for (const b of buckets) {
     quantity += b.quantity;
     for (const p of b.partNums) partNums.add(p);
     for (const e of b.elementIds) elementIds.add(e);
     if (!partName && b.partName) partName = b.partName;
     if (!colorName && b.colorName) colorName = b.colorName;
+    imgUrl = pickBucketImgUrl(imgUrl, b.imgUrl);
   }
   return {
     partNums,
@@ -112,6 +126,7 @@ function mergeIoBuckets(buckets: readonly BomCompareBucket[]): BomCompareBucket 
     colorId: first.colorId,
     quantity,
     colorName,
+    imgUrl,
   };
 }
 
@@ -152,6 +167,7 @@ function pairUnmatchedOnlyInRows(
         partName: ioRow.partName ?? mocRow.partName,
         colorId: ioRow.colorId,
         colorName: ioRow.colorName ?? mocRow.colorName,
+        imgUrl: pickBucketImgUrl(ioRow.imgUrl, mocRow.imgUrl),
         ioQty: ioRow.ioQty,
         mocQty: mocRow.mocQty,
       });
@@ -176,6 +192,7 @@ function mergeBucketDiffRow(
     partName: ioBucket.partName ?? mocBucket.partName,
     colorId: ioBucket.colorId,
     colorName: ioBucket.colorName ?? mocBucket.colorName,
+    imgUrl: pickBucketImgUrl(ioBucket.imgUrl, mocBucket.imgUrl),
     ioQty,
     mocQty,
   };
@@ -246,6 +263,7 @@ function mergeIntoBomBucket(map: Map<string, BomCompareBucket>, key: string, ite
     if (eid) cur.elementIds.add(eid);
     if (!cur.colorName && item.colorName) cur.colorName = item.colorName;
     if (!cur.partName && item.partName) cur.partName = item.partName;
+    cur.imgUrl = pickBucketImgUrl(cur.imgUrl, item.imgUrl);
   } else {
     map.set(key, {
       partNums: new Set([partNum]),
@@ -254,6 +272,7 @@ function mergeIntoBomBucket(map: Map<string, BomCompareBucket>, key: string, ite
       colorId,
       quantity: qty,
       colorName: item.colorName,
+      imgUrl: item.imgUrl?.trim() || null,
     });
   }
 }
