@@ -394,8 +394,8 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
   const [mocBomCompare, setMocBomCompare] = useState<IoMocBomCompare | null>(null);
   const [ackBomDiff, setAckBomDiff] = useState(false);
 
-  const [mode, setMode] = useState<SplitModeUi>("by_color");
-  const [planName, setPlanName] = useState("按颜色分包");
+  const [mode, setMode] = useState<SplitModeUi>("manual");
+  const [planName, setPlanName] = useState("自定义分包");
   const [planNameTouched, setPlanNameTouched] = useState(false);
   const [replaceExisting, setReplaceExisting] = useState(true);
 
@@ -686,14 +686,38 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         ) : null}
       </div>
 
+      {loadingCtx && !mocBomCompare ? (
+        <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-4">
+          <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            正在解析 IO 并对照 MOC 完整零件表…
+          </p>
+        </section>
+      ) : mocBomCompare ? (
+        <section
+          className={`rounded-lg border p-4 ${
+            mocBomCompare.status === "compared" && !mocBomCompare.match
+              ? "border-amber-400/45 bg-amber-500/10"
+              : "border-[var(--border-soft)] bg-[var(--surface-2)]/50"
+          }`}
+        >
+          <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
+          <MocBomComparePanel
+            compare={mocBomCompare}
+            acknowledged={ackBomDiff}
+            onAcknowledgedChange={setAckBomDiff}
+          />
+        </section>
+      ) : null}
+
       <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-4">
         <h2 className="text-sm font-medium text-[var(--text)]">拆分方式</h2>
         <div className="mt-3 flex flex-col gap-2 text-sm">
           {(
             [
+              ["manual", "自定义：自选步骤归入各批次"],
               ["by_color", "按颜色：每种颜色一张表（整模）"],
               ["by_category", "按零件类别：每类一张表（整模）"],
-              ["manual", "自定义：自选步骤归入各批次"],
             ] as const
           ).map(([value, label]) => (
             <label key={value} className="flex cursor-pointer items-center gap-2">
@@ -918,30 +942,6 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         ) : null}
 
       </section>
-
-      {loadingCtx && !mocBomCompare ? (
-        <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-4">
-          <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
-          <p className="mt-2 text-xs text-[var(--muted)]">
-            正在解析 IO 并对照 MOC 完整零件表…
-          </p>
-        </section>
-      ) : mocBomCompare ? (
-        <section
-          className={`rounded-lg border p-4 ${
-            mocBomCompare.status === "compared" && !mocBomCompare.match
-              ? "border-amber-400/45 bg-amber-500/10"
-              : "border-[var(--border-soft)] bg-[var(--surface-2)]/50"
-          }`}
-        >
-          <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
-          <MocBomComparePanel
-            compare={mocBomCompare}
-            acknowledged={ackBomDiff}
-            onAcknowledgedChange={setAckBomDiff}
-          />
-        </section>
-      ) : null}
 
       <div className="flex flex-wrap gap-3">
         <button

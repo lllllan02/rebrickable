@@ -325,9 +325,7 @@ function needsSupplementFromLdrSteps(
   elementLookup: StudioIoElementLookup | undefined,
   substituteClosure: ReadonlyMap<string, ReadonlySet<string>>
 ): boolean {
-  if (lxfmlBricks.some((b) => legoMechanicalPartKeysEquivalent(b.designId, partNum))) {
-    return false;
-  }
+  // 仅按 part+色 / element_id 判断是否已收录；design 在 lxfml 中已有其他色号时仍可能缺片（如 63864 的 Trans-Dark Blue）。
   if (
     lxfmlBomCoversPlacementElement(
       partNum,
