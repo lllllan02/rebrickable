@@ -85,17 +85,3 @@ export function buildIoPlanMergedShortageExportStem(input: {
     batchLabel: "汇总缺件",
   });
 }
-
-/** 方案一键导出压缩包文件名 */
-export function buildIoSplitPlanZipExportStem(input: {
-  mocId: string;
-  displayName: string;
-  planLabel: string;
-}): string {
-  return buildIoSplitBatchExportStem({
-    mocId: input.mocId,
-    displayName: input.displayName,
-    planLabel: input.planLabel,
-    batchLabel: "全部零件表",
-  });
-}

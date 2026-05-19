@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchIoBatchFulfillmentSheetAction,
@@ -21,11 +21,9 @@ import {
 import {
   buildIoPlanMergedShortageExportStem,
   buildIoSplitBatchExportStem,
-  buildIoSplitPlanZipExportStem,
 } from "@/lib/parts-sheet-export-filename";
 import { ioBatchSheetLoadKey, loadIoSplitSheet } from "@/lib/io-split-sheet-cache";
 import { formatGobricksGdsPriceCny } from "@/lib/gobricks-display-caption";
-import { downloadIoSplitPlanZip } from "@/lib/io-split-plan-zip-download";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
 
 type ListTab = MocPartsListTab;
@@ -131,8 +129,6 @@ export function MocPartsSheetBrowser({
 
   const [ioSecondary, setIoSecondary] = useState<IoSecondary | null>(null);
   const [ioExportSheet, setIoExportSheet] = useState<IoSplitSheetState | null>(null);
-  const [zipExportBusy, startZipExport] = useTransition();
-  const [zipExportError, setZipExportError] = useState<string | null>(null);
 
   const activePlan = useMemo(
     () =>
@@ -282,28 +278,7 @@ export function MocPartsSheetBrowser({
     setPrimary({ kind: "all" });
     setIoSecondary(null);
     setIoExportSheet(null);
-    setZipExportError(null);
   }, []);
-
-  const onExportPlanZip = useCallback(() => {
-    if (!activePlan || subjectKind !== BUILD_SUBJECT_MOC) return;
-    setZipExportError(null);
-    const planLabel = planDisplayName(activePlan, activePlanIndex >= 0 ? activePlanIndex : 0);
-    const zipFilename = `${buildIoSplitPlanZipExportStem({
-      mocId: subjectId,
-      displayName: exportDisplayName,
-      planLabel,
-    })}.zip`;
-    startZipExport(async () => {
-      const r = await downloadIoSplitPlanZip({
-        mocId: subjectId,
-        groupKey: activePlan.groupKey,
-        displayName: exportDisplayName,
-        zipFilename,
-      });
-      if (!r.ok) setZipExportError(r.error);
-    });
-  }, [activePlan, activePlanIndex, exportDisplayName, subjectId, subjectKind]);
 
   useEffect(() => {
     if (primary.kind !== "io") return;
@@ -593,31 +568,16 @@ export function MocPartsSheetBrowser({
                 </button>
               </div>
               {subjectKind === BUILD_SUBJECT_MOC ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <MocDetailPartsListExportBar
-                    subjectKind={subjectKind}
-                    subjectId={subjectId}
-                    exportDisplayName={exportDisplayName}
-                    listTab={ioExportListTab}
-                    activeSheet={ioExportSheet}
-                    filenameStemOverride={ioExportFilenameStem}
-                  />
-                  <button
-                    type="button"
-                    disabled={zipExportBusy}
-                    className="rounded-md border border-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] disabled:opacity-50"
-                    onClick={() => onExportPlanZip()}
-                  >
-                    {zipExportBusy ? "打包中…" : "一键导出全部"}
-                  </button>
-                </div>
+                <MocDetailPartsListExportBar
+                  subjectKind={subjectKind}
+                  subjectId={subjectId}
+                  exportDisplayName={exportDisplayName}
+                  listTab={ioExportListTab}
+                  activeSheet={ioExportSheet}
+                  filenameStemOverride={ioExportFilenameStem}
+                />
               ) : null}
             </div>
-            {zipExportError ? (
-              <p className="mb-2 text-xs text-red-200/95" role="alert">
-                {zipExportError}
-              </p>
-            ) : null}
             {planMeta}
             {ioViewerMode === "plan-merged-shortage" ? (
               <MocIoSplitSheetViewer
