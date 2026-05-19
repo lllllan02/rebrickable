@@ -10,6 +10,8 @@ export type ShortageCsvRow = {
   colorId: number;
   /** LEGO element_id；Studio 导出或目录回填 */
   elementId: string | null;
+  /** Studio 导出 LdrawId 列（无 .dat 后缀），与 .io 中 LDraw 文件名一致 */
+  ldrawPartNum?: string | null;
   quantity: number;
   /** 高砖 `info.price` 等（元）；旧版 CSV 无此列时为 null */
   gobricksUnitPrice: string | null;

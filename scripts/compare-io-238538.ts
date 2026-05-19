@@ -11,7 +11,11 @@ import Database from "better-sqlite3";
 import { parse } from "csv-parse/sync";
 
 import { parseStudioLxfmlBrickCatalog } from "../src/lib/parse-studio-lxfml";
-import { parseStudioIoLdrText, STUDIO_IO_ZIP_PASSWORD } from "../src/lib/parse-studio-io";
+import {
+  parseStudioIoLdrText,
+  pickStudioIoBomPlacements,
+  STUDIO_IO_ZIP_PASSWORD,
+} from "../src/lib/parse-studio-io";
 import {
   enrichStudioIoPlacementsWithItemNos,
   studioLdrawColorAliases,
@@ -37,7 +41,7 @@ function loadIo() {
   const parsed = parseStudioIoLdrText(ldr, null, {
     brickCatalog: catalog.size ? catalog : undefined,
   });
-  return { placements: parsed.mainSteps.flatMap((s) => s.newPlacements), catalog };
+  return { placements: pickStudioIoBomPlacements(parsed), catalog };
 }
 
 function elementColorByItemNos(itemNos: string[]): Map<string, { colorId: number }> {

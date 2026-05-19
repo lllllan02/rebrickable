@@ -1,5 +1,14 @@
-import { legoMechanicalPartKeysEquivalent } from "@/lib/lego-mechanical-part-key";
-import type { StudioLxfmlBrick } from "@/lib/parse-studio-lxfml";
+import {
+  legoMechanicalPartKey,
+  legoMechanicalPartKeysEquivalent,
+} from "@/lib/lego-mechanical-part-key";
+import { parseStudioLxfmlBomBricks, type StudioLxfmlBrick } from "@/lib/parse-studio-lxfml";
+import { buildPartSubstituteClosure } from "@/lib/part-substitute-closure";
+import {
+  catalogBrickRefRepresentsSameElementAsPlacement,
+  lxfmlBomCoversPlacementElement,
+  type StudioIoElementLookup,
+} from "@/lib/studio-io-item-lookup";
 
 /** BrickLink Studio .io 固定 ZIP 密码（公开约定） */
 export const STUDIO_IO_ZIP_PASSWORD = "soho0909";
@@ -26,6 +35,13 @@ export type StudioIoPlacement = {
 export type ParseStudioIoOptions = {
   /** model.lxfml 砖块目录（itemNos / designID） */
   brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>;
+  /** 原始 model.lxfml 文本；用于生成与 Studio 零件清单一致的 BOM */
+  lxfmlText?: string;
+  /**
+   * elements 表 element_id 对照（服务端由 `buildStudioIoElementLookup` 注入）。
+   * 用于判断 brickRef itemNos 与 LDR .dat 是否同一物理件，替代硬编码模具对。
+   */
+  elementLookup?: StudioIoElementLookup;
 };
 
 /**
@@ -41,6 +57,15 @@ export function normalizeStudioLdrawColorId(color: number): number {
   return color;
 }
 
+/**
+ * Studio / BrickLink 自定义 LDraw 件名（如 `bl_24855.dat`）去掉 `bl_` 后与 Rebrickable design 一致。
+ */
+export function normalizeStudioLdrawPartNum(partNum: string): string {
+  const p = partNum.trim().replace(/\.dat$/i, "");
+  if (!p) return p;
+  return p.toLowerCase().startsWith("bl_") ? p.slice(3) : p;
+}
+
 export type StudioIoMainStep = {
   stepIndex: number;
   title: string;
@@ -53,6 +78,11 @@ export type ParsedStudioIo = {
   studioVersion: string | null;
   mainSteps: StudioIoMainStep[];
   submodels: string[];
+  /**
+   * 主场景全部砖（lxfml 零件清单或 LDR 展开），用于与 MOC 完整零件表对照。
+   * 与 `mainSteps` 累加不一致时由 `pickStudioIoBomPlacements` 选取（分步重复计步时优先 BOM）。
+   */
+  bomPlacements: StudioIoPlacement[];
   /** model.lxfml 砖块目录（供 itemNos 回填） */
   brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>;
 };
@@ -93,7 +123,11 @@ function parsePartLine(
     if (!fileToken) return null;
     const isDat = fileToken.toLowerCase().endsWith(".dat");
     if (isDat) {
-      return { partNum: fileToken.replace(/\.dat$/i, ""), ldrawColorId: rawColor, isSubmodelRef: false };
+      return {
+        partNum: normalizeStudioLdrawPartNum(fileToken),
+        ldrawColorId: rawColor,
+        isSubmodelRef: false,
+      };
     }
     return {
       partNum: fileToken,
@@ -113,7 +147,7 @@ function parsePartLine(
     const isDat = fileToken.toLowerCase().endsWith(".dat");
     const base: StudioIoPlacement = isDat
       ? {
-          partNum: fileToken.replace(/\.dat$/i, ""),
+          partNum: normalizeStudioLdrawPartNum(fileToken),
           ldrawColorId: rawColor,
           brickRefId,
           isSubmodelRef: false,
@@ -141,7 +175,7 @@ export function normalizeStudioLdrText(ldrText: string): string {
   return ldrText.replace(/^\uFEFF/, "");
 }
 
-function parseMpdSections(ldrText: string): MpdSection[] {
+export function parseMpdSections(ldrText: string): MpdSection[] {
   const sections: MpdSection[] = [];
   let current: MpdSection | null = null;
   for (const line of normalizeStudioLdrText(ldrText).split(/\r?\n/)) {
@@ -160,11 +194,323 @@ function parseMpdSections(ldrText: string): MpdSection[] {
 }
 
 function findSection(sectionByName: Map<string, MpdSection>, key: string): MpdSection | undefined {
+  const trimmed = key.trim();
   return (
-    sectionByName.get(key) ??
-    sectionByName.get(key.toLowerCase()) ??
-    [...sectionByName.entries()].find(([n]) => n.toLowerCase() === key.toLowerCase())?.[1]
+    sectionByName.get(trimmed) ??
+    sectionByName.get(trimmed.toLowerCase()) ??
+    [...sectionByName.entries()].find(([n]) => n.toLowerCase() === trimmed.toLowerCase())?.[1]
   );
+}
+
+function buildSectionByName(sections: MpdSection[]): Map<string, MpdSection> {
+  const sectionByName = new Map<string, MpdSection>();
+  for (const s of sections) {
+    sectionByName.set(s.name, s);
+    sectionByName.set(s.name.toLowerCase(), s);
+  }
+  return sectionByName;
+}
+
+const SUBMODEL_GROUP_SECTION_RE = /^SubModel Group \d+$/i;
+
+function isSubModelGroupSectionName(name: string): boolean {
+  return SUBMODEL_GROUP_SECTION_RE.test(name.trim());
+}
+
+/** 无顶层 .io、仅多个 SubModel Group 段（如 MOC 223467） */
+function studioIoUsesSubModelGroupSectionsOnly(sections: MpdSection[]): boolean {
+  if (sections.length < 2) return false;
+  if (sections.some((s) => s.name.toLowerCase().endsWith(".io"))) return false;
+  return sections.filter((s) => isSubModelGroupSectionName(s.name)).length >= 2;
+}
+
+function collectStudioIoSubModelGroupPlacements(
+  sections: MpdSection[],
+  sectionByName: Map<string, MpdSection>,
+  brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>
+): StudioIoPlacement[] {
+  const out: StudioIoPlacement[] = [];
+  for (const s of sections) {
+    if (!isSubModelGroupSectionName(s.name)) continue;
+    out.push(
+      ...expandPlacements(allPlacementsInSection(s, brickCatalog), sectionByName, brickCatalog)
+    );
+  }
+  return out;
+}
+
+function buildMergedSubModelGroupSteps(
+  sections: MpdSection[],
+  sectionByName: Map<string, MpdSection>,
+  brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>
+): StudioIoMainStep[] {
+  const merged: StudioIoMainStep[] = [];
+  let nextIndex = 0;
+  for (const s of sections) {
+    if (!isSubModelGroupSectionName(s.name)) continue;
+    const steps = buildMainSteps(s, sectionByName, brickCatalog);
+    for (const st of steps) {
+      const stepIndex = nextIndex++;
+      merged.push({
+        ...st,
+        stepIndex,
+        title: steps.length > 1 ? `${s.name} · ${st.title}` : st.title,
+      });
+    }
+  }
+  return merged;
+}
+
+function pickMainSection(sections: MpdSection[]): MpdSection {
+  const main =
+    sections.find((s) => s.name.toLowerCase().endsWith(".io")) ??
+    sections.reduce(
+      (best, s) => {
+        const stepCount = s.lines.filter((l) => l.trim() === "0 STEP").length;
+        return stepCount > best.stepCount ? { section: s, stepCount } : best;
+      },
+      { section: sections[0]!, stepCount: -1 }
+    ).section;
+  if (!main) {
+    throw new Error("model.ldr 中无有效模型段。");
+  }
+  return main;
+}
+
+/** 将 model.lxfml BOM 砖块转为 placement（每块定义砖 1 片，与 Studio 零件清单同源）。 */
+export function studioLxfmlBomBricksToPlacements(bricks: readonly StudioLxfmlBrick[]): StudioIoPlacement[] {
+  return bricks.map((brick) => ({
+    partNum: brick.designId,
+    ldrawColorId: 0,
+    legoItemNo: brick.legoItemNo,
+    brickRefId: brick.brickRefId,
+    isSubmodelRef: false,
+  }));
+}
+
+function studioPlacementPartColorKey(p: StudioIoPlacement): string {
+  return `${legoMechanicalPartKey(normalizeStudioLdrawPartNum(p.partNum))}\t${normalizeStudioLdrawColorId(p.ldrawColorId)}`;
+}
+
+function needsSupplementFromLdrSteps(
+  partNum: string,
+  ldrawColorId: number,
+  lxfmlBricks: readonly StudioLxfmlBrick[],
+  elementLookup: StudioIoElementLookup | undefined,
+  substituteClosure: ReadonlyMap<string, ReadonlySet<string>>
+): boolean {
+  if (lxfmlBricks.some((b) => legoMechanicalPartKeysEquivalent(b.designId, partNum))) {
+    return false;
+  }
+  if (
+    lxfmlBomCoversPlacementElement(
+      partNum,
+      ldrawColorId,
+      lxfmlBricks,
+      elementLookup,
+      substituteClosure
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export type SupplementLxfmlBomFromLdrOptions = {
+  /**
+   * 主场景 LDR 展开砖表。当 SubModel Group 分步远少于主场景时（如 238538），
+   * 用主场景统计 lxfml 未登记的 design+色，避免只补到 Group 子集。
+   */
+  mainScenePlacements?: readonly StudioIoPlacement[];
+  brickCatalog?: ReadonlyMap<number, StudioLxfmlBrick>;
+  /** 与 `ParseStudioIoOptions.elementLookup` 相同，用于 brickRef 与 .dat 的 element_id 去重 */
+  elementLookup?: StudioIoElementLookup;
+};
+
+function lxfmlBomItemNos(lxfmlBom: readonly StudioIoPlacement[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of lxfmlBom) {
+    const id = p.legoItemNo?.trim();
+    if (id) out.add(id);
+  }
+  return out;
+}
+
+/**
+ * LDR 砖行已计入 lxfml BOM 时不再补第二遍。
+ * brickRef 的 itemNos 仅在 catalog design 与 .dat 一致，或与 .dat 在 elements 表为同一 element_id 时视为已收录；
+ * Studio 常把 brickRef 指到无关 catalog 行（如 5852→3023），不能单凭 itemNos 跳过。
+ */
+function ldrPlacementAlreadyInLxfmlBom(
+  p: StudioIoPlacement,
+  lxfmlItemNos: ReadonlySet<string>,
+  brickCatalog: ReadonlyMap<number, StudioLxfmlBrick> | undefined,
+  elementLookup: StudioIoElementLookup | undefined,
+  substituteClosure: ReadonlyMap<string, ReadonlySet<string>>
+): boolean {
+  const direct = p.legoItemNo?.trim();
+  if (direct && lxfmlItemNos.has(direct)) return true;
+  if (p.brickRefId == null || !brickCatalog) return false;
+  const brick = brickCatalog.get(p.brickRefId);
+  const item = brick?.legoItemNo?.trim();
+  if (!brick || !item || !lxfmlItemNos.has(item)) return false;
+  return catalogBrickRefRepresentsSameElementAsPlacement(
+    p,
+    brick,
+    elementLookup,
+    substituteClosure
+  );
+}
+
+/**
+ * Studio 有时在 model.lxfml 零件清单漏登记 design，但 model.ldr 仍有该 .dat。
+ * 对 lxfml 未覆盖的 design+色：主场景充足时用主场景片数，否则用各 SubModel 分步最大值。
+ */
+export function supplementLxfmlBomFromLdrSteps(
+  lxfmlBom: readonly StudioIoPlacement[],
+  mainSteps: readonly StudioIoMainStep[],
+  lxfmlBricks: readonly StudioLxfmlBrick[],
+  options?: SupplementLxfmlBomFromLdrOptions
+): StudioIoPlacement[] {
+  if (!lxfmlBom.length || !lxfmlBricks.length) return [...lxfmlBom];
+
+  const lxfmlItemNos = lxfmlBomItemNos(lxfmlBom);
+  const brickCatalog = options?.brickCatalog;
+  const elementLookup = options?.elementLookup;
+  const substituteClosure = buildPartSubstituteClosure(
+    lxfmlBricks.map((b) => b.designId)
+  );
+  const stepPlacementCount = mainSteps.reduce((n, s) => n + s.newPlacements.length, 0);
+  const mainScene = options?.mainScenePlacements;
+  const useMainScene =
+    mainScene != null &&
+    mainScene.length > 0 &&
+    mainScene.length > stepPlacementCount;
+
+  const qtyByPartColor = new Map<string, { placement: StudioIoPlacement; count: number }>();
+
+  if (useMainScene) {
+    for (const p of mainScene) {
+      if (p.isSubmodelRef) continue;
+      if (
+        ldrPlacementAlreadyInLxfmlBom(
+          p,
+          lxfmlItemNos,
+          brickCatalog,
+          elementLookup,
+          substituteClosure
+        )
+      ) {
+        continue;
+      }
+      if (
+        !needsSupplementFromLdrSteps(
+          p.partNum,
+          p.ldrawColorId,
+          lxfmlBricks,
+          elementLookup,
+          substituteClosure
+        )
+      ) {
+        continue;
+      }
+      const key = studioPlacementPartColorKey(p);
+      const cur = qtyByPartColor.get(key);
+      if (cur) cur.count += 1;
+      else qtyByPartColor.set(key, { placement: p, count: 1 });
+    }
+  } else if (mainSteps.length > 0) {
+    for (const step of mainSteps) {
+      const stepCounts = new Map<string, { placement: StudioIoPlacement; count: number }>();
+      for (const p of step.newPlacements) {
+        if (p.isSubmodelRef) continue;
+        if (
+          ldrPlacementAlreadyInLxfmlBom(
+            p,
+            lxfmlItemNos,
+            brickCatalog,
+            elementLookup,
+            substituteClosure
+          )
+        ) {
+          continue;
+        }
+        if (
+          !needsSupplementFromLdrSteps(
+            p.partNum,
+            p.ldrawColorId,
+            lxfmlBricks,
+            elementLookup,
+            substituteClosure
+          )
+        ) {
+        continue;
+      }
+        const key = studioPlacementPartColorKey(p);
+        const cur = stepCounts.get(key);
+        if (cur) cur.count += 1;
+        else stepCounts.set(key, { placement: p, count: 1 });
+      }
+      for (const [key, entry] of stepCounts) {
+        const prev = qtyByPartColor.get(key);
+        if (!prev || entry.count > prev.count) qtyByPartColor.set(key, entry);
+      }
+    }
+  }
+
+  const extra: StudioIoPlacement[] = [];
+  for (const { placement, count } of qtyByPartColor.values()) {
+    for (let i = 0; i < count; i++) {
+      extra.push({
+        partNum: normalizeStudioLdrawPartNum(placement.partNum),
+        ldrawColorId: placement.ldrawColorId,
+        legoItemNo: null,
+        brickRefId: placement.brickRefId,
+        isSubmodelRef: false,
+      });
+    }
+  }
+  return [...lxfmlBom, ...extra];
+}
+
+/**
+ * 与 MOC 完整表对照 / 按色·按类分包时选用全模砖表。
+ * 默认取片数较多的一侧；若分步明显多于 lxfml BOM（多 SubModel Group 重复计步），则改用 BOM。
+ */
+export function pickStudioIoBomPlacements(parsed: ParsedStudioIo): StudioIoPlacement[] {
+  const fromSteps = parsed.mainSteps.flatMap((s) => s.newPlacements);
+  const fromBom = parsed.bomPlacements;
+  if (!fromBom.length) return fromSteps;
+  if (!fromSteps.length) return fromBom;
+
+  const stepN = fromSteps.length;
+  const bomN = fromBom.length;
+  if (
+    parsed.brickCatalog?.size &&
+    bomN > 0 &&
+    stepN > bomN &&
+    (stepN - bomN) / bomN > 0.05
+  ) {
+    return fromBom;
+  }
+
+  return fromBom.length >= fromSteps.length ? fromBom : fromSteps;
+}
+
+/** 主场景内全部砖（展开子模型），供 BOM 对照，不依赖分步边界。 */
+export function collectStudioIoMainScenePlacements(
+  ldrText: string,
+  options?: ParseStudioIoOptions
+): StudioIoPlacement[] {
+  const brickCatalog = options?.brickCatalog;
+  const normalized = normalizeStudioLdrText(ldrText);
+  let sections = parseMpdSections(normalized);
+  if (sections.length === 0) {
+    sections = [{ name: "model.ldr", lines: normalized.split(/\r?\n/) }];
+  }
+  const sectionByName = buildSectionByName(sections);
+  const main = pickMainSection(sections);
+  return expandPlacements(allPlacementsInSection(main, brickCatalog), sectionByName, brickCatalog);
 }
 
 function allPlacementsInSection(
@@ -274,29 +620,15 @@ export function parseStudioIoLdrText(
   options?: ParseStudioIoOptions
 ): ParsedStudioIo {
   const brickCatalog = options?.brickCatalog;
+  const lxfmlText = options?.lxfmlText;
+  const elementLookup = options?.elementLookup;
   const normalized = normalizeStudioLdrText(ldrText);
   let sections = parseMpdSections(normalized);
   if (sections.length === 0) {
     sections = [{ name: "model.ldr", lines: normalized.split(/\r?\n/) }];
   }
-  const sectionByName = new Map<string, MpdSection>();
-  for (const s of sections) {
-    sectionByName.set(s.name, s);
-    sectionByName.set(s.name.toLowerCase(), s);
-  }
-
-  const main =
-    sections.find((s) => s.name.toLowerCase().endsWith(".io")) ??
-    sections.reduce(
-      (best, s) => {
-        const stepCount = s.lines.filter((l) => l.trim() === "0 STEP").length;
-        return stepCount > best.stepCount ? { section: s, stepCount } : best;
-      },
-      { section: sections[0], stepCount: -1 }
-    ).section;
-  if (!main) {
-    throw new Error("model.ldr 中无有效模型段。");
-  }
+  const sectionByName = buildSectionByName(sections);
+  const main = pickMainSection(sections);
 
   let modelName = main.name;
   for (const line of main.lines) {
@@ -306,15 +638,49 @@ export function parseStudioIoLdrText(
     }
   }
 
-  const mainSteps = buildMainSteps(main, sectionByName, brickCatalog);
+  const multiGroupOnly = studioIoUsesSubModelGroupSectionsOnly(sections);
+  const mainScenePlacements = expandPlacements(
+    allPlacementsInSection(main, brickCatalog),
+    sectionByName,
+    brickCatalog
+  );
+  let mainSteps = multiGroupOnly
+    ? buildMergedSubModelGroupSteps(sections, sectionByName, brickCatalog)
+    : buildMainSteps(main, sectionByName, brickCatalog);
+  /** 全模 BOM 以 model.lxfml 零件清单为准；无 lxfml 时退回 LDR 展开 */
+  const lxfmlBom = lxfmlText?.trim() ? parseStudioLxfmlBomBricks(lxfmlText) : [];
+  let bomPlacements = lxfmlBom.length
+    ? studioLxfmlBomBricksToPlacements(lxfmlBom)
+    : multiGroupOnly
+      ? collectStudioIoSubModelGroupPlacements(sections, sectionByName, brickCatalog)
+      : mainScenePlacements;
+  if (lxfmlBom.length) {
+    bomPlacements = supplementLxfmlBomFromLdrSteps(bomPlacements, mainSteps, lxfmlBom, {
+      mainScenePlacements,
+      brickCatalog,
+      elementLookup,
+    });
+  }
+
   if (mainSteps.length === 0) {
-    throw new Error("未找到主场景搭建步骤（无 0 STEP）。");
+    if (bomPlacements.length === 0) {
+      throw new Error("未找到主场景搭建步骤（无 0 STEP），且主场景无砖块行。");
+    }
+    mainSteps = [
+      {
+        stepIndex: 0,
+        title: "整模",
+        description: null,
+        newPlacements: bomPlacements,
+      },
+    ];
   }
 
   return {
     modelName,
     studioVersion,
     mainSteps,
+    bomPlacements,
     submodels: sections.filter((s) => s !== main).map((s) => s.name),
     brickCatalog: brickCatalog?.size ? brickCatalog : undefined,
   };

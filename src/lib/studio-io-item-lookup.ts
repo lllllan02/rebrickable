@@ -1,6 +1,8 @@
 import { legoMechanicalPartKeysEquivalent } from "@/lib/lego-mechanical-part-key";
+import { partNumsCanPairViaSubstitute } from "@/lib/lego-bom-compare-alias";
 import {
   normalizeStudioLdrawColorId,
+  normalizeStudioLdrawPartNum,
   STUDIO_EXTENDED_LDRAW_COLOR_OFFSET,
   type StudioIoPlacement,
 } from "@/lib/parse-studio-io";
@@ -81,8 +83,104 @@ export function buildStudioMaterialToLdrawColorMap(
   return map;
 }
 
-function catalogBrickMatchesDatPart(brick: StudioLxfmlBrick, datPartNum: string): boolean {
+export function catalogBrickMatchesDatPart(brick: StudioLxfmlBrick, datPartNum: string): boolean {
   return legoMechanicalPartKeysEquivalent(brick.designId, datPartNum);
+}
+
+/** 由 `buildStudioIoElementLookup` 提供：part + LDraw 色 → 目录 element_id 列表（惰性缓存）。 */
+export type StudioIoElementLookup = {
+  elementIdsForPartColor(partNum: string, ldrawColorId: number): readonly string[];
+  rebrickableColorIdForItem(itemNo: string): number | null;
+  /** elements 表中的 part_num（按 itemNos / element_id） */
+  rebrickablePartNumForItem(itemNo: string): string | null;
+};
+
+/**
+ * brickRef 是否表示与 LDR .dat 同一颗物理件。
+ * design 与 .dat 一致时直接成立；否则用 elements 表比 element_id（如 lxfml 4723 / LDR 3046.dat 同 6477380）。
+ */
+export function catalogBrickRefRepresentsSameElementAsPlacement(
+  placement: StudioIoPlacement,
+  brick: StudioLxfmlBrick,
+  lookup: StudioIoElementLookup | undefined,
+  substituteClosure?: ReadonlyMap<string, ReadonlySet<string>>
+): boolean {
+  if (catalogBrickMatchesDatPart(brick, placement.partNum)) return true;
+  if (!lookup) return false;
+  const item = brick.legoItemNo?.trim();
+  if (!item) return false;
+  if (
+    lookup
+      .elementIdsForPartColor(
+        normalizeStudioLdrawPartNum(placement.partNum),
+        placement.ldrawColorId
+      )
+      .includes(item)
+  ) {
+    return true;
+  }
+  const dat = normalizeStudioLdrawPartNum(placement.partNum);
+  const itemPart = lookup.rebrickablePartNumForItem(item);
+  if (
+    itemPart &&
+    (itemPart.trim().toLowerCase() === dat.toLowerCase() ||
+      legoMechanicalPartKeysEquivalent(itemPart, dat))
+  ) {
+    const mat = brick.materialColorId;
+    if (mat != null && colorsCompatible(placement.ldrawColorId, mat)) return true;
+    const itemColor = lookup.rebrickableColorIdForItem(item);
+    if (itemColor != null && colorsCompatible(placement.ldrawColorId, itemColor)) return true;
+  }
+  if (!substituteClosure?.size) return false;
+  if (!partNumsCanPairViaSubstitute(brick.designId, placement.partNum, substituteClosure)) {
+    return false;
+  }
+  const itemColor = lookup.rebrickableColorIdForItem(item);
+  return itemColor != null && colorsCompatible(placement.ldrawColorId, itemColor);
+}
+
+/**
+ * lxfml 零件清单是否已包含与 LDR part+色 相同 element_id 的登记（不限 designID，如 50746 清单 + 54200.dat）。
+ */
+export function lxfmlBomCoversPlacementElement(
+  partNum: string,
+  ldrawColorId: number,
+  lxfmlBricks: readonly StudioLxfmlBrick[],
+  lookup: StudioIoElementLookup | undefined,
+  substituteClosure?: ReadonlyMap<string, ReadonlySet<string>>
+): boolean {
+  const dat = normalizeStudioLdrawPartNum(partNum);
+  if (lookup) {
+    const datElements = lookup.elementIdsForPartColor(dat, ldrawColorId);
+    if (datElements.length > 0) {
+      const covered = new Set(datElements);
+      if (lxfmlBricks.some((b) => covered.has(b.legoItemNo.trim()))) return true;
+    }
+    for (const b of lxfmlBricks) {
+      const item = b.legoItemNo?.trim();
+      if (!item) continue;
+      const itemPart = lookup.rebrickablePartNumForItem(item);
+      if (!itemPart) continue;
+      if (
+        itemPart.trim().toLowerCase() === dat.toLowerCase() ||
+        legoMechanicalPartKeysEquivalent(itemPart, dat)
+      ) {
+        const mat = b.materialColorId;
+        if (mat != null && colorsCompatible(ldrawColorId, mat)) return true;
+        const itemColor = lookup.rebrickableColorIdForItem(item);
+        if (itemColor != null && colorsCompatible(ldrawColorId, itemColor)) return true;
+      }
+    }
+  }
+  if (!substituteClosure?.size || !lookup) return false;
+  for (const b of lxfmlBricks) {
+    if (!partNumsCanPairViaSubstitute(b.designId, dat, substituteClosure)) continue;
+    const item = b.legoItemNo?.trim();
+    if (!item) continue;
+    const itemColor = lookup.rebrickableColorIdForItem(item);
+    if (itemColor != null && colorsCompatible(ldrawColorId, itemColor)) return true;
+  }
+  return false;
 }
 
 /**
@@ -163,9 +261,20 @@ export function enrichStudioIoPlacementsWithItemNos(
 
   return placements.map((p) => {
     if (p.isSubmodelRef) return p;
+    const itemNo = p.legoItemNo?.trim();
+    if (itemNo && p.brickRefId != null) {
+      const brick = brickCatalog.get(p.brickRefId);
+      if (
+        brick &&
+        brick.legoItemNo === itemNo &&
+        catalogBrickMatchesDatPart(brick, p.partNum)
+      ) {
+        return p;
+      }
+    }
     const fromRef = itemNoFromRefIdIfValid(p, brickCatalog, elementByItemNo, materialToLdraw);
     if (fromRef) return { ...p, legoItemNo: fromRef };
-    if (p.legoItemNo?.trim()) {
+    if (itemNo) {
       const brick = p.brickRefId != null ? brickCatalog.get(p.brickRefId) : undefined;
       if (
         brick &&
@@ -182,7 +291,7 @@ export function enrichStudioIoPlacementsWithItemNos(
       }
     }
     const fromDesign = findStudioItemNoForPlacement(
-      p.partNum,
+      normalizeStudioLdrawPartNum(p.partNum),
       p.ldrawColorId,
       bricks,
       elementByItemNo,

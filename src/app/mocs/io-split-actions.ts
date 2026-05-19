@@ -14,8 +14,13 @@ import { buildAttachments, buildIoStepBatches } from "@/db/schema";
 import { revalidateMocIoSplitPaths } from "@/lib/build-revalidate-paths";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId } from "@/lib/build-subject";
 import { dualSheetsToPayloadV2 } from "@/lib/parts-sheet-moc-id";
-import type { StudioIoMainStep, StudioIoPlacement } from "@/lib/parse-studio-io";
+import {
+  pickStudioIoBomPlacements,
+  type StudioIoMainStep,
+  type StudioIoPlacement,
+} from "@/lib/parse-studio-io";
 import { readStudioIoFromAbsolutePath } from "@/lib/read-studio-io-from-path";
+import { anchorIoItemsToMocFullSheet } from "@/lib/anchor-io-items-to-moc-full-sheet";
 import { resolveStudioIoPlacementsInDb } from "@/lib/resolve-studio-io-placements-in-db";
 import {
   defaultRuleLabelForConfig,
@@ -27,7 +32,7 @@ import { buildUploadAbsoluteDir } from "@/lib/build-upload-storage";
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { applyGobricksSyncForIoBatch } from "@/lib/gobricks-sync-io-batch";
 import {
-  comparePartsSheetBomsViaGobricks,
+  comparePartsSheetBomsByLegoIdentity,
   type PartsSheetBomCompareSummary,
   type PartsSheetBomDiffRow,
 } from "@/lib/compare-parts-sheet-bom";
@@ -73,16 +78,36 @@ function countUnresolved(items: ShortageResolveItem[]): number {
 
 async function resolveDraftPlacements(
   placements: StudioIoPlacement[],
-  brickCatalog?: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>["brickCatalog"]
+  options?: {
+    brickCatalog?: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>["brickCatalog"];
+    mocFullItems?: readonly ShortageResolveItem[];
+    /** BOM 对照为 false，仅分包预览/提交时对齐完整表身份 */
+    anchorToMocFull?: boolean;
+  }
 ): Promise<{ ok: true; items: ShortageResolveItem[] } | { ok: false; error: string }> {
-  const r = await resolveStudioIoPlacementsInDb(placements, { brickCatalog });
+  const r = await resolveStudioIoPlacementsInDb(placements, {
+    brickCatalog: options?.brickCatalog,
+  });
   if (!r.ok) return r;
-  return { ok: true, items: r.items };
+  const full = options?.mocFullItems;
+  if (!full?.length || options?.anchorToMocFull === false) {
+    return { ok: true, items: r.items };
+  }
+  return { ok: true, items: anchorIoItemsToMocFullSheet(r.items, full).items };
+}
+
+async function loadMocFullItemsForAnchor(
+  mocId: string
+): Promise<readonly ShortageResolveItem[] | undefined> {
+  const sheet = await loadMocPartsSheetFromDb(mocId);
+  if (!sheet.ok || !sheet.full?.items.length) return undefined;
+  return sheet.full.items;
 }
 
 async function batchesFromConfig(
   parsed: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>,
-  config: IoSplitConfig
+  config: IoSplitConfig,
+  mocFullItems?: readonly ShortageResolveItem[]
 ): Promise<
   | {
       ok: true;
@@ -97,8 +122,11 @@ async function batchesFromConfig(
   | { ok: false; error: string }
 > {
   if (config.mode === "by_category") {
-    const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
-    const resolved = await resolveDraftPlacements(allPlacements, parsed.brickCatalog);
+    const allPlacements = pickStudioIoBomPlacements(parsed);
+    const resolved = await resolveDraftPlacements(allPlacements, {
+      brickCatalog: parsed.brickCatalog,
+      mocFullItems,
+    });
     if (!resolved.ok) return resolved;
     const groups = splitResolvedItemsByCategory(resolved.items, parsed);
     return {
@@ -116,8 +144,11 @@ async function batchesFromConfig(
   }
 
   if (config.mode === "by_color") {
-    const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
-    const resolved = await resolveDraftPlacements(allPlacements, parsed.brickCatalog);
+    const allPlacements = pickStudioIoBomPlacements(parsed);
+    const resolved = await resolveDraftPlacements(allPlacements, {
+      brickCatalog: parsed.brickCatalog,
+      mocFullItems,
+    });
     if (!resolved.ok) return resolved;
     const byColor = new Map<number, ShortageResolveItem[]>();
     for (const row of resolved.items) {
@@ -153,7 +184,10 @@ async function batchesFromConfig(
   }[] = [];
 
   for (const d of drafts) {
-    const resolved = await resolveDraftPlacements(d.placements, parsed.brickCatalog);
+    const resolved = await resolveDraftPlacements(d.placements, {
+      brickCatalog: parsed.brickCatalog,
+      mocFullItems,
+    });
     if (!resolved.ok) return resolved;
     batches.push({
       label: d.label,
@@ -220,12 +254,6 @@ async function compareIoBomWithMocFullSheet(
   mocId: string,
   parsed: Awaited<ReturnType<typeof readStudioIoFromAbsolutePath>>
 ): Promise<IoMocBomCompare> {
-  const allPlacements = parsed.mainSteps.flatMap((s) => s.newPlacements);
-  const resolved = await resolveDraftPlacements(allPlacements, parsed.brickCatalog);
-  if (!resolved.ok) {
-    return { status: "skipped", reason: `无法解析 IO 零件行：${resolved.error}` };
-  }
-
   const mocSheet = await loadMocPartsSheetFromDb(mocId);
   if (!mocSheet.ok) {
     return { status: "skipped", reason: "无法读取该 MOC 的零件表。" };
@@ -236,25 +264,18 @@ async function compareIoBomWithMocFullSheet(
       reason: "该 MOC 尚无完整零件表，无法对照；请先在零件表页导入或保存完整表。",
     };
   }
-  if (!mocSheet.fulfillment?.items.length) {
-    return {
-      status: "skipped",
-      reason:
-        "该 MOC 尚无配货表（高砖可购零件）。请先在零件表页上传完整表并同步高砖后再对照。",
-    };
+
+  const allPlacements = pickStudioIoBomPlacements(parsed);
+  const resolved = await resolveDraftPlacements(allPlacements, {
+    brickCatalog: parsed.brickCatalog,
+    anchorToMocFull: false,
+  });
+  if (!resolved.ok) {
+    return { status: "skipped", reason: `无法解析 IO 零件行：${resolved.error}` };
   }
 
-  try {
-    const compared = await comparePartsSheetBomsViaGobricks(
-      resolved.items,
-      mocSheet.full.items,
-      mocSheet.fulfillment.items
-    );
-    return { status: "compared", ...compared };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "高砖接口请求失败";
-    return { status: "skipped", reason: `高砖零件对照失败：${msg}` };
-  }
+  const compared = comparePartsSheetBomsByLegoIdentity(resolved.items, mocSheet.full.items);
+  return { status: "compared", ...compared };
 }
 
 export async function previewIoStepSplitAction(input: {
@@ -277,7 +298,8 @@ export async function previewIoStepSplitAction(input: {
     return { ok: false, error: msg };
   }
 
-  const built = await batchesFromConfig(parsed, input.config);
+  const mocFullItems = await loadMocFullItemsForAnchor(mocId);
+  const built = await batchesFromConfig(parsed, input.config, mocFullItems);
   if (!built.ok) return built;
 
   return {
@@ -330,9 +352,11 @@ export async function commitIoStepSplitAction(input: {
   const pathResult = await loadIoAbsolutePath(mocId, input.attachmentId);
   if (!pathResult.ok) return pathResult;
 
+  const mocFullItems = await loadMocFullItemsForAnchor(mocId);
   const built = await batchesFromConfig(
     await readStudioIoFromAbsolutePath(pathResult.absPath),
-    input.config
+    input.config,
+    mocFullItems
   );
   if (!built.ok) return built;
 

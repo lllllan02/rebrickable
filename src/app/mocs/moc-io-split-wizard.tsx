@@ -13,7 +13,6 @@ import {
   type IoSplitPreviewBatch,
   type IoSplitPreviewStep,
 } from "@/app/mocs/io-split-actions";
-import { formatPartsSheetBomLineLabel } from "@/lib/compare-parts-sheet-bom";
 import { buildSubjectDetailPath, mocIoBatchPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
@@ -86,49 +85,131 @@ function orderedStepIndexes(steps: IoSplitPreviewStep[]): number[] {
   return steps.map((s) => s.stepIndex);
 }
 
-function DiffRowList({
+function diffRowKey(r: IoMocBomCompareRow, suffix: string): string {
+  return `${r.elementId ?? ""}-${r.partNum}-${r.colorId}-${suffix}`;
+}
+
+function sumDiffRowQty(rows: IoMocBomCompareRow[], side: "io" | "moc"): number {
+  let n = 0;
+  for (const r of rows) {
+    n += side === "io" ? r.ioQty : r.mocQty;
+  }
+  return n;
+}
+
+function diffSectionQtyLabel(
+  mode: "io-only" | "moc-only" | "both",
+  totalQty: number,
+  ioTotalQty?: number,
+  mocTotalQty?: number
+): string {
+  if (mode === "io-only") return `共 ${totalQty} 片（IO）`;
+  if (mode === "moc-only") return `共 ${totalQty} 片（MOC）`;
+  return `IO ${ioTotalQty ?? 0} 片 · MOC ${mocTotalQty ?? 0} 片`;
+}
+
+function DiffRowTable({
   title,
   rows,
-  totalCount,
-  qtyColumns,
+  totalQty,
+  rowCount,
+  mode,
+  ioTotalQty,
+  mocTotalQty,
 }: {
   title: string;
   rows: IoMocBomCompareRow[];
-  totalCount: number;
-  qtyColumns: "io-only" | "moc-only" | "both";
+  totalQty: number;
+  rowCount: number;
+  mode: "io-only" | "moc-only" | "both";
+  ioTotalQty?: number;
+  mocTotalQty?: number;
 }) {
-  if (totalCount === 0) return null;
+  if (rowCount === 0) return null;
+  const showIo = mode !== "moc-only";
+  const showMoc = mode !== "io-only";
+  const showDelta = mode === "both";
+  const visibleIo = sumDiffRowQty(rows, "io");
+  const visibleMoc = sumDiffRowQty(rows, "moc");
   return (
     <div className="mt-3">
       <h3 className="text-xs font-medium text-[var(--text)]">
         {title}
-        <span className="ml-1 font-normal text-[var(--muted)]">（{totalCount} 行）</span>
+        <span className="ml-1 font-normal text-[var(--muted)]">
+          （{diffSectionQtyLabel(mode, totalQty, ioTotalQty, mocTotalQty)}）
+        </span>
       </h3>
-      <ul className="mt-1.5 max-h-40 overflow-y-auto rounded border border-[var(--border-soft)] bg-[var(--surface)]/50 text-xs">
-        {rows.map((r) => (
-          <li
-            key={`${r.partNum}-${r.colorId}-${qtyColumns}`}
-            className="flex justify-between gap-2 border-b border-[var(--border-soft)] px-2 py-1.5 last:border-b-0"
-          >
-            <span className="min-w-0 truncate text-[var(--text)]">
-              {formatPartsSheetBomLineLabel(r)}
-            </span>
-            <span className="shrink-0 tabular-nums text-[var(--muted)]">
-              {qtyColumns === "io-only" ? (
-                <>IO {r.ioQty}</>
-              ) : qtyColumns === "moc-only" ? (
-                <>MOC {r.mocQty}</>
-              ) : (
-                <>
-                  IO {r.ioQty} / MOC {r.mocQty}
-                </>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {totalCount > rows.length ? (
-        <p className="mt-1 text-[10px] text-[var(--muted)]">仅显示前 {rows.length} 行</p>
+      <div className="mt-1.5 max-h-56 overflow-auto rounded border border-[var(--border-soft)] bg-[var(--surface)]/50">
+        <table className="w-full min-w-[36rem] border-collapse text-left text-xs">
+          <thead className="sticky top-0 z-[1] bg-[var(--surface)] text-[var(--muted)]">
+            <tr className="border-b border-[var(--border-soft)]">
+              <th className="whitespace-nowrap px-2 py-1.5 font-medium">Element ID</th>
+              <th className="whitespace-nowrap px-2 py-1.5 font-medium">零件号</th>
+              <th className="min-w-[8rem] px-2 py-1.5 font-medium">零件名称</th>
+              <th className="whitespace-nowrap px-2 py-1.5 font-medium">色 ID</th>
+              <th className="min-w-[5rem] px-2 py-1.5 font-medium">颜色</th>
+              {showIo ? (
+                <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">IO</th>
+              ) : null}
+              {showMoc ? (
+                <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">MOC</th>
+              ) : null}
+              {showDelta ? (
+                <th className="whitespace-nowrap px-2 py-1.5 text-right font-medium">差</th>
+              ) : null}
+            </tr>
+          </thead>
+          <tbody className="text-[var(--text)]">
+            {rows.map((r) => {
+              const delta = r.ioQty - r.mocQty;
+              return (
+                <tr
+                  key={diffRowKey(r, mode)}
+                  className="border-b border-[var(--border-soft)] last:border-b-0"
+                >
+                  <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[11px] text-[var(--muted)]">
+                    {r.elementId ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1.5 font-mono">{r.partNum || "—"}</td>
+                  <td className="max-w-[14rem] truncate px-2 py-1.5" title={r.partName ?? undefined}>
+                    {r.partName?.trim() || "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{r.colorId}</td>
+                  <td className="truncate px-2 py-1.5" title={r.colorName ?? undefined}>
+                    {r.colorName?.trim() || "—"}
+                  </td>
+                  {showIo ? (
+                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                      {r.ioQty}
+                    </td>
+                  ) : null}
+                  {showMoc ? (
+                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                      {r.mocQty}
+                    </td>
+                  ) : null}
+                  {showDelta ? (
+                    <td
+                      className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${
+                        delta !== 0 ? "text-amber-200/95" : ""
+                      }`}
+                    >
+                      {delta > 0 ? `+${delta}` : delta}
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {rowCount > rows.length ? (
+        <p className="mt-1 text-[10px] text-[var(--muted)]">
+          全量 {rowCount} 条差异身份；下表样例 {rows.length} 条
+          {showIo && !showMoc ? ` · 样例合计 ${visibleIo} 片` : null}
+          {showMoc && !showIo ? ` · 样例合计 ${visibleMoc} 片` : null}
+          {showDelta ? ` · 样例 IO ${visibleIo} / MOC ${visibleMoc} 片` : null}
+        </p>
       ) : null}
     </div>
   );
@@ -152,8 +233,7 @@ function MocBomComparePanel({
   if (compare.match) {
     return (
       <p className="mt-2 text-xs text-emerald-200/90">
-        与 MOC 完整零件表一致（高砖 SKU {compare.ioLineCount} 行 · 合计 {compare.ioTotalQty}{" "}
-        片）。
+        与 MOC 完整零件表一致（按 Element ID / 零件号+色号对照 · 合计 {compare.ioTotalQty} 片）。
       </p>
     );
   }
@@ -163,51 +243,51 @@ function MocBomComparePanel({
     compare.onlyInMocCount > compare.onlyInMoc.length ||
     compare.qtyMismatchCount > compare.qtyMismatch.length;
 
+  const diffIoCol = compare.onlyInIoTotalQty + compare.qtyMismatchIoTotalQty;
+  const diffMocCol = compare.onlyInMocTotalQty + compare.qtyMismatchMocTotalQty;
+  const modelDelta = compare.ioTotalQty - compare.mocTotalQty;
+  const diffColDelta = diffIoCol - diffMocCol;
+
   return (
   <div className="mt-3 space-y-2">
       <p className="text-xs text-amber-100/95">
-        IO 解析结果与当前 MOC 完整零件表不一致。IO 侧提交高砖解析 SKU，MOC 侧使用已存配货表
-        的 gds 字段，按高砖 SKU（如 3040 / 3040b 归同一商品）汇总完整表数量；继续拆分将按
-        IO 内容生成分包，不会自动修改 MOC 完整表。
+        IO 解析结果与当前 MOC 完整零件表不一致。整模总片数：IO {compare.ioTotalQty} 片、MOC{" "}
+        {compare.mocTotalQty} 片
+        {modelDelta === 0 ? "（相同）" : `（IO ${modelDelta > 0 ? "多" : "少"} ${Math.abs(modelDelta)} 片）`}
+        。下表为未能按同一身份对齐的零件；差异表 IO / MOC 列合计之差应与整模片数差一致。
       </p>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-[var(--muted)] sm:grid-cols-4">
-        <div>
-          <dt>IO 行数</dt>
-          <dd className="tabular-nums text-[var(--text)]">{compare.ioLineCount}</dd>
-        </div>
-        <div>
-          <dt>MOC 行数</dt>
-          <dd className="tabular-nums text-[var(--text)]">{compare.mocLineCount}</dd>
-        </div>
-        <div>
-          <dt>IO 总片数</dt>
-          <dd className="tabular-nums text-[var(--text)]">{compare.ioTotalQty}</dd>
-        </div>
-        <div>
-          <dt>MOC 总片数</dt>
-          <dd className="tabular-nums text-[var(--text)]">{compare.mocTotalQty}</dd>
-        </div>
-      </dl>
-      <DiffRowList
+      <p className="text-xs text-[var(--muted)]">
+        差异表列合计：IO {diffIoCol} 片 · MOC {diffMocCol} 片
+        {diffColDelta === 0 ? "（两侧相同）" : `（IO ${diffColDelta > 0 ? "多" : "少"} ${Math.abs(diffColDelta)} 片）`}
+        {modelDelta !== diffColDelta ? (
+          <span className="text-red-300"> · 与整模片数差不一致</span>
+        ) : null}
+      </p>
+      <DiffRowTable
         title="仅在 IO 中"
         rows={compare.onlyInIo}
-        totalCount={compare.onlyInIoCount}
-        qtyColumns="io-only"
+        totalQty={compare.onlyInIoTotalQty}
+        rowCount={compare.onlyInIoCount}
+        mode="io-only"
       />
-      <DiffRowList
+      <DiffRowTable
         title="仅在 MOC 完整表中"
         rows={compare.onlyInMoc}
-        totalCount={compare.onlyInMocCount}
-        qtyColumns="moc-only"
+        totalQty={compare.onlyInMocTotalQty}
+        rowCount={compare.onlyInMocCount}
+        mode="moc-only"
       />
-      <DiffRowList
+      <DiffRowTable
         title="数量不一致"
         rows={compare.qtyMismatch}
-        totalCount={compare.qtyMismatchCount}
-        qtyColumns="both"
+        totalQty={compare.qtyMismatchIoTotalQty + compare.qtyMismatchMocTotalQty}
+        rowCount={compare.qtyMismatchCount}
+        mode="both"
+        ioTotalQty={compare.qtyMismatchIoTotalQty}
+        mocTotalQty={compare.qtyMismatchMocTotalQty}
       />
       {truncated ? (
-        <p className="text-[10px] text-[var(--muted)]">差异较多时仅列出部分样例行。</p>
+        <p className="text-[10px] text-[var(--muted)]">差异较多时仅列出部分样例，片数以各表标题为准。</p>
       ) : null}
       <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm text-[var(--text)]">
         <input
@@ -812,7 +892,7 @@ export function MocIoSplitWizard({ mocId, attachmentId, attachmentLabel }: Props
         <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-4">
           <h2 className="text-sm font-medium text-[var(--text)]">与 MOC 完整零件表对照</h2>
           <p className="mt-2 text-xs text-[var(--muted)]">
-            正在解析 IO、查询高砖并对照 MOC 配货表…
+            正在解析 IO 并对照 MOC 完整零件表…
           </p>
         </section>
       ) : mocBomCompare ? (

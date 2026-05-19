@@ -36,6 +36,7 @@ type EnrichSourceRow = {
   lineNumber: number;
   quantity: number;
   rest: string;
+  ldrawPartNum?: string | null;
   gobricksUnitPrice: string | null;
   gdsUnitPrice?: string | null;
   gdsItemId?: string | null;
@@ -192,6 +193,7 @@ async function enrichPartsSheetIdentitiesInDb(
       partNum: id.partNum,
       colorId: id.colorId,
       elementId: eid,
+      ldrawPartNum: src.ldrawPartNum?.trim() || null,
       quantity: src.quantity,
       gobricksUnitPrice: price,
       gdsUnitPrice: gdsU ?? price,
@@ -329,6 +331,7 @@ export async function resolveShortageCsvInDb(csv: string): Promise<ResolveShorta
     lineNumber: r.lineNumber,
     quantity: r.quantity,
     rest: r.rest,
+    ldrawPartNum: r.ldrawPartNum ?? null,
     gobricksUnitPrice: r.gobricksUnitPrice,
   }));
 

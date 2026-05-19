@@ -175,6 +175,7 @@ function isShortageResolveItem(v: unknown): v is ShortageResolveItem {
     typeof o.partNum === "string" &&
     typeof o.colorId === "number" &&
     isOptionalStringOrNull(o.elementId) &&
+    isOptionalStringOrNull(o.ldrawPartNum) &&
     typeof o.quantity === "number" &&
     typeof o.rest === "string" &&
     typeof o.partFound === "boolean" &&

@@ -6,6 +6,8 @@ export type ShortageResolveItem = {
   colorId: number;
   /** LEGO element_id；导入时优先用于对照目录 part_num / color_id */
   elementId?: string | null;
+  /** Studio 零件清单 LdrawId（无 .dat），用于与 .io 解析的 LDraw 零件名对照 */
+  ldrawPartNum?: string | null;
   quantity: number;
   /** @deprecated 请使用 {@link ShortageResolveItem.gdsUnitPrice}；旧 JSON 或未走 GDS 解析时可能仍有值 */
   gobricksUnitPrice?: string | null;

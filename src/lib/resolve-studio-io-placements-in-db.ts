@@ -6,7 +6,11 @@ import {
   legoMechanicalPartKey,
   legoMechanicalPartKeysEquivalent,
 } from "@/lib/lego-mechanical-part-key";
-import type { StudioIoPlacement } from "@/lib/parse-studio-io";
+import {
+  normalizeStudioLdrawColorId,
+  normalizeStudioLdrawPartNum,
+  type StudioIoPlacement,
+} from "@/lib/parse-studio-io";
 import type { StudioLxfmlBrick } from "@/lib/parse-studio-lxfml";
 import {
   resolvePartsSheetIdentitiesInDb,
@@ -29,7 +33,7 @@ function placementsToRows(placements: StudioIoPlacement[]): AggregatedPlacementR
   const map = new Map<string, AggregatedPlacementRow>();
   for (const p of placements) {
     const partNum = p.partNum;
-    const ldrawColorId = p.ldrawColorId;
+    const ldrawColorId = normalizeStudioLdrawColorId(p.ldrawColorId);
     const legoItemNo = p.legoItemNo?.trim() || null;
     const key = legoItemNo
       ? `item:${legoItemNo}`
@@ -96,8 +100,9 @@ function allCatalogItemNos(catalog: ReadonlyMap<number, StudioLxfmlBrick>): stri
 
 function partNumCandidates(partNum: string): string[] {
   const t = partNum.trim();
-  const mech = legoMechanicalPartKey(t);
-  const out = new Set<string>([t, mech, `${mech}a`, `${mech}b`]);
+  const normalized = normalizeStudioLdrawPartNum(t);
+  const mech = legoMechanicalPartKey(normalized);
+  const out = new Set<string>([t, normalized, mech, `${mech}a`, `${mech}b`]);
   return [...out];
 }
 
@@ -114,7 +119,7 @@ async function inferElementIdByPartAndLdrawColor(
 
   const db = getCatalogDb();
   const hits = await db
-    .select({ elementId: elements.elementId })
+    .select({ elementId: elements.elementId, colorId: elements.colorId })
     .from(elements)
     .where(
       and(inArray(elements.partNum, partCandidates), inArray(elements.colorId, colorCandidates))
@@ -122,6 +127,10 @@ async function inferElementIdByPartAndLdrawColor(
     .orderBy(elements.elementId);
 
   if (hits.length === 0) return null;
+
+  const normalizedLdraw = normalizeStudioLdrawColorId(ldrawColorId);
+  const exactColor = hits.filter((h) => h.colorId === normalizedLdraw);
+  if (exactColor.length === 1) return exactColor[0]!.elementId;
 
   const preferred = hits.filter((h) => catalogItemNos.has(h.elementId));
   if (preferred.length === 1) return preferred[0]!.elementId;
@@ -131,6 +140,7 @@ async function inferElementIdByPartAndLdrawColor(
     legoMechanicalPartKeysEquivalent(b.designId, partNum)
   );
   if (hits.length === 1 && designInLxfml) return hits[0]!.elementId;
+  if (exactColor.length > 1) return exactColor[0]!.elementId;
   return null;
 }
 
@@ -203,7 +213,7 @@ function placementRowsToResolveInput(
 
     return {
       partNum: r.partNum,
-      colorId: r.ldrawColorId,
+      colorId: normalizeStudioLdrawColorId(r.ldrawColorId),
       elementId: r.legoItemNo,
       quantity: r.quantity,
       rest,
@@ -223,14 +233,14 @@ export async function resolveStudioIoPlacementsInDb(
     return { ok: true, skippedHeader: true, items: [] };
   }
 
-  let enriched = placements;
   const catalog = options?.brickCatalog;
+  const catalogItemNos = new Set(catalog?.size ? allCatalogItemNos(catalog) : []);
+  let enriched = placements;
   if (catalog?.size) {
     const elementColors = await elementColorByItemNos(allCatalogItemNos(catalog));
-    const catalogItemNos = new Set(allCatalogItemNos(catalog));
     enriched = enrichStudioIoPlacementsWithItemNos(placements, catalog, elementColors);
-    enriched = await inferMissingItemNos(enriched, catalog, catalogItemNos);
   }
+  enriched = await inferMissingItemNos(enriched, catalog ?? new Map(), catalogItemNos);
 
   const aggregated = placementsToRows(enriched);
   const byItemNo = await rebrickableIdentityByLegoItemNos(

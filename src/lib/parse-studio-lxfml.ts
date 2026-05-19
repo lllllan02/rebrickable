@@ -13,25 +13,32 @@ export type StudioLxfmlBrick = {
   materialColorId: number | null;
 };
 
-const BRICK_OPEN_RE =
-  /<Brick\s+refID="(\d+)"\s+designID="([^"]+)"[^>]*\bitemNos="([^"]+)"/g;
+/** Studio 常将 Brick 属性拆到多行，需匹配到闭合 `>` / `/>` */
+const BRICK_BLOCK_RE = /<Brick\b[\s\S]*?(?:\/>|>)/gi;
+const ATTR_RE = (name: string) => new RegExp(`\\b${name}="([^"]*)"`, "i");
 const MATERIALS_RE = /materials="(\d+):/;
+
+function readBrickAttr(attrs: string, name: string): string | null {
+  const m = ATTR_RE(name).exec(attrs);
+  return m?.[1]?.trim() ?? null;
+}
 
 /**
  * 从 model.lxfml 解析砖块 refID → 设计号 / itemNos / 材质色。
- * 解析失败或空文件时返回空 Map。
+ * 属性顺序不固定；解析失败或空文件时返回空 Map。
  */
 export function parseStudioLxfmlBrickCatalog(lxfmlText: string): Map<number, StudioLxfmlBrick> {
   const out = new Map<number, StudioLxfmlBrick>();
   if (!lxfmlText.trim()) return out;
 
-  for (const m of lxfmlText.matchAll(BRICK_OPEN_RE)) {
-    const brickRefId = Number.parseInt(m[1] ?? "", 10);
-    const designId = (m[2] ?? "").trim();
-    const legoItemNo = (m[3] ?? "").trim();
+  for (const m of lxfmlText.matchAll(BRICK_BLOCK_RE)) {
+    const block = m[0] ?? "";
+    const brickRefId = Number.parseInt(readBrickAttr(block, "refID") ?? "", 10);
+    const designId = readBrickAttr(block, "designID") ?? "";
+    const legoItemNo = readBrickAttr(block, "itemNos") ?? "";
     if (!Number.isFinite(brickRefId) || !designId || !legoItemNo) continue;
 
-    const tail = lxfmlText.slice(m.index ?? 0, (m.index ?? 0) + 800);
+    const tail = lxfmlText.slice(m.index ?? 0, (m.index ?? 0) + 1200);
     const matM = MATERIALS_RE.exec(tail);
     const materialColorId =
       matM?.[1] != null && Number.isFinite(Number.parseInt(matM[1], 10))
@@ -39,6 +46,34 @@ export function parseStudioLxfmlBrickCatalog(lxfmlText: string): Map<number, Stu
         : null;
 
     out.set(brickRefId, { brickRefId, designId, legoItemNo, materialColorId });
+  }
+  return out;
+}
+
+/**
+ * Studio 零件清单级 BOM：每个带 itemNos 的 Brick 定义计 1 片（跳过仅 brickRef 的实例引用行）。
+ * 与 Studio「零件清单」导出一致，不含 lxfml 内用于渲染的重复 brickRef。
+ */
+export function parseStudioLxfmlBomBricks(lxfmlText: string): StudioLxfmlBrick[] {
+  const out: StudioLxfmlBrick[] = [];
+  if (!lxfmlText.trim()) return out;
+
+  for (const m of lxfmlText.matchAll(BRICK_BLOCK_RE)) {
+    const block = m[0] ?? "";
+    if (readBrickAttr(block, "brickRef")) continue;
+    const brickRefId = Number.parseInt(readBrickAttr(block, "refID") ?? "", 10);
+    const designId = readBrickAttr(block, "designID") ?? "";
+    const legoItemNo = readBrickAttr(block, "itemNos") ?? "";
+    if (!Number.isFinite(brickRefId) || !designId || !legoItemNo) continue;
+
+    const tail = lxfmlText.slice(m.index ?? 0, (m.index ?? 0) + 1200);
+    const matM = MATERIALS_RE.exec(tail);
+    const materialColorId =
+      matM?.[1] != null && Number.isFinite(Number.parseInt(matM[1], 10))
+        ? Number.parseInt(matM[1], 10)
+        : null;
+
+    out.push({ brickRefId, designId, legoItemNo, materialColorId });
   }
   return out;
 }

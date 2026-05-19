@@ -8,6 +8,8 @@ import { promisify } from "util";
 
 import { parseStudioLxfmlBrickCatalog } from "@/lib/parse-studio-lxfml";
 import { parseStudioIoLdrText, STUDIO_IO_ZIP_PASSWORD, type ParsedStudioIo } from "@/lib/parse-studio-io";
+import { readStudioIoLdrFromExtractDir } from "@/lib/pick-studio-io-ldr";
+import { buildStudioIoElementLookup } from "@/lib/studio-io-element-lookup";
 
 const execFileAsync = promisify(execFile);
 
@@ -20,26 +22,16 @@ export async function readStudioIoFromAbsolutePath(absIoPath: string): Promise<P
     await execFileAsync("unzip", ["-P", STUDIO_IO_ZIP_PASSWORD, "-oq", absIoPath, "-d", tmp]);
 
     let brickCatalog;
+    let lxfml: string | undefined;
     try {
-      const lxfml = await fs.readFile(path.join(tmp, "model.lxfml"), "utf8");
+      lxfml = await fs.readFile(path.join(tmp, "model.lxfml"), "utf8");
       brickCatalog = parseStudioLxfmlBrickCatalog(lxfml);
     } catch {
       brickCatalog = undefined;
+      lxfml = undefined;
     }
 
-    const ldrCandidates = ["modelv2.ldr", "model.ldr"] as const;
-    let ldr: string | null = null;
-    for (const name of ldrCandidates) {
-      try {
-        ldr = await fs.readFile(path.join(tmp, name), "utf8");
-        break;
-      } catch {
-        /* try next */
-      }
-    }
-    if (ldr == null) {
-      throw new Error("解压后未找到 model.ldr / modelv2.ldr。");
-    }
+    const { text: ldr } = await readStudioIoLdrFromExtractDir(tmp);
     let studioVersion: string | null = null;
     try {
       const infoRaw = await fs.readFile(path.join(tmp, ".info"), "utf8");
@@ -50,6 +42,8 @@ export async function readStudioIoFromAbsolutePath(absIoPath: string): Promise<P
     }
     return parseStudioIoLdrText(ldr, studioVersion, {
       brickCatalog: brickCatalog?.size ? brickCatalog : undefined,
+      lxfmlText: lxfml,
+      elementLookup: brickCatalog?.size ? buildStudioIoElementLookup(brickCatalog) : undefined,
     });
   } finally {
     await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
