@@ -32,7 +32,6 @@ type Props = {
   subjectId: string;
   parentSubjectOwned?: boolean;
   onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
-  onShortageRowReplacedToFulfillment?: (ioBatchId?: number) => void;
   /** 更换/还原后同时刷新方案级汇总缺件缓存 */
   planBatchIds?: number[];
 } & (
@@ -86,7 +85,6 @@ export function MocIoSplitSheetViewer({
   subjectId,
   parentSubjectOwned = false,
   onSheetLoaded,
-  onShortageRowReplacedToFulfillment,
   planBatchIds = [],
   ...props
 }: Props) {
@@ -283,11 +281,6 @@ export function MocIoSplitSheetViewer({
               sourceMetaLine={sourceMetaLine}
               sheetRowReplaceContext={sheetRowReplaceContext}
               onSheetRowMutated={reloadSheetAfterMutation}
-              onShortageRowReplacedToFulfillment={
-                mode === "batch-shortage" || mode === "plan-merged-shortage"
-                  ? onShortageRowReplacedToFulfillment
-                  : undefined
-              }
             />
           </div>
         </>

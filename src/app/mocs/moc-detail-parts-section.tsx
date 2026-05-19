@@ -284,7 +284,6 @@ function IoBatchEmbeddedList({
             await reloadShortageSheet();
             await reloadFulfillmentSheet();
           }}
-          onShortageRowReplacedToFulfillment={() => setListTab("fulfillment")}
         />
       ) : null}
     </div>

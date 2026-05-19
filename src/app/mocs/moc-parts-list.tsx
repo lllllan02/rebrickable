@@ -1200,8 +1200,6 @@ type Props = {
   detailSubstituteSuggestions?: boolean;
   /** 非空时与详情共用模态框，以 tab 切换「更换零件」 */
   sheetRowReplaceContext?: SheetRowReplaceContext | null;
-  /** 缺件表行更换并入配货表后回调（`ioBatchId` 为写入的分包，用于切换到该包配货 Tab） */
-  onShortageRowReplacedToFulfillment?: (ioBatchId?: number) => void;
   /** 更换/还原成功后：由父级刷新列表（如 Studio 分包客户端缓存表） */
   onSheetRowMutated?: () => void | Promise<void>;
 };
@@ -1218,7 +1216,6 @@ export function MocPartsList({
   parentSubjectOwned = false,
   detailSubstituteSuggestions = false,
   sheetRowReplaceContext = null,
-  onShortageRowReplacedToFulfillment,
   onSheetRowMutated,
 }: Props) {
   const router = useRouter();
@@ -1294,9 +1291,6 @@ export function MocPartsList({
       if (targetBatchId) {
         invalidateIoSplitSheetCacheForBatch(targetBatchId);
       }
-      if (ctx?.branch === "shortage") {
-        onShortageRowReplacedToFulfillment?.(targetBatchId);
-      }
       closeDetail();
       try {
         await onSheetRowMutated?.();
@@ -1308,7 +1302,6 @@ export function MocPartsList({
     closeDetail,
     detailItem,
     onSheetRowMutated,
-    onShortageRowReplacedToFulfillment,
     router,
     sheetRowReplaceContext,
   ]);

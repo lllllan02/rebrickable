@@ -514,7 +514,6 @@ export function MocPartsSheetBrowser({
                   shortageListMode
                   detailSubstituteSuggestions
                   sheetRowReplaceContext={{ subjectKind, subjectId, branch: "shortage" }}
-                  onShortageRowReplacedToFulfillment={() => setAllTab("fulfillment")}
                 />
               ) : null}
               {allTab === "official" && officialInventory ? (
@@ -629,13 +628,6 @@ export function MocPartsSheetBrowser({
                 parentSubjectOwned={parentSubjectOwned}
                 planBatchIds={planBatchIds}
                 onSheetLoaded={handleIoSheetLoaded}
-                onShortageRowReplacedToFulfillment={(ioBatchId) => {
-                  const batchId =
-                    ioBatchId && activePlan?.batches.some((b) => b.id === ioBatchId)
-                      ? ioBatchId
-                      : activePlan?.batches[0]?.id;
-                  if (batchId) setIoSecondary({ kind: "batch", batchId });
-                }}
               />
             ) : ioViewerMode === "batch-fulfillment" && activeBatch ? (
               <MocIoSplitSheetViewer
