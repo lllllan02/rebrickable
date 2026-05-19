@@ -6,9 +6,6 @@ export type IoSplitSheetRowProvenance = {
   sourceLineNumber: number;
 };
 
-/** @deprecated 使用 {@link IoSplitSheetRowProvenance} */
-export type IoSplitSheetReplaceProvenance = IoSplitSheetRowProvenance;
-
 export type IoSplitSheetState = {
   items: ShortageResolveItem[];
   skippedHeader: boolean;

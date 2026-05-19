@@ -285,14 +285,12 @@ async function persistStoredDualSheetsWithFulfillmentDerivedPrice(
     db.transaction((tx) => {
       const existingRows = tx
         .select({
-          payloadJson: buildSavedPartsSheets.payloadJson,
           shortageClearedAt: buildSavedPartsSheets.shortageClearedAt,
         })
         .from(buildSavedPartsSheets)
         .where(buildSheetKey(subjectKind, subjectId))
         .limit(1)
         .all();
-      const existingJson = existingRows[0]?.payloadJson;
       const rawCleared = existingRows[0]?.shortageClearedAt;
       const existingClearedAt =
         typeof rawCleared === "string" && rawCleared.trim().length > 0 ? rawCleared.trim() : null;

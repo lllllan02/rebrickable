@@ -138,9 +138,6 @@ export function fulfillmentItemsForDisplay<T extends { rest: string }>(
   return sortFulfillmentItemsReplacedFirst(items);
 }
 
-/** @deprecated 使用 {@link fulfillmentItemsForDisplay} */
-export const fulfillmentItemsExcludingModified = fulfillmentItemsForDisplay;
-
 export function stripSheetRowReplacedMarker(rest: string): string {
   return rest.replace(TOKEN_STRIP_RE, "").replace(/\s{2,}/g, " ").trim();
 }

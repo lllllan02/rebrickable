@@ -2,7 +2,7 @@
  * 从用户上传的缺货表文件名中尽量解析 Rebrickable MOC 数字 ID（仅启发式，不调用 API）。
  */
 
-import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import { MOC_PROFILE_MAX_DISPLAY_NAME } from "@/lib/moc-profile-parse";
 import type { PartsSheetTag } from "@/lib/parts-sheet-tags";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
@@ -260,18 +260,6 @@ export function parseStoredMocDualSheets(raw: unknown): StoredMocDualSheets | nu
   }
 
   return null;
-}
-
-/** @deprecated 使用 {@link parseStoredMocDualSheets}；仍返回 v1 形状供旧逻辑读取「完整表」 */
-export function parseStoredMocPartsSheet(raw: unknown): MocPartsSheetPayloadV1 | null {
-  const dual = parseStoredMocDualSheets(raw);
-  if (!dual?.full) return null;
-  return {
-    version: 1,
-    skippedHeader: dual.full.skippedHeader,
-    items: dual.full.items,
-    savedAt: dual.full.savedAt,
-  };
 }
 
 export function dualSheetsToPayloadV2(dual: StoredMocDualSheets): MocPartsSheetPayloadV2 {

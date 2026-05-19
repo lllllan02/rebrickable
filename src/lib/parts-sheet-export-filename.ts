@@ -72,27 +72,6 @@ export function buildIoSplitBatchExportStem(input: {
   return sanitizePartsSheetExportSegment(body, MAX_PARTS_SHEET_EXPORT_STEM_LEN) || `${id}-分包-未命名`;
 }
 
-/** @deprecated 使用 {@link buildIoSplitBatchExportStem} */
-export function buildIoBatchPartsSheetExportStem(input: {
-  mocId: string;
-  displayName: string;
-  planLabel: string;
-  batchLabel: string;
-  branch: PartsSheetExportBranch;
-  contentLabel?: string;
-}): string {
-  const sheetSuffix =
-    input.contentLabel?.trim() ||
-    (input.branch === "fulfillment" ? undefined : BRANCH_LABEL[input.branch]);
-  return buildIoSplitBatchExportStem({
-    mocId: input.mocId,
-    displayName: input.displayName,
-    planLabel: input.planLabel,
-    batchLabel: input.batchLabel,
-    sheetSuffix,
-  });
-}
-
 /** 方案内汇总缺件表导出文件名 */
 export function buildIoPlanMergedShortageExportStem(input: {
   mocId: string;
@@ -104,21 +83,6 @@ export function buildIoPlanMergedShortageExportStem(input: {
     displayName: input.displayName,
     planLabel: input.planLabel,
     batchLabel: "汇总缺件",
-  });
-}
-
-/** 方案内汇总修改表导出文件名 */
-export function buildIoPlanMergedModifiedExportStem(input: {
-  mocId: string;
-  displayName: string;
-  planLabel: string;
-}): string {
-  return buildIoSplitBatchExportStem({
-    mocId: input.mocId,
-    displayName: input.displayName,
-    planLabel: input.planLabel,
-    batchLabel: "修改表",
-    sheetSuffix: FULFILLMENT_MODIFIED_EXPORT_CONTENT_LABEL,
   });
 }
 

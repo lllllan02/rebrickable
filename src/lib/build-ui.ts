@@ -1,4 +1,4 @@
-import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 
 export type BuildSubjectUi = {
   kind: BuildSubjectKind;

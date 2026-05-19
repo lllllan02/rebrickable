@@ -23,7 +23,7 @@ import {
   buildIoSplitBatchExportStem,
   buildIoSplitPlanZipExportStem,
 } from "@/lib/parts-sheet-export-filename";
-import { ioBatchSheetLoadKey, isIoSplitSheetLoadSettled, loadIoSplitSheet } from "@/lib/io-split-sheet-cache";
+import { ioBatchSheetLoadKey, loadIoSplitSheet } from "@/lib/io-split-sheet-cache";
 import { formatGobricksGdsPriceCny } from "@/lib/gobricks-display-caption";
 import { downloadIoSplitPlanZip } from "@/lib/io-split-plan-zip-download";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";

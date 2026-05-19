@@ -22,7 +22,7 @@ export function readColorNamesFromLego2ApiRow(row: Record<string, unknown>): {
   en: string | null;
 } {
   const pick = (v: unknown) => readGobricksColorDataNames(v);
-  let { zh, en } = pick(row.color_data);
+  const { zh, en } = pick(row.color_data);
   if (zh || en) return { zh, en };
   for (const key of ["colorData", "color"]) {
     const r = pick(row[key]);
