@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { gobricksProductPictureClassName } from "@/lib/gobricks-picture-display";
 
 type Props = {
   src: string;
@@ -47,6 +48,7 @@ export function RemoteCoverImage({
   }, []);
 
   const useFill = fill === true;
+  const resolvedClassName = gobricksProductPictureClassName(trimmed, className);
 
   if (!trimmed || failed) {
     const base = useFill
@@ -65,7 +67,7 @@ export function RemoteCoverImage({
         src={trimmed}
         alt={alt}
         fill
-        className={className}
+        className={resolvedClassName}
         sizes={sizes}
         unoptimized={unoptimized}
         priority={priority}
@@ -81,7 +83,7 @@ export function RemoteCoverImage({
         alt={alt}
         width={width}
         height={height}
-        className={className}
+        className={resolvedClassName}
         sizes={sizes}
         unoptimized={unoptimized}
         priority={priority}
