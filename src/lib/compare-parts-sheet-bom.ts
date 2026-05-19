@@ -1,12 +1,4 @@
-import {
-  aggregateBomForGobricks,
-  bomToGobricksTestList,
-  buildLegoDesignColorToGobricksSkuMap,
-  fetchGobricksLego2MergedPayload,
-  gobricksBomSkuDisplayLabel,
-  gobricksBomSkuKeyFromGds,
-} from "@/lib/gobricks-lego2-item-list";
-import { legoMechanicalPartKey } from "@/lib/lego-mechanical-part-key";
+import { bomPartColorKey } from "@/lib/lego-bom-compare-keys";
 import {
   legoBomAliasKeys,
   partNumsCanPairViaSubstitute,
@@ -70,10 +62,6 @@ type BomCompareBucket = {
   colorName: string | null;
 };
 
-type GobricksBomBucket = BomCompareBucket & {
-  label: string;
-};
-
 function primaryPartNum(partNums: Set<string>): string {
   const sorted = [...partNums]
     .map((p) => p.trim())
@@ -88,105 +76,15 @@ function joinElementIds(ids: Set<string>): string | null {
   return sorted.join(", ");
 }
 
-function legoLineKey(partNum: string, colorId: number): string {
-  return `${partNum.trim().toLowerCase()}\t${colorId}`;
-}
-
-/** 从已同步的配货表行建立「乐高 design+色 → 高砖 SKU」映射（不再请求高砖）。 */
-export function buildLegoToSkuFromFulfillmentItems(
-  fulfillmentItems: readonly ShortageResolveItem[]
-): { legoToSku: Map<string, string>; skuLabels: Map<string, string> } {
-  const legoToSku = new Map<string, string>();
-  const skuLabels = new Map<string, string>();
-  for (const i of fulfillmentItems) {
-    const sku = gobricksBomSkuKeyFromGds({
-      gdsItemId: i.gdsItemId ?? null,
-      gdsColorId: i.gdsColorId ?? null,
-    });
-    if (!sku) continue;
-    const partNum = i.partNum.trim();
-    const colorId = Math.trunc(i.colorId);
-    if (!partNum || !Number.isFinite(colorId) || colorId < 0) continue;
-    legoToSku.set(legoLineKey(partNum, colorId), sku);
-    if (!skuLabels.has(sku)) {
-      skuLabels.set(
-        sku,
-        gobricksBomSkuDisplayLabel(
-          {
-            gdsItemId: i.gdsItemId ?? null,
-            gdsColorId: i.gdsColorId ?? null,
-            gdsCaption: i.gdsCaption ?? null,
-            gdsCaptionEn: i.gdsCaptionEn ?? null,
-          },
-          sku
-        )
-      );
-    }
-  }
-  return { legoToSku, skuLabels };
-}
-
-function aggregateByGobricksSku(
-  items: readonly ShortageResolveItem[],
-  legoToSku: Map<string, string>,
-  skuLabels: Map<string, string>
-): Map<string, GobricksBomBucket> {
-  const map = new Map<string, GobricksBomBucket>();
-  for (const i of items) {
-    const partNum = i.partNum.trim();
-    const colorId = Math.trunc(i.colorId);
-    const qty = Math.trunc(i.quantity);
-    if (!partNum || !Number.isFinite(colorId) || colorId < 0 || !Number.isFinite(qty) || qty <= 0) {
-      continue;
-    }
-    const sku =
-      legoToSku.get(legoLineKey(partNum, colorId)) ?? `lego-unresolved:${legoLineKey(partNum, colorId)}`;
-    const label =
-      skuLabels.get(sku) ??
-      (sku.startsWith("lego-unresolved:")
-        ? partNum
-        : sku.includes("\t")
-          ? `GDS-${sku.replace("\t", "-")}`
-          : `GDS-${sku}`);
-    const eid = i.elementId?.trim();
-    const cur = map.get(sku);
-    if (cur) {
-      cur.quantity += qty;
-      cur.partNums.add(partNum);
-      if (eid) cur.elementIds.add(eid);
-      if (!cur.colorName && i.colorName) cur.colorName = i.colorName;
-      if (!cur.partName && i.partName) cur.partName = i.partName;
-    } else {
-      map.set(sku, {
-        label,
-        partNums: new Set([partNum]),
-        elementIds: eid ? new Set([eid]) : new Set(),
-        partName: i.partName,
-        colorId,
-        quantity: qty,
-        colorName: i.colorName,
-      });
-    }
-  }
-  return map;
-}
-
 function bucketToDiffBase(bucket: BomCompareBucket): Pick<
   PartsSheetBomDiffRow,
   "elementId" | "partNum" | "partName" | "colorId" | "colorName"
 > {
   const partNum = primaryPartNum(bucket.partNums);
-  const partName = bucket.partName?.trim() || null;
-  const gobricksLabel = (bucket as GobricksBomBucket).label;
-  const displayName =
-    partName ||
-    (gobricksLabel && gobricksLabel !== partNum && !gobricksLabel.startsWith("GDS-")
-      ? gobricksLabel
-      : null);
   return {
     elementId: joinElementIds(bucket.elementIds),
     partNum,
-    partName: displayName,
+    partName: bucket.partName?.trim() || null,
     colorId: bucket.colorId,
     colorName: bucket.colorName,
   };
@@ -305,21 +203,9 @@ function sumDiffRowsQty(rows: readonly PartsSheetBomDiffRow[], side: "io" | "moc
   return n;
 }
 
-/** 差异表全部行的 IO / MOC 列片数合计（与 onlyIn* / qtyMismatch* 字段之和一致） */
-export function diffTableColumnTotals(summary: {
-  onlyInIoTotalQty: number;
-  onlyInMocTotalQty: number;
-  qtyMismatchIoTotalQty: number;
-  qtyMismatchMocTotalQty: number;
-}): { io: number; moc: number } {
-  return {
-    io: summary.onlyInIoTotalQty + summary.qtyMismatchIoTotalQty,
-    moc: summary.onlyInMocTotalQty + summary.qtyMismatchMocTotalQty,
-  };
-}
-
 function assertBomCompareQtyInvariant(summary: PartsSheetBomCompareSummary): void {
-  const { io: diffIo, moc: diffMoc } = diffTableColumnTotals(summary);
+  const diffIo = summary.onlyInIoTotalQty + summary.qtyMismatchIoTotalQty;
+  const diffMoc = summary.onlyInMocTotalQty + summary.qtyMismatchMocTotalQty;
   const modelDelta = summary.ioTotalQty - summary.mocTotalQty;
   const diffDelta = diffIo - diffMoc;
   if (modelDelta !== diffDelta) {
@@ -334,102 +220,6 @@ function assertBomCompareQtyInvariant(summary: PartsSheetBomCompareSummary): voi
   }
 }
 
-function compareBomBucketMaps(
-  ioMap: Map<string, BomCompareBucket>,
-  mocMap: Map<string, BomCompareBucket>
-): PartsSheetBomCompareSummary {
-  const onlyInIoAll: PartsSheetBomDiffRow[] = [];
-  const onlyInMocAll: PartsSheetBomDiffRow[] = [];
-  const qtyMismatchAll: PartsSheetBomDiffRow[] = [];
-
-  for (const [sku, ioBucket] of ioMap) {
-    const mocBucket = mocMap.get(sku);
-    if (!mocBucket) {
-      onlyInIoAll.push({
-        ...bucketToDiffBase(ioBucket),
-        ioQty: ioBucket.quantity,
-        mocQty: 0,
-      });
-      continue;
-    }
-    if (ioBucket.quantity !== mocBucket.quantity) {
-      qtyMismatchAll.push(
-        mergeBucketDiffRow(ioBucket, mocBucket, ioBucket.quantity, mocBucket.quantity)
-      );
-    }
-  }
-
-  for (const [sku, mocBucket] of mocMap) {
-    if (!ioMap.has(sku)) {
-      onlyInMocAll.push({
-        ...bucketToDiffBase(mocBucket),
-        ioQty: 0,
-        mocQty: mocBucket.quantity,
-      });
-    }
-  }
-
-  let ioTotalQty = 0;
-  for (const v of ioMap.values()) ioTotalQty += v.quantity;
-  let mocTotalQty = 0;
-  for (const v of mocMap.values()) mocTotalQty += v.quantity;
-
-  const match =
-    onlyInIoAll.length === 0 && onlyInMocAll.length === 0 && qtyMismatchAll.length === 0;
-
-  const summary: PartsSheetBomCompareSummary = {
-    match,
-    ioLineCount: ioMap.size,
-    mocLineCount: mocMap.size,
-    ioTotalQty,
-    mocTotalQty,
-    onlyInIoCount: onlyInIoAll.length,
-    onlyInIoTotalQty: sumDiffRowsQty(onlyInIoAll, "io"),
-    onlyInMocCount: onlyInMocAll.length,
-    onlyInMocTotalQty: sumDiffRowsQty(onlyInMocAll, "moc"),
-    qtyMismatchCount: qtyMismatchAll.length,
-    qtyMismatchIoTotalQty: sumDiffRowsQty(qtyMismatchAll, "io"),
-    qtyMismatchMocTotalQty: sumDiffRowsQty(qtyMismatchAll, "moc"),
-    onlyInIo: takeSample(onlyInIoAll),
-    onlyInMoc: takeSample(onlyInMocAll),
-    qtyMismatch: takeSample(qtyMismatchAll),
-  };
-  assertBomCompareQtyInvariant(summary);
-  return summary;
-}
-
-/**
- * IO 侧提交高砖 `lego2ItemList` 解析 SKU；MOC 侧用已存配货表的 `gds_*`（上传完整表时同步得到），按高砖 SKU 聚合数量后对照。
- */
-export async function comparePartsSheetBomsViaGobricks(
-  ioItems: readonly ShortageResolveItem[],
-  mocFullItems: readonly ShortageResolveItem[],
-  mocFulfillmentItems: readonly ShortageResolveItem[],
-  init?: { signal?: AbortSignal }
-): Promise<PartsSheetBomCompareSummary> {
-  const ioBom = aggregateBomForGobricks(ioItems);
-  const ioPayload = await fetchGobricksLego2MergedPayload(bomToGobricksTestList(ioBom), {
-    signal: init?.signal,
-  });
-
-  const ioMaps = buildLegoDesignColorToGobricksSkuMap(ioPayload);
-  const mocMaps = buildLegoToSkuFromFulfillmentItems(mocFulfillmentItems);
-  const skuLabels = new Map<string, string>([...ioMaps.skuLabels, ...mocMaps.skuLabels]);
-
-  const ioMap = aggregateByGobricksSku(ioItems, ioMaps.legoToSku, skuLabels);
-  const mocMap = aggregateByGobricksSku(mocFullItems, mocMaps.legoToSku, skuLabels);
-
-  return compareBomBucketMaps(ioMap, mocMap);
-}
-
-function partColorKey(partNum: string, colorId: number): string {
-  return `${partNum.trim().toLowerCase()}\t${Math.trunc(colorId)}`;
-}
-
-function mechColorKey(partNum: string, colorId: number): string {
-  return `${legoMechanicalPartKey(partNum)}\t${Math.trunc(colorId)}`;
-}
-
 /** 聚合主键：优先 element_id，否则 part_num + Rebrickable color_id */
 function canonicalLegoBomKey(item: ShortageResolveItem): string {
   const eid = item.elementId?.trim();
@@ -437,7 +227,7 @@ function canonicalLegoBomKey(item: ShortageResolveItem): string {
   const partNum = item.partNum.trim();
   const colorId = Math.trunc(item.colorId);
   if (!partNum || !Number.isFinite(colorId) || colorId < 0) return "";
-  return `p:${partColorKey(partNum, colorId)}`;
+  return `p:${bomPartColorKey(partNum, colorId)}`;
 }
 
 function mergeIntoBomBucket(map: Map<string, BomCompareBucket>, key: string, item: ShortageResolveItem): void {
@@ -617,16 +407,4 @@ export function comparePartsSheetBomsByLegoIdentity(
   };
   assertBomCompareQtyInvariant(summary);
   return summary;
-}
-
-export function formatPartsSheetBomLineLabel(row: {
-  partNum: string;
-  partName?: string | null;
-  colorId: number;
-  colorName: string | null;
-}): string {
-  const name = row.partName?.trim() || row.partNum;
-  return row.colorName
-    ? `${name} · ${row.colorName}（${row.colorId}）`
-    : `${name} · 色 ${row.colorId}`;
 }

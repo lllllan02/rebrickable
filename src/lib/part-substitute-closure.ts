@@ -1,20 +1,4 @@
-import Database from "better-sqlite3";
-
-import { catalogDbPath } from "@/db/db-paths";
-
-const globalForCatalog = globalThis as typeof globalThis & {
-  __bomCompareCatalogSqlite?: Database.Database;
-};
-
-function getCatalogSqlite(): Database.Database {
-  if (!globalForCatalog.__bomCompareCatalogSqlite) {
-    globalForCatalog.__bomCompareCatalogSqlite = new Database(catalogDbPath(), {
-      readonly: true,
-      fileMustExist: true,
-    });
-  }
-  return globalForCatalog.__bomCompareCatalogSqlite;
-}
+import { getReadonlyCatalogSqlite } from "@/lib/catalog-readonly-sqlite";
 
 /**
  * 对给定 part_num 列表，在 `part_relationships`（A/M）上求连通分量，用于 BOM 对照别名。
@@ -26,7 +10,7 @@ export function buildPartSubstituteClosure(
   if (!seeds.length) return new Map();
 
   const ph = seeds.map(() => "?").join(",");
-  const rows = getCatalogSqlite()
+  const rows = getReadonlyCatalogSqlite()
     .prepare(
       `SELECT parent_part_num AS parent, child_part_num AS child
        FROM part_relationships

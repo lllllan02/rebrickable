@@ -1,22 +1,18 @@
-import { normalizeLdrawPartToken } from "@/lib/anchor-io-items-to-moc-full-sheet";
+import {
+  bomMechColorKey,
+  bomPartColorKey,
+  normalizeLdrawPartToken,
+} from "@/lib/lego-bom-compare-keys";
 import {
   legoMechanicalPartKey,
   legoMechanicalPartKeysEquivalent,
 } from "@/lib/lego-mechanical-part-key";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
-function partColorKey(partNum: string, colorId: number): string {
-  return `${partNum.trim().toLowerCase()}\t${Math.trunc(colorId)}`;
-}
-
-function mechColorKey(partNum: string, colorId: number): string {
-  return `${legoMechanicalPartKey(partNum)}\t${Math.trunc(colorId)}`;
-}
-
 /**
  * 印刷件对照键：3070pb092 与 3070bpb092 等（pb / bpb / pr + 图案编号）归一为同一键。
  */
-export function legoPrintedDecorCompareKey(partNum: string): string | null {
+function legoPrintedDecorCompareKey(partNum: string): string | null {
   const m = /^(\d{1,6})([a-z]*?)(?:pb|bpb|pr)([a-z0-9]+)$/i.exec(partNum.trim());
   if (!m) return null;
   const baseMech = legoMechanicalPartKey(`${m[1] ?? ""}${m[2] ?? ""}`);
@@ -51,8 +47,8 @@ export function legoBomAliasKeys(
   if (eid) keys.push(`e:${eid}`);
 
   for (const partNum of partNums) {
-    keys.push(`p:${partColorKey(partNum, colorId)}`);
-    keys.push(`m:${mechColorKey(partNum, colorId)}`);
+    keys.push(`p:${bomPartColorKey(partNum, colorId)}`);
+    keys.push(`m:${bomMechColorKey(partNum, colorId)}`);
     const decor = legoPrintedDecorCompareKey(partNum);
     if (decor) keys.push(`d:${decor}\t${colorId}`);
   }

@@ -1,4 +1,9 @@
 import {
+  bomMechColorKey,
+  bomPartColorKey,
+  normalizeLdrawPartToken,
+} from "@/lib/lego-bom-compare-keys";
+import {
   legoMechanicalPartKey,
   legoMechanicalPartKeysEquivalent,
 } from "@/lib/lego-mechanical-part-key";
@@ -7,7 +12,7 @@ import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 const ANCHOR_NOTE = "已对齐 MOC 完整表";
 
-export type MocFullSheetAnchorStats = {
+type MocFullSheetAnchorStats = {
   totalLines: number;
   /** 身份已与完整表一致，未改写 */
   alreadyMatched: number;
@@ -20,14 +25,6 @@ export type MocFullSheetAnchorStats = {
   unmatched: number;
 };
 
-/** Studio LdrawId / .io 中 .dat 文件名（无后缀、小写） */
-export function normalizeLdrawPartToken(
-  partNum: string,
-  ldrawPartNum?: string | null
-): string {
-  return (ldrawPartNum ?? partNum).trim().toLowerCase().replace(/\.dat$/i, "");
-}
-
 function ldrawColorKey(ldrawPart: string, colorId: number): string {
   return `${ldrawPart}\t${colorId}`;
 }
@@ -37,18 +34,10 @@ export type AnchorIoItemsToMocFullSheetResult = {
   stats: MocFullSheetAnchorStats;
 };
 
-function partColorKey(partNum: string, colorId: number): string {
-  return `${partNum.trim().toLowerCase()}\t${colorId}`;
-}
-
-function mechColorKey(partNum: string, colorId: number): string {
-  return `${legoMechanicalPartKey(partNum)}\t${colorId}`;
-}
-
 function identityKey(item: Pick<ShortageResolveItem, "partNum" | "colorId" | "elementId">): string {
   const eid = item.elementId?.trim();
   if (eid) return `e:${eid}`;
-  return `p:${partColorKey(item.partNum, item.colorId)}`;
+  return `p:${bomPartColorKey(item.partNum, item.colorId)}`;
 }
 
 function sameIdentity(
@@ -86,10 +75,10 @@ function buildMocFullSheetIndexes(items: readonly ShortageResolveItem[]): MocFul
     const lc = ldrawColorKey(ldraw, item.colorId);
     if (!byLdrawColor.has(lc)) byLdrawColor.set(lc, item);
 
-    const pc = partColorKey(item.partNum, item.colorId);
+    const pc = bomPartColorKey(item.partNum, item.colorId);
     if (!byPartColor.has(pc)) byPartColor.set(pc, item);
 
-    const mc = mechColorKey(item.partNum, item.colorId);
+    const mc = bomMechColorKey(item.partNum, item.colorId);
     const mcList = byMechColor.get(mc) ?? [];
     mcList.push(item);
     byMechColor.set(mc, mcList);
@@ -133,7 +122,7 @@ function findMocAnchor(
     if (lcHit) return { moc: lcHit, method: "byLdrawColor" };
   }
 
-  const direct = indexes.byPartColor.get(partColorKey(io.partNum, io.colorId));
+  const direct = indexes.byPartColor.get(bomPartColorKey(io.partNum, io.colorId));
   if (direct) return { moc: direct, method: "byPartColor" };
 
   for (const moc of indexes.byPartColor.values()) {
@@ -146,7 +135,7 @@ function findMocAnchor(
   }
 
   for (const colorId of studioLdrawColorAliases(io.colorId)) {
-    const hits = indexes.byMechColor.get(mechColorKey(io.partNum, colorId));
+    const hits = indexes.byMechColor.get(bomMechColorKey(io.partNum, colorId));
     const rep = hits ? uniqueIdentityRepresentative(hits) : null;
     if (rep) return { moc: rep, method: "byMechPartColor" };
   }

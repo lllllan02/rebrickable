@@ -1,6 +1,4 @@
-import Database from "better-sqlite3";
-
-import { catalogDbPath } from "@/db/db-paths";
+import { getReadonlyCatalogSqlite } from "@/lib/catalog-readonly-sqlite";
 import { legoMechanicalPartKey } from "@/lib/lego-mechanical-part-key";
 import {
   normalizeStudioLdrawColorId,
@@ -11,20 +9,6 @@ import {
   studioLdrawColorAliases,
   type StudioIoElementLookup,
 } from "@/lib/studio-io-item-lookup";
-
-const globalForCatalog = globalThis as typeof globalThis & {
-  __studioIoCatalogSqlite?: Database.Database;
-};
-
-function getCatalogSqlite(): Database.Database {
-  if (!globalForCatalog.__studioIoCatalogSqlite) {
-    globalForCatalog.__studioIoCatalogSqlite = new Database(catalogDbPath(), {
-      readonly: true,
-      fileMustExist: true,
-    });
-  }
-  return globalForCatalog.__studioIoCatalogSqlite;
-}
 
 function partNumCandidates(partNum: string): string[] {
   const normalized = normalizeStudioLdrawPartNum(partNum.trim());
@@ -39,7 +23,7 @@ function queryElementIdsForPartLdrawColor(partNum: string, ldrawColorId: number)
 
   const partPh = partCandidates.map(() => "?").join(",");
   const colorPh = colorCandidates.map(() => "?").join(",");
-  const rows = getCatalogSqlite()
+  const rows = getReadonlyCatalogSqlite()
     .prepare(
       `SELECT element_id AS elementId FROM elements WHERE part_num IN (${partPh}) AND color_id IN (${colorPh})`
     )
@@ -51,7 +35,7 @@ function queryElementIdsForPartLdrawColor(partNum: string, ldrawColorId: number)
 function queryColorIdForItem(itemNo: string): number | null {
   const id = itemNo.trim();
   if (!id) return null;
-  const row = getCatalogSqlite()
+  const row = getReadonlyCatalogSqlite()
     .prepare(`SELECT color_id AS colorId FROM elements WHERE element_id = ? LIMIT 1`)
     .get(id) as { colorId: number } | undefined;
   return row?.colorId ?? null;
@@ -60,7 +44,7 @@ function queryColorIdForItem(itemNo: string): number | null {
 function queryPartNumForItem(itemNo: string): string | null {
   const id = itemNo.trim();
   if (!id) return null;
-  const row = getCatalogSqlite()
+  const row = getReadonlyCatalogSqlite()
     .prepare(`SELECT part_num AS partNum FROM elements WHERE element_id = ? LIMIT 1`)
     .get(id) as { partNum: string } | undefined;
   const part = row?.partNum?.trim();

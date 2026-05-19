@@ -63,7 +63,7 @@ function brickMatchesPlacementColor(
 }
 
 /** 从 refID 与 .dat 一致的砖行，建立 LEGO 材质色 → model.ldr 原始 LDraw 色。 */
-export function buildStudioMaterialToLdrawColorMap(
+function buildStudioMaterialToLdrawColorMap(
   placements: readonly StudioIoPlacement[],
   brickCatalog: ReadonlyMap<number, StudioLxfmlBrick>,
   elementByItemNo: ReadonlyMap<string, { colorId: number }>
@@ -83,7 +83,7 @@ export function buildStudioMaterialToLdrawColorMap(
   return map;
 }
 
-export function catalogBrickMatchesDatPart(brick: StudioLxfmlBrick, datPartNum: string): boolean {
+function catalogBrickMatchesDatPart(brick: StudioLxfmlBrick, datPartNum: string): boolean {
   return legoMechanicalPartKeysEquivalent(brick.designId, datPartNum);
 }
 
@@ -187,7 +187,7 @@ export function lxfmlBomCoversPlacementElement(
  * 用 model.lxfml 砖块目录 + elements 配色，为单块砖匹配 itemNos（ElementId）。
  * modelv2.ldr 的 brickRefId 与 lxfml Brick refID 常不一致，不能单靠 refID 取 itemNos。
  */
-export function findStudioItemNoForPlacement(
+function findStudioItemNoForPlacement(
   partNum: string,
   ldrawColorId: number,
   bricks: Iterable<StudioLxfmlBrick>,

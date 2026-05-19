@@ -278,7 +278,7 @@ function pickMainSection(sections: MpdSection[]): MpdSection {
 }
 
 /** 将 model.lxfml BOM 砖块转为 placement（每块定义砖 1 片，与 Studio 零件清单同源）。 */
-export function studioLxfmlBomBricksToPlacements(bricks: readonly StudioLxfmlBrick[]): StudioIoPlacement[] {
+function studioLxfmlBomBricksToPlacements(bricks: readonly StudioLxfmlBrick[]): StudioIoPlacement[] {
   return bricks.map((brick) => ({
     partNum: brick.designId,
     ldrawColorId: 0,
@@ -316,7 +316,7 @@ function needsSupplementFromLdrSteps(
   return true;
 }
 
-export type SupplementLxfmlBomFromLdrOptions = {
+type SupplementLxfmlBomFromLdrOptions = {
   /**
    * 主场景 LDR 展开砖表。当 SubModel Group 分步远少于主场景时（如 238538），
    * 用主场景统计 lxfml 未登记的 design+色，避免只补到 Group 子集。
@@ -366,7 +366,7 @@ function ldrPlacementAlreadyInLxfmlBom(
  * Studio 有时在 model.lxfml 零件清单漏登记 design，但 model.ldr 仍有该 .dat。
  * 对 lxfml 未覆盖的 design+色：主场景充足时用主场景片数，否则用各 SubModel 分步最大值。
  */
-export function supplementLxfmlBomFromLdrSteps(
+function supplementLxfmlBomFromLdrSteps(
   lxfmlBom: readonly StudioIoPlacement[],
   mainSteps: readonly StudioIoMainStep[],
   lxfmlBricks: readonly StudioLxfmlBrick[],
@@ -495,22 +495,6 @@ export function pickStudioIoBomPlacements(parsed: ParsedStudioIo): StudioIoPlace
   }
 
   return fromBom.length >= fromSteps.length ? fromBom : fromSteps;
-}
-
-/** 主场景内全部砖（展开子模型），供 BOM 对照，不依赖分步边界。 */
-export function collectStudioIoMainScenePlacements(
-  ldrText: string,
-  options?: ParseStudioIoOptions
-): StudioIoPlacement[] {
-  const brickCatalog = options?.brickCatalog;
-  const normalized = normalizeStudioLdrText(ldrText);
-  let sections = parseMpdSections(normalized);
-  if (sections.length === 0) {
-    sections = [{ name: "model.ldr", lines: normalized.split(/\r?\n/) }];
-  }
-  const sectionByName = buildSectionByName(sections);
-  const main = pickMainSection(sections);
-  return expandPlacements(allPlacementsInSection(main, brickCatalog), sectionByName, brickCatalog);
 }
 
 function allPlacementsInSection(
