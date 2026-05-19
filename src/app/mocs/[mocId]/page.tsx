@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { and, asc, eq } from "drizzle-orm";
 
 import { listIoSplitPlanGroupsForMoc } from "@/app/mocs/io-batch-parts-sheet-actions";
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import { getUserDb } from "@/db/client";
@@ -93,9 +93,9 @@ export default async function MocDetailPage({ params }: Props) {
     : null;
   const gobricksGdsPriceCny = sheet.ok ? sheet.gobricksGdsPriceCny : null;
 
-  let initialFull: InitialMocSheetFromServer | null = null;
-  let initialShortage: InitialMocSheetFromServer | null = null;
-  let initialFulfillment: InitialMocSheetFromServer | null = null;
+  let initialFull: InitialBuildSheetFromServer | null = null;
+  let initialShortage: InitialBuildSheetFromServer | null = null;
+  let initialFulfillment: InitialBuildSheetFromServer | null = null;
   let initialMocLoadError: string | null = null;
   if (sheet.ok) {
     if (sheet.full) {

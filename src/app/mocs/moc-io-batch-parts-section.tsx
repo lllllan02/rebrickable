@@ -1,6 +1,6 @@
 "use client";
 
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
@@ -8,9 +8,9 @@ type Props = {
   mocId: string;
   batchId: number;
   batchLabel: string;
-  initialFull: InitialMocSheetFromServer | null;
-  initialShortage: InitialMocSheetFromServer | null;
-  initialFulfillment: InitialMocSheetFromServer | null;
+  initialFull: InitialBuildSheetFromServer | null;
+  initialShortage: InitialBuildSheetFromServer | null;
+  initialFulfillment: InitialBuildSheetFromServer | null;
   initialMocLoadError: string | null;
   initialShortageClearedAt: string | null;
   exportDisplayName: string;

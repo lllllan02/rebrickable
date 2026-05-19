@@ -428,8 +428,6 @@ function SheetReplaceFourQuadrants({
       replaceMeta.originalGobricksCaptionEn,
       replaceMeta.originalColorName
     ) || "—";
-  const ogc = replaceMeta.originalGobricksColorId?.trim();
-  const oglc = replaceMeta.originalGobricksLegoColorId?.trim();
   const origGobricksColorLine =
     ocid != null
       ? formatGobricksColorLine({

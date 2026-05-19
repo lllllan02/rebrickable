@@ -28,7 +28,6 @@ import { formatIoSplitConfigSummary, parseIoSplitConfigJson } from "@/lib/studio
 
 import type { BuildSheetBranchLoaded, InitialBuildSheetFromServer, LoadBuildPartsSheetResult } from "./moc-parts-sheet-actions";
 
-const MAX_SUBJECT_ID_LEN = 128;
 const MAX_ITEMS = 100_000;
 
 function batchKey(batchId: number) {
@@ -160,7 +159,6 @@ export async function listIoSplitPlanGroupsForMoc(mocId: string): Promise<IoSpli
 
   if (rows.length === 0) return [];
 
-  const attIds = [...new Set(rows.map((r) => r.attachmentId))];
   const attRows = await db
     .select({
       id: buildAttachments.id,

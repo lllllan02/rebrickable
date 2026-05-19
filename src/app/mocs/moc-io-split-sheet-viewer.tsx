@@ -114,12 +114,12 @@ export function MocIoSplitSheetViewer({
   onSheetLoadedRef.current = onSheetLoaded;
   const lastNotifyKeyRef = useRef<string | null>(null);
 
-  const notifyLoaded = (next: IoSplitSheetState | null, err: string | null) => {
+  const notifyLoaded = useCallback((next: IoSplitSheetState | null, err: string | null) => {
     const token = `${loadKey}\0${next?.savedAt ?? ""}\0${next?.items.length ?? 0}\0${err ?? ""}`;
     if (lastNotifyKeyRef.current === token) return;
     lastNotifyKeyRef.current = token;
     onSheetLoadedRef.current?.(next, err);
-  };
+  }, [loadKey]);
 
   const fetchSheet = useCallback(async (): Promise<IoSplitSheetLoadResult> => {
     const batchIds = batchIdsKey
@@ -150,7 +150,7 @@ export function MocIoSplitSheetViewer({
       setError(result.error);
       notifyLoaded(getIoSplitSheetFromCache(loadKey) ?? null, result.error);
     },
-    [loadKey],
+    [loadKey, notifyLoaded],
   );
 
   const prevLoadKeyRef = useRef(loadKey);
@@ -185,7 +185,7 @@ export function MocIoSplitSheetViewer({
     return () => {
       cancelled = true;
     };
-  }, [applyLoadResult, fetchSheet, loadKey]);
+  }, [applyLoadResult, fetchSheet, loadKey, notifyLoaded]);
 
   const invalidateRelatedCaches = useCallback(() => {
     if (mode === "plan-merged-shortage") {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import {
   fetchIoBatchFulfillmentSheetAction,
@@ -36,9 +36,9 @@ const MOC_PARTS_TAB_STORAGE_PREFIX = "rb:mocPartsTab:v1:";
 function mocTabHasData(
   tab: ListTab,
   ctx: {
-    initialFull: InitialMocSheetFromServer | null;
-    initialFulfillment: InitialMocSheetFromServer | null;
-    initialShortage: InitialMocSheetFromServer | null;
+    initialFull: InitialBuildSheetFromServer | null;
+    initialFulfillment: InitialBuildSheetFromServer | null;
+    initialShortage: InitialBuildSheetFromServer | null;
     hasOfficial: boolean;
   },
 ): boolean {
@@ -96,9 +96,9 @@ function scheduleScrollToElementById(elementId: string) {
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
-  initialFull: InitialMocSheetFromServer | null;
-  initialShortage: InitialMocSheetFromServer | null;
-  initialFulfillment: InitialMocSheetFromServer | null;
+  initialFull: InitialBuildSheetFromServer | null;
+  initialShortage: InitialBuildSheetFromServer | null;
+  initialFulfillment: InitialBuildSheetFromServer | null;
   initialMocLoadError: string | null;
   initialShortageClearedAt?: string | null;
   officialInventory?: {
@@ -130,9 +130,9 @@ function IoBatchEmbeddedList({
   ioBatchId: number;
   exportDisplayName: string;
   parentSubjectOwned: boolean;
-  initialFull: InitialMocSheetFromServer | null;
-  initialShortage: InitialMocSheetFromServer | null;
-  initialFulfillment: InitialMocSheetFromServer | null;
+  initialFull: InitialBuildSheetFromServer | null;
+  initialShortage: InitialBuildSheetFromServer | null;
+  initialFulfillment: InitialBuildSheetFromServer | null;
 }) {
   const [listTab, setListTab] = useState<IoBatchListTab>(() => {
     if (initialFull) return "full";
@@ -141,7 +141,7 @@ function IoBatchEmbeddedList({
     return "full";
   });
 
-  const toDisplayFulfillment = useCallback((sheet: InitialMocSheetFromServer | null) => {
+  const toDisplayFulfillment = useCallback((sheet: InitialBuildSheetFromServer | null) => {
     if (!sheet) return null;
     const items = fulfillmentItemsForDisplay(sheet.items);
     if (!items.length) return null;

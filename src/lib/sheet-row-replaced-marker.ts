@@ -175,7 +175,7 @@ export type ParsedSheetRowReplaceMeta = {
   originalGobricksUnitPrice: string | null;
 };
 
-function payloadToParsed(d: EncodedPayload, hasMarker: true): ParsedSheetRowReplaceMeta {
+function payloadToParsed(d: EncodedPayload): ParsedSheetRowReplaceMeta {
   return {
     hasMarker: true,
     originalPartNum: d.p,
@@ -216,7 +216,7 @@ export function parseSheetRowReplaceMeta(rest: string): ParsedSheetRowReplaceMet
   const enc = rest.match(/‖sheetRowReplaced:([A-Za-z0-9_-]+)‖/);
   if (enc?.[1]) {
     const d = decodeReplacePayload(enc[1]);
-    if (d) return payloadToParsed(d, true);
+    if (d) return payloadToParsed(d);
     return {
       ...empty,
       hasMarker: true,

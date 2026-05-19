@@ -11,7 +11,7 @@ import { MocIoSplitPlanDeleteButton } from "@/app/mocs/moc-io-split-plan-delete"
 import { MocIoSplitSheetViewer, type IoSplitSheetState } from "@/app/mocs/moc-io-split-sheet-viewer";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import {
@@ -38,9 +38,9 @@ type Props = {
   subjectId: string;
   exportDisplayName: string;
   parentSubjectOwned: boolean;
-  initialFull: InitialMocSheetFromServer | null;
-  initialShortage: InitialMocSheetFromServer | null;
-  initialFulfillment: InitialMocSheetFromServer | null;
+  initialFull: InitialBuildSheetFromServer | null;
+  initialShortage: InitialBuildSheetFromServer | null;
+  initialFulfillment: InitialBuildSheetFromServer | null;
   officialInventory: {
     items: import("@/lib/shortage-resolve-types").ShortageResolveItem[];
     inventoryId: number;
@@ -245,8 +245,8 @@ export function MocPartsSheetBrowser({
 
   /** 预取当前分包高砖可购零件（每包仅一次） */
   useEffect(() => {
-    if (primary.kind !== "io" || ioSecondary?.kind !== "batch") return;
-    const batchId = ioSecondary.batchId;
+    if (primary.kind !== "io" || ioSecondaryBatchId == null) return;
+    const batchId = ioSecondaryBatchId;
     if (prefetchedBatchIdsRef.current.has(batchId)) return;
     prefetchedBatchIdsRef.current.add(batchId);
 

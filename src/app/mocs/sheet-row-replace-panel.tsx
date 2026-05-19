@@ -315,7 +315,7 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
       item.colorName
     );
     return cg ? [cg] : [];
-  }, [item.partNum, item.gdsItemId, item.gdsCaption, item.gdsCaptionEn, item.gdsPicture]);
+  }, [item.colorName, item.partNum, item.gdsItemId, item.gdsCaption, item.gdsCaptionEn, item.gdsPicture]);
 
   /** 选高砖色时对照：配货表本行对应的乐高颜色名（已更换行优先用标记里存档的原色） */
   const legoReferenceColorLine = useMemo(() => {

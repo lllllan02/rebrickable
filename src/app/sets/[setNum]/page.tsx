@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq, isNotNull, min, ne } from "drizzle-orm";
 
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadBuildPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailEditorial, type SetDetailOfficialMeta } from "@/app/mocs/moc-detail-editorial";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
@@ -191,8 +191,8 @@ export default async function SetDetailPage({ params }: Props) {
     }))
   );
 
-  let initialShortage: InitialMocSheetFromServer | null = null;
-  let initialFulfillment: InitialMocSheetFromServer | null = null;
+  let initialShortage: InitialBuildSheetFromServer | null = null;
+  let initialFulfillment: InitialBuildSheetFromServer | null = null;
   let initialSheetLoadError: string | null = null;
   if (sheet.ok) {
     if (sheet.shortage) {

@@ -10,7 +10,7 @@ import { downloadPartsSheetXlsx } from "@/lib/parts-sheet-xlsx-download";
 
 import { saveIoBatchPartsSheetToDb } from "@/app/mocs/io-batch-parts-sheet-actions";
 import {
-  type InitialMocSheetFromServer,
+  type InitialBuildSheetFromServer,
   saveBuildPartsSheetToDb,
 } from "./moc-parts-sheet-actions";
 import { syncGobricksShortageForSubjectWithModifiedConfirm } from "./gobricks-shortage-sync-client";
@@ -98,11 +98,11 @@ type PartsSheetImportProps = {
   /** 详情页嵌入时：锁定保存到该主体 ID（MOC 数字 ID 或套装 set_num） */
   requestedLoadMocId?: string;
   /** 非详情嵌页：初始化预览数据（若有） */
-  initialFullSheet?: InitialMocSheetFromServer | null;
+  initialFullSheet?: InitialBuildSheetFromServer | null;
   /** 详情页：已存缺件表 */
-  initialShortageSheet?: InitialMocSheetFromServer | null;
+  initialShortageSheet?: InitialBuildSheetFromServer | null;
   /** 详情页：高砖 itemList 配货表 */
-  initialFulfillmentSheet?: InitialMocSheetFromServer | null;
+  initialFulfillmentSheet?: InitialBuildSheetFromServer | null;
   /** 详情页：服务端「标记为不缺」时间戳（ISO），无则 null */
   initialShortageClearedAt?: string | null;
   initialMocLoadError?: string | null;
@@ -132,10 +132,8 @@ export function PartsSheetImport({
   const [items, setItems] = useState<ShortageRow[] | null>(null);
   const [skippedHeader, setSkippedHeader] = useState(false);
   const [fullItems, setFullItems] = useState<ShortageRow[] | null>(null);
-  const [fullSkippedHeader, setFullSkippedHeader] = useState(false);
   const [fullFileName, setFullFileName] = useState<string | null>(null);
   const [shortageItems, setShortageItems] = useState<ShortageRow[] | null>(null);
-  const [shortageSkippedHeader, setShortageSkippedHeader] = useState(false);
   const [shortageFileName, setShortageFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lineNumber, setLineNumber] = useState<number | null>(null);
@@ -361,10 +359,8 @@ export function PartsSheetImport({
         const rows = withRowIds(result.items);
         if (mocDetailEmbed) {
           if (kind === "full") {
-            setFullSkippedHeader(result.skippedHeader);
             setFullItems(rows);
           } else {
-            setShortageSkippedHeader(result.skippedHeader);
             setShortageItems(rows);
           }
           const mid = (requestedLoadMocId ?? "").trim();
@@ -522,7 +518,6 @@ export function PartsSheetImport({
       clearedByEditRef.current = false;
       setError(null);
       if (!noFullSheetForSet && initialFullSheet && initialFullSheet.subjectId === qid) {
-        setFullSkippedHeader(initialFullSheet.skippedHeader);
         setFullItems(withRowIds(initialFullSheet.items));
         setFullFileName(
           `${buildPartsSheetExportStem({
@@ -537,7 +532,6 @@ export function PartsSheetImport({
         setFullFileName(null);
       }
       if (initialShortageSheet && initialShortageSheet.subjectId === qid) {
-        setShortageSkippedHeader(initialShortageSheet.skippedHeader);
         setShortageItems(withRowIds(initialShortageSheet.items));
         setShortageFileName(
           `${buildPartsSheetExportStem({

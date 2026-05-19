@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 
-import type { InitialMocSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 import { buildPartsSheetExportStem } from "@/lib/parts-sheet-export-filename";
@@ -33,9 +33,9 @@ type Props = {
   /** 用于导出文件名中间段；可与资料页显示名一致 */
   exportDisplayName: string;
   listTab: "full" | "shortage" | "fulfillment";
-  initialFull?: InitialMocSheetFromServer | null;
-  initialShortage?: InitialMocSheetFromServer | null;
-  initialFulfillment?: InitialMocSheetFromServer | null;
+  initialFull?: InitialBuildSheetFromServer | null;
+  initialShortage?: InitialBuildSheetFromServer | null;
+  initialFulfillment?: InitialBuildSheetFromServer | null;
   /** 覆盖从 initial* 解析的分支数据（如 Studio 分包内嵌查看） */
   activeSheet?: PartsSheetExportSource | null;
   /** 覆盖默认文件名主体 */
@@ -43,7 +43,7 @@ type Props = {
 };
 
 function toExportSource(
-  sheet: InitialMocSheetFromServer | PartsSheetExportSource | null | undefined,
+  sheet: InitialBuildSheetFromServer | PartsSheetExportSource | null | undefined,
 ): PartsSheetExportSource | null {
   if (!sheet?.items.length) return null;
   return {

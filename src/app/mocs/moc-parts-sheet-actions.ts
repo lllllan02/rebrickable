@@ -83,17 +83,12 @@ export type InitialBuildSheetFromServer = {
   savedAt: string;
 };
 
-/** @deprecated 字段请用 {@link InitialBuildSheetFromServer.subjectId} */
-export type InitialMocSheetFromServer = InitialBuildSheetFromServer;
-
 export type BuildSheetBranchLoaded = {
   skippedHeader: boolean;
   items: ShortageResolveItem[];
   savedAt: string;
   totalPartQty: number;
 };
-
-export type MocSheetBranchLoaded = BuildSheetBranchLoaded;
 
 export type LoadBuildPartsSheetResult =
   | {
