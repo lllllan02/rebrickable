@@ -9,7 +9,6 @@ const trailingLinks = [
   { href: "/mocs", label: "MOCs" },
   { href: "/sets", label: "Sets" },
   { href: "/parts", label: "Parts" },
-  { href: "/settings", label: "设置" },
 ] as const;
 
 export function SiteNav() {
