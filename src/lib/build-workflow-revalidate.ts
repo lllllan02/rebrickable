@@ -1,10 +1,11 @@
 import { revalidatePath } from "next/cache";
 
 import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
-import type { BuildSubjectKind } from "@/lib/build-subject";
+import type { WorkflowSubjectKind } from "@/lib/build-workflow-stage";
 
-export function revalidateFavoritePaths(kind: BuildSubjectKind, subjectId: string): void {
+export function revalidateWorkflowPaths(kind: WorkflowSubjectKind, subjectId: string): void {
   revalidatePath("/");
+  revalidatePath("/settings");
   revalidatePath(buildSubjectListPath(kind));
   revalidatePath(buildSubjectDetailPath(kind, subjectId));
 }

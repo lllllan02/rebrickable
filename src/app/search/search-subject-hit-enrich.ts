@@ -2,13 +2,14 @@ import { and, asc, eq, inArray, or } from "drizzle-orm";
 
 import { getUserDb } from "@/db/client";
 import {
-  buildFavoriteSubjects,
   buildImages,
   buildOwnedSubjects,
   buildProfiles,
   buildSavedPartsSheets,
 } from "@/db/schema";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
+import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
+import type { BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 
@@ -24,7 +25,7 @@ export function subjectIdFromListHref(href: string, segment: "mocs" | "sets"): s
   }
 }
 
-/** 为搜索结果中的 MOC/套装行补齐与 `/mocs` 列表相同的数据源（零件表、资料、封面、拥有/收藏） */
+/** 为搜索结果中的 MOC/套装行补齐与 `/mocs` 列表相同的数据源（零件表、资料、封面、进度） */
 export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[]) {
   const db = getUserDb();
   const sheetByKindId = new Map<
@@ -39,10 +40,8 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
       gobricksGdsPriceCny: number | null;
     }
   >();
-  const favoriteMocIds = new Set<string>();
-  const favoriteSetNums = new Set<string>();
-  const ownedMocIds = new Set<string>();
-  const ownedSetNums = new Set<string>();
+  const mocWorkflowStage = new Map<string, BuildWorkflowStage>();
+  const setWorkflowStage = new Map<string, BuildWorkflowStage>();
   const mocProfileById = new Map<
     string,
     { displayName: string; tags: string[]; hasInstructionsPdf: boolean; hasIoSource: boolean }
@@ -55,10 +54,8 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
   if (mocIds.length === 0 && setNums.length === 0) {
     return {
       sheetByKindId,
-      favoriteMocIds,
-      favoriteSetNums,
-      ownedMocIds,
-      ownedSetNums,
+      mocWorkflowStage,
+      setWorkflowStage,
       mocProfileById,
       setProfileByNum,
       mocCoverStored,
@@ -78,17 +75,6 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
       and(eq(buildSavedPartsSheets.subjectKind, BUILD_SUBJECT_SET), inArray(buildSavedPartsSheets.subjectId, setNums)),
     );
   }
-  const favOrs = [];
-  if (mocIds.length > 0) {
-    favOrs.push(
-      and(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_MOC), inArray(buildFavoriteSubjects.subjectId, mocIds)),
-    );
-  }
-  if (setNums.length > 0) {
-    favOrs.push(
-      and(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET), inArray(buildFavoriteSubjects.subjectId, setNums)),
-    );
-  }
   const ownOrs = [];
   if (mocIds.length > 0) {
     ownOrs.push(
@@ -101,17 +87,8 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
     );
   }
 
-  const [
-    sheetRows,
-    favRows,
-    ownRows,
-    mocProfRows,
-    setProfRows,
-    mocImgRows,
-    setImgRows,
-  ] = await Promise.all([
+  const [sheetRows, ownRows, mocProfRows, setProfRows, mocImgRows, setImgRows] = await Promise.all([
     sheetOrs.length > 0 ? db.select().from(buildSavedPartsSheets).where(or(...sheetOrs)) : Promise.resolve([]),
-    favOrs.length > 0 ? db.select().from(buildFavoriteSubjects).where(or(...favOrs)) : Promise.resolve([]),
     ownOrs.length > 0 ? db.select().from(buildOwnedSubjects).where(or(...ownOrs)) : Promise.resolve([]),
     mocIds.length > 0
       ? db
@@ -167,13 +144,11 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
           : null,
     });
   }
-  for (const f of favRows as { subjectKind: string; subjectId: string }[]) {
-    if (f.subjectKind === BUILD_SUBJECT_MOC) favoriteMocIds.add(f.subjectId);
-    else if (f.subjectKind === BUILD_SUBJECT_SET) favoriteSetNums.add(f.subjectId);
-  }
-  for (const o of ownRows as { subjectKind: string; subjectId: string }[]) {
-    if (o.subjectKind === BUILD_SUBJECT_MOC) ownedMocIds.add(o.subjectId);
-    else if (o.subjectKind === BUILD_SUBJECT_SET) ownedSetNums.add(o.subjectId);
+  for (const o of ownRows as { subjectKind: string; subjectId: string; workflowStage: string }[]) {
+    const stage = workflowStageFromRow(o);
+    if (!stage) continue;
+    if (o.subjectKind === BUILD_SUBJECT_MOC) mocWorkflowStage.set(o.subjectId, stage);
+    else if (o.subjectKind === BUILD_SUBJECT_SET) setWorkflowStage.set(o.subjectId, stage);
   }
   for (const p of mocProfRows as (typeof buildProfiles.$inferSelect)[]) {
     mocProfileById.set(p.subjectId, {
@@ -198,10 +173,8 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
 
   return {
     sheetByKindId,
-    favoriteMocIds,
-    favoriteSetNums,
-    ownedMocIds,
-    ownedSetNums,
+    mocWorkflowStage,
+    setWorkflowStage,
     mocProfileById,
     setProfileByNum,
     mocCoverStored,

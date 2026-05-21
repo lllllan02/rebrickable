@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 
-import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
-import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { MocAttachmentsPanel, type MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import { MocDeleteControl } from "@/app/mocs/moc-delete-control";
 import { MocImageCarousel, type MocGalleryImage } from "@/app/mocs/moc-image-carousel";
@@ -39,10 +37,6 @@ type Props = {
   gobricksGdsPriceCny?: number | null;
   /** 仅套装：官方盒图 / 占位与目录元数据，与 MOC 主面板同栅格展示 */
   setOfficial?: SetDetailOfficialMeta | null;
-  /** 是否在「我的拥有」中标记（本地 SQLite） */
-  initialOwned: boolean;
-  /** 是否加入「收藏」（本地 SQLite） */
-  initialFavorite: boolean;
 };
 
 export function MocDetailEditorial({
@@ -55,8 +49,6 @@ export function MocDetailEditorial({
   partTotalQty,
   gobricksGdsPriceCny = null,
   setOfficial = null,
-  initialOwned,
-  initialFavorite,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const rbHref = ui.rebrickableUrl(subjectId);
@@ -104,13 +96,6 @@ export function MocDetailEditorial({
             initialTags={initialTags}
             partTotalQty={partTotalQty}
             gobricksGdsPriceCny={gobricksGdsPriceCny}
-            sidebarTitleAside={
-              <>
-                <span className="sr-only">拥有与收藏</span>
-                <BuildOwnedToggle subjectKind={subjectKind} subjectId={subjectId} initialOwned={initialOwned} />
-                <BuildFavoriteToggle subjectKind={subjectKind} subjectId={subjectId} initialFavorite={initialFavorite} />
-              </>
-            }
           />
 
           {o ? (

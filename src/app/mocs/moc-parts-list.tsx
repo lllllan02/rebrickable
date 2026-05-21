@@ -857,8 +857,8 @@ function LegoCatalogDetailBlock({
         ) : null}
         {parentSubjectOwned ? (
           <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">拥有</dt>
-            <dd className="mt-0.5 text-[var(--text)]">本 MOC / 套装已在「我的拥有」中标记。</dd>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">完成</dt>
+            <dd className="mt-0.5 text-[var(--text)]">拼搭进度为「完成」。</dd>
           </div>
         ) : null}
       </dl>

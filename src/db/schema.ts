@@ -285,19 +285,24 @@ export const buildAttachments = sqliteTable(
   (t) => [index("build_attachments_subject_idx").on(t.subjectKind, t.subjectId)]
 );
 
-/** 用户标记「拥有」的套装 / MOC / 零件（与是否已存零件表无关） */
+/** 用户拼搭进度（还原 / 待采 / 拥有）；仅 MOC / 套装 */
 export const buildOwnedSubjects = sqliteTable(
   "build_owned_subjects",
   {
     subjectKind: text("subject_kind").notNull(),
     subjectId: text("subject_id").notNull(),
+    /** collected | replicate | purchase | complete */
+    workflowStage: text("workflow_stage").notNull(),
     markedAt: text("marked_at").notNull(),
-    /** 散装零件数量；套装 / MOC 行固定为 1，不参与合计逻辑 */
-    quantity: integer("quantity").notNull().default(1),
+    collectedAt: text("collected_at"),
+    replicateAt: text("replicate_at"),
+    purchaseAt: text("purchase_at"),
+    completeAt: text("complete_at"),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),
     index("build_owned_kind_idx").on(t.subjectKind),
+    index("build_owned_stage_idx").on(t.workflowStage),
   ]
 );
 

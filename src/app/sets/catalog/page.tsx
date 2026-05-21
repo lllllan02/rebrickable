@@ -15,7 +15,7 @@ export default async function SetsCatalogRedirectPage({ searchParams }: Props) {
   if (q) u.set("q", q);
   if (page) u.set("page", page);
   if (theme) u.set("theme", theme);
-  if (mark === "owned" || mark === "favorite") u.set("mark", mark);
+  if (mark && mark !== "all") u.set("mark", mark);
   const qs = u.toString();
   redirect(qs ? `/sets?${qs}` : "/sets");
 }

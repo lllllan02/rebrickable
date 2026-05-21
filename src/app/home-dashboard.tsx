@@ -2,10 +2,8 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
 import { HomeListStrip } from "@/app/home-list-strip";
-import { HomeMyFavoriteTabs, type HomeMyFavoriteDefaultTab } from "@/app/home-my-favorite-tabs";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import {
-  buildFavoriteSubjects,
   buildImages,
   buildOwnedSubjects,
   buildProfiles,
@@ -17,6 +15,7 @@ import {
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
+import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
 import { mocListHref } from "@/lib/moc-list-href";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
@@ -25,12 +24,6 @@ export const dynamic = "force-dynamic";
 
 const HOME_PREVIEW_MAX = 4;
 const PREVIEW_SUBJECT_LI = "min-w-0";
-
-function pickHomeDefaultTab(ownedCount: number, favCount: number): HomeMyFavoriteDefaultTab {
-  if (ownedCount > 0) return "my";
-  if (favCount > 0) return "favorite";
-  return "my";
-}
 
 type SheetMeta = {
   totalPartQty: number;
@@ -42,37 +35,24 @@ type SheetMeta = {
   gobricksGdsPriceCny: number | null;
 };
 
-function emptyTabHint(kind: "moc" | "set", tab: "my" | "favorite"): string {
-  if (kind === "moc") {
-    return tab === "my"
-      ? "暂无已拥有的 MOC。在 MOC 详情页点击「+」即可标记拥有；更多条目请用顶部搜索或 MOC 目录（已拥有筛选仅含已存零件表）。"
-      : "暂无收藏的 MOC。在详情页点击星标即可收藏；MOC 目录中的「已收藏」筛选仅含已保存零件表的条目。";
-  }
-  return tab === "my"
-    ? "暂无已拥有的套装。在套装详情或官方目录卡片上标记拥有即可。"
-    : "暂无收藏的套装。在套装详情或官方目录卡片上加入收藏即可。";
+function emptyWorkflowHint(kind: "moc" | "set"): string {
+  return kind === "moc"
+    ? "暂无进度中的 MOC。在详情页进度条上点击「收录」或后续阶段即可加入。"
+    : "暂无进度中的套装。在详情页或官方目录卡片上设置进度即可。";
 }
 
-/** MOC：我的 / 收藏 两个 Tab */
+/** MOC：拼搭进度预览 */
 export async function HomeMocBlock() {
   const userDb = getUserDb();
 
-  const [ownedAll, favAll] = await Promise.all([
-    userDb
-      .select()
-      .from(buildOwnedSubjects)
-      .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_MOC))
-      .orderBy(desc(buildOwnedSubjects.markedAt)),
-    userDb
-      .select()
-      .from(buildFavoriteSubjects)
-      .where(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_MOC))
-      .orderBy(desc(buildFavoriteSubjects.markedAt)),
-  ]);
+  const workflowAll = await userDb
+    .select()
+    .from(buildOwnedSubjects)
+    .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_MOC))
+    .orderBy(desc(buildOwnedSubjects.markedAt));
 
-  const ownedPreview = ownedAll.slice(0, HOME_PREVIEW_MAX);
-  const favPreview = favAll.slice(0, HOME_PREVIEW_MAX);
-  const enrichIds = [...new Set([...ownedPreview.map((r) => r.subjectId), ...favPreview.map((r) => r.subjectId)])];
+  const workflowPreview = workflowAll.slice(0, HOME_PREVIEW_MAX);
+  const enrichIds = workflowPreview.map((r) => r.subjectId);
 
   const mocProfileById = new Map<
     string,
@@ -80,8 +60,6 @@ export async function HomeMocBlock() {
   >();
   const mocCoverStored = new Map<string, string>();
   const sheetByKindId = new Map<string, SheetMeta>();
-  const mocMarkedAt = new Map<string, string>();
-  for (const r of favAll) mocMarkedAt.set(r.subjectId, r.markedAt);
 
   if (enrichIds.length > 0) {
     const [profRows, imgRows, sheetRows] = await Promise.all([
@@ -130,130 +108,6 @@ export async function HomeMocBlock() {
     }
   }
 
-  const ownedPreviewIds = ownedPreview.map((r) => r.subjectId);
-  const favPreviewIds = favPreview.map((r) => r.subjectId);
-  const favoriteForOwnedPreview = new Set<string>();
-  const ownedForFavPreview = new Set<string>();
-  if (ownedPreviewIds.length > 0) {
-    const fr = await userDb
-      .select()
-      .from(buildFavoriteSubjects)
-      .where(
-        and(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_MOC), inArray(buildFavoriteSubjects.subjectId, ownedPreviewIds)),
-      );
-    for (const r of fr) favoriteForOwnedPreview.add(r.subjectId);
-  }
-  if (favPreviewIds.length > 0) {
-    const orows = await userDb
-      .select()
-      .from(buildOwnedSubjects)
-      .where(and(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_MOC), inArray(buildOwnedSubjects.subjectId, favPreviewIds)));
-    for (const r of orows) ownedForFavPreview.add(r.subjectId);
-  }
-
-  const myPanel =
-    ownedAll.length > 0 ? (
-      <HomeListStrip
-        heading="MOC"
-        total={ownedAll.length}
-        moreHref={mocListHref({ mark: "owned" })}
-        moreLabel="MOC 目录 · 已拥有（仅已存零件表）"
-        previewCap={HOME_PREVIEW_MAX}
-        hideCategoryTitle
-      >
-        {ownedPreview.map((r) => {
-          const prof = mocProfileById.get(r.subjectId);
-          const displayName = prof?.displayName?.trim() ?? "";
-          const title = displayName || `MOC ${r.subjectId}`;
-          const tags = prof?.tags ?? [];
-          const stored = mocCoverStored.get(r.subjectId);
-          const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.subjectId, stored) : null;
-          const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_MOC, r.subjectId);
-          const sheet = sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${r.subjectId}`);
-          const totalPartQty = sheet?.totalPartQty ?? 0;
-          const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
-          return (
-            <SavedSubjectListRow
-              key={`moc-my-${r.subjectId}`}
-              className={PREVIEW_SUBJECT_LI}
-              kind={BUILD_SUBJECT_MOC}
-              subjectId={r.subjectId}
-              detailHref={detailHref}
-              title={title}
-              coverUrl={uploadCoverUrl}
-              tags={tags}
-              mocTagHref={(tag) => mocListHref({ tag })}
-              totalPartQty={totalPartQty}
-              shortageLineCount={sheet?.shortageLineCount ?? null}
-              shortageTotalQty={sheet?.shortageTotalQty ?? null}
-              shortageClearedAt={sheet?.shortageClearedAt ?? null}
-              gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
-              gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
-              updatedAtIso={updatedAtIso}
-              owned={true}
-              favorite={favoriteForOwnedPreview.has(r.subjectId)}
-              showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
-              showSourceBadge={Boolean(prof?.hasIoSource)}
-            />
-          );
-        })}
-      </HomeListStrip>
-    ) : (
-      <p className="text-sm text-[var(--muted)]">{emptyTabHint("moc", "my")}</p>
-    );
-
-  const favoritePanel =
-    favAll.length > 0 ? (
-      <HomeListStrip
-        heading="MOC"
-        total={favAll.length}
-        moreHref={mocListHref({ mark: "favorite" })}
-        moreLabel="MOC 目录 · 已收藏（仅已存零件表）"
-        previewCap={HOME_PREVIEW_MAX}
-        hideCategoryTitle
-      >
-        {favPreview.map((r) => {
-          const prof = mocProfileById.get(r.subjectId);
-          const displayName = prof?.displayName?.trim() ?? "";
-          const title = displayName || `MOC ${r.subjectId}`;
-          const tags = prof?.tags ?? [];
-          const stored = mocCoverStored.get(r.subjectId);
-          const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.subjectId, stored) : null;
-          const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_MOC, r.subjectId);
-          const sheet = sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${r.subjectId}`);
-          const totalPartQty = sheet?.totalPartQty ?? 0;
-          const favAt = mocMarkedAt.get(r.subjectId) ?? r.markedAt;
-          const updatedAtIso = sheet?.updatedAt ?? favAt;
-          return (
-            <SavedSubjectListRow
-              key={`moc-fav-${r.subjectId}`}
-              className={PREVIEW_SUBJECT_LI}
-              kind={BUILD_SUBJECT_MOC}
-              subjectId={r.subjectId}
-              detailHref={detailHref}
-              title={title}
-              coverUrl={uploadCoverUrl}
-              tags={tags}
-              mocTagHref={(tag) => mocListHref({ tag })}
-              totalPartQty={totalPartQty}
-              shortageLineCount={sheet?.shortageLineCount ?? null}
-              shortageTotalQty={sheet?.shortageTotalQty ?? null}
-              shortageClearedAt={sheet?.shortageClearedAt ?? null}
-              gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
-              gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
-              updatedAtIso={updatedAtIso}
-              owned={ownedForFavPreview.has(r.subjectId)}
-              favorite={true}
-              showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
-              showSourceBadge={Boolean(prof?.hasIoSource)}
-            />
-          );
-        })}
-      </HomeListStrip>
-    ) : (
-      <p className="text-sm text-[var(--muted)]">{emptyTabHint("moc", "favorite")}</p>
-    );
-
   return (
     <section className="section-panel" aria-labelledby="home-moc-block-heading">
       <header className="mb-4">
@@ -262,43 +116,75 @@ export async function HomeMocBlock() {
           MOC
         </h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          每类 Tab 内最多展示 {HOME_PREVIEW_MAX} 条。MOC 目录的「已拥有 / 已收藏」筛选仅含
-          <strong className="font-medium text-[var(--text)]">已保存零件表</strong> 的条目；此处列表为全部本地标记。
+          最多展示 {HOME_PREVIEW_MAX} 条；进度为收录 → 复刻 → 购入 → 完成（收录在列表中不单独标出）。
         </p>
-        {ownedAll.length === 0 && favAll.length > 0 ? (
-          <p className="mt-1 text-xs text-[var(--muted)]">暂无已拥有的 MOC，已默认打开「收藏」Tab。</p>
-        ) : null}
       </header>
-      <HomeMyFavoriteTabs
-        defaultTab={pickHomeDefaultTab(ownedAll.length, favAll.length)}
-        myPanel={myPanel}
-        favoritePanel={favoritePanel}
-      />
+      {workflowAll.length > 0 ? (
+        <HomeListStrip
+          heading="MOC"
+          total={workflowAll.length}
+          moreHref="/mocs"
+          moreLabel="MOC 目录（已存零件表）"
+          previewCap={HOME_PREVIEW_MAX}
+          hideCategoryTitle
+        >
+          {workflowPreview.map((r) => {
+            const workflowStage = workflowStageFromRow(r);
+            const prof = mocProfileById.get(r.subjectId);
+            const displayName = prof?.displayName?.trim() ?? "";
+            const title = displayName || `MOC ${r.subjectId}`;
+            const tags = prof?.tags ?? [];
+            const stored = mocCoverStored.get(r.subjectId);
+            const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.subjectId, stored) : null;
+            const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_MOC, r.subjectId);
+            const sheet = sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${r.subjectId}`);
+            const totalPartQty = sheet?.totalPartQty ?? 0;
+            const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
+            return (
+              <SavedSubjectListRow
+                key={`moc-wf-${r.subjectId}`}
+                className={PREVIEW_SUBJECT_LI}
+                kind={BUILD_SUBJECT_MOC}
+                subjectId={r.subjectId}
+                detailHref={detailHref}
+                title={title}
+                coverUrl={uploadCoverUrl}
+                tags={tags}
+                mocTagHref={(tag) => mocListHref({ tag })}
+                totalPartQty={totalPartQty}
+                shortageLineCount={sheet?.shortageLineCount ?? null}
+                shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                shortageClearedAt={sheet?.shortageClearedAt ?? null}
+                gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
+                updatedAtIso={updatedAtIso}
+                workflowStage={workflowStage}
+                showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
+                showSourceBadge={Boolean(prof?.hasIoSource)}
+              />
+            );
+          })}
+        </HomeListStrip>
+      ) : (
+        <p className="text-sm text-[var(--muted)]">{emptyWorkflowHint("moc")}</p>
+      )}
     </section>
   );
 }
 
-/** 套装：我的 / 收藏 两个 Tab */
+/** 套装：拼搭进度预览 */
 export async function HomeSetBlock() {
   const userDb = getUserDb();
   const catalogDb = getCatalogDb();
 
-  const [ownedAll, favAll] = await Promise.all([
-    userDb
-      .select()
-      .from(buildOwnedSubjects)
-      .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET))
-      .orderBy(desc(buildOwnedSubjects.markedAt)),
-    userDb
-      .select()
-      .from(buildFavoriteSubjects)
-      .where(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET))
-      .orderBy(desc(buildFavoriteSubjects.markedAt)),
-  ]);
+  const workflowAll = await userDb
+    .select()
+    .from(buildOwnedSubjects)
+    .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET))
+    .orderBy(desc(buildOwnedSubjects.markedAt));
 
-  const ownedPreview = ownedAll.slice(0, HOME_PREVIEW_MAX);
-  const favPreview = favAll.slice(0, HOME_PREVIEW_MAX);
-  const enrichNums = [...new Set([...ownedPreview.map((r) => r.subjectId), ...favPreview.map((r) => r.subjectId)])];
+  const workflowPreview = workflowAll.slice(0, HOME_PREVIEW_MAX);
+  const enrichNums = workflowPreview.map((r) => r.subjectId);
 
   const setNameByNum = new Map<string, string>();
   let setHeroByNum = new Map<string, string | null>();
@@ -306,8 +192,6 @@ export async function HomeSetBlock() {
   const setCoverStored = new Map<string, string>();
   const sheetByKindId = new Map<string, SheetMeta>();
   let setOfficialPartQtyByNum = new Map<string, number>();
-  const setMarkedAt = new Map<string, string>();
-  for (const r of favAll) setMarkedAt.set(r.subjectId, r.markedAt);
 
   if (enrichNums.length > 0) {
     const [names, heroes, profRows, imgRows, sheetRows, officialQty] = await Promise.all([
@@ -392,134 +276,6 @@ export async function HomeSetBlock() {
     setOfficialPartQtyByNum = officialQty;
   }
 
-  const ownedPreviewIds = ownedPreview.map((r) => r.subjectId);
-  const favPreviewIds = favPreview.map((r) => r.subjectId);
-  const favoriteForOwnedPreview = new Set<string>();
-  const ownedForFavPreview = new Set<string>();
-  if (ownedPreviewIds.length > 0) {
-    const fr = await userDb
-      .select()
-      .from(buildFavoriteSubjects)
-      .where(
-        and(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET), inArray(buildFavoriteSubjects.subjectId, ownedPreviewIds)),
-      );
-    for (const r of fr) favoriteForOwnedPreview.add(r.subjectId);
-  }
-  if (favPreviewIds.length > 0) {
-    const orows = await userDb
-      .select()
-      .from(buildOwnedSubjects)
-      .where(and(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET), inArray(buildOwnedSubjects.subjectId, favPreviewIds)));
-    for (const r of orows) ownedForFavPreview.add(r.subjectId);
-  }
-
-  const myPanel =
-    ownedAll.length > 0 ? (
-      <HomeListStrip
-        heading="套装"
-        total={ownedAll.length}
-        moreHref="/sets?theme=all&mark=owned"
-        moreLabel="在套装列表中查看（已拥有）"
-        previewCap={HOME_PREVIEW_MAX}
-        hideCategoryTitle
-      >
-        {ownedPreview.map((r) => {
-          const prof = setProfileByNum.get(r.subjectId);
-          const displayName = prof?.displayName?.trim() ?? "";
-          const catalogName = setNameByNum.get(r.subjectId) ?? "";
-          const title = displayName || catalogName || `套装 ${r.subjectId}`;
-          const tags = prof?.tags ?? [];
-          const officialUrl = setHeroByNum.get(r.subjectId) ?? null;
-          const stored = setCoverStored.get(r.subjectId);
-          const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, r.subjectId, stored) : null;
-          const coverUrl = (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
-          const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId);
-          const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
-          const totalPartQty = sheet?.totalPartQty ?? setOfficialPartQtyByNum.get(r.subjectId) ?? 0;
-          const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
-          return (
-            <SavedSubjectListRow
-              key={`set-my-${r.subjectId}`}
-              className={PREVIEW_SUBJECT_LI}
-              kind={BUILD_SUBJECT_SET}
-              subjectId={r.subjectId}
-              detailHref={detailHref}
-              title={title}
-              coverUrl={coverUrl}
-              tags={tags}
-              totalPartQty={totalPartQty}
-              shortageLineCount={sheet?.shortageLineCount ?? null}
-              shortageTotalQty={sheet?.shortageTotalQty ?? null}
-              shortageClearedAt={sheet?.shortageClearedAt ?? null}
-              gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
-              gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
-              updatedAtIso={updatedAtIso}
-              owned={true}
-              favorite={favoriteForOwnedPreview.has(r.subjectId)}
-              showInstructionBadge={false}
-              showSourceBadge={false}
-            />
-          );
-        })}
-      </HomeListStrip>
-    ) : (
-      <p className="text-sm text-[var(--muted)]">{emptyTabHint("set", "my")}</p>
-    );
-
-  const favoritePanel =
-    favAll.length > 0 ? (
-      <HomeListStrip
-        heading="套装"
-        total={favAll.length}
-        moreHref="/sets?theme=all&mark=favorite"
-        moreLabel="在套装列表中查看（已收藏）"
-        previewCap={HOME_PREVIEW_MAX}
-        hideCategoryTitle
-      >
-        {favPreview.map((r) => {
-          const prof = setProfileByNum.get(r.subjectId);
-          const displayName = prof?.displayName?.trim() ?? "";
-          const catalogName = setNameByNum.get(r.subjectId) ?? "";
-          const title = displayName || catalogName || `套装 ${r.subjectId}`;
-          const tags = prof?.tags ?? [];
-          const officialUrl = setHeroByNum.get(r.subjectId) ?? null;
-          const stored = setCoverStored.get(r.subjectId);
-          const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, r.subjectId, stored) : null;
-          const coverUrl = (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
-          const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId);
-          const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
-          const totalPartQty = sheet?.totalPartQty ?? setOfficialPartQtyByNum.get(r.subjectId) ?? 0;
-          const favAt = setMarkedAt.get(r.subjectId) ?? r.markedAt;
-          const updatedAtIso = sheet?.updatedAt ?? favAt;
-          return (
-            <SavedSubjectListRow
-              key={`set-fav-${r.subjectId}`}
-              className={PREVIEW_SUBJECT_LI}
-              kind={BUILD_SUBJECT_SET}
-              subjectId={r.subjectId}
-              detailHref={detailHref}
-              title={title}
-              coverUrl={coverUrl}
-              tags={tags}
-              totalPartQty={totalPartQty}
-              shortageLineCount={sheet?.shortageLineCount ?? null}
-              shortageTotalQty={sheet?.shortageTotalQty ?? null}
-              shortageClearedAt={sheet?.shortageClearedAt ?? null}
-              gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
-              gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
-              updatedAtIso={updatedAtIso}
-              owned={ownedForFavPreview.has(r.subjectId)}
-              favorite={true}
-              showInstructionBadge={false}
-              showSourceBadge={false}
-            />
-          );
-        })}
-      </HomeListStrip>
-    ) : (
-      <p className="text-sm text-[var(--muted)]">{emptyTabHint("set", "favorite")}</p>
-    );
-
   return (
     <section className="section-panel" aria-labelledby="home-set-block-heading">
       <header className="mb-4">
@@ -528,17 +284,60 @@ export async function HomeSetBlock() {
           套装
         </h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          每类 Tab 内最多展示 {HOME_PREVIEW_MAX} 条；完整列表请在套装官方目录使用「已拥有 / 已收藏」筛选。
+          最多展示 {HOME_PREVIEW_MAX} 条；完整列表请在套装官方目录按阶段筛选。
         </p>
-        {ownedAll.length === 0 && favAll.length > 0 ? (
-          <p className="mt-1 text-xs text-[var(--muted)]">暂无已拥有的套装，已默认打开「收藏」Tab。</p>
-        ) : null}
       </header>
-      <HomeMyFavoriteTabs
-        defaultTab={pickHomeDefaultTab(ownedAll.length, favAll.length)}
-        myPanel={myPanel}
-        favoritePanel={favoritePanel}
-      />
+      {workflowAll.length > 0 ? (
+        <HomeListStrip
+          heading="套装"
+          total={workflowAll.length}
+          moreHref="/sets?theme=all"
+          moreLabel="套装官方目录"
+          previewCap={HOME_PREVIEW_MAX}
+          hideCategoryTitle
+        >
+          {workflowPreview.map((r) => {
+            const workflowStage = workflowStageFromRow(r);
+            const prof = setProfileByNum.get(r.subjectId);
+            const displayName = prof?.displayName?.trim() ?? "";
+            const catalogName = setNameByNum.get(r.subjectId) ?? "";
+            const title = displayName || catalogName || `套装 ${r.subjectId}`;
+            const tags = prof?.tags ?? [];
+            const officialUrl = setHeroByNum.get(r.subjectId) ?? null;
+            const stored = setCoverStored.get(r.subjectId);
+            const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, r.subjectId, stored) : null;
+            const coverUrl = (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
+            const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId);
+            const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
+            const totalPartQty = sheet?.totalPartQty ?? setOfficialPartQtyByNum.get(r.subjectId) ?? 0;
+            const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
+            return (
+              <SavedSubjectListRow
+                key={`set-wf-${r.subjectId}`}
+                className={PREVIEW_SUBJECT_LI}
+                kind={BUILD_SUBJECT_SET}
+                subjectId={r.subjectId}
+                detailHref={detailHref}
+                title={title}
+                coverUrl={coverUrl}
+                tags={tags}
+                totalPartQty={totalPartQty}
+                shortageLineCount={sheet?.shortageLineCount ?? null}
+                shortageTotalQty={sheet?.shortageTotalQty ?? null}
+                shortageClearedAt={sheet?.shortageClearedAt ?? null}
+                gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
+                gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
+                updatedAtIso={updatedAtIso}
+                workflowStage={workflowStage}
+                showInstructionBadge={false}
+                showSourceBadge={false}
+              />
+            );
+          })}
+        </HomeListStrip>
+      ) : (
+        <p className="text-sm text-[var(--muted)]">{emptyWorkflowHint("set")}</p>
+      )}
     </section>
   );
 }

@@ -3,11 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
-import { PartOwnedStockControl } from "@/app/parts/part-owned-stock-control";
 import { CopyableId } from "@/components/copyable-id";
-import { getCatalogDb, getUserDb } from "@/db/client";
+import { getCatalogDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
-import { OWNED_SUBJECT_PART } from "@/lib/build-owned-subject";
 import {
   colors,
   elements,
@@ -16,7 +14,6 @@ import {
   parts,
   partCategories,
   partRelationships,
-  buildOwnedSubjects,
 } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +25,6 @@ export default async function PartDetailPage({ params }: Props) {
   const partNum = decodeURIComponent(raw);
 
   const catalogDb = getCatalogDb();
-  const userDb = getUserDb();
   const [row] = await catalogDb
     .select({
       partNum: parts.partNum,
@@ -50,12 +46,7 @@ export default async function PartDetailPage({ params }: Props) {
     ne(inventoryParts.imgUrl, "")
   );
 
-  const partOwnedKey = and(
-    eq(buildOwnedSubjects.subjectKind, OWNED_SUBJECT_PART),
-    eq(buildOwnedSubjects.subjectId, partNum)
-  );
-
-  const [asParent, asChild, elemRows, setRows, heroThumbRow, colorThumbRows, ownedRow] =
+  const [asParent, asChild, elemRows, setRows, heroThumbRow, colorThumbRows] =
     await Promise.all([
       catalogDb
         .select({
@@ -116,15 +107,7 @@ export default async function PartDetailPage({ params }: Props) {
         .from(inventoryParts)
         .where(imgClause)
         .groupBy(inventoryParts.colorId),
-      userDb.select().from(buildOwnedSubjects).where(partOwnedKey).limit(1),
     ]);
-
-  const owned = ownedRow[0];
-  const initialOwned = Boolean(owned);
-  const initialOwnedQty =
-    owned && typeof owned.quantity === "number" && Number.isFinite(owned.quantity)
-      ? Math.max(1, Math.floor(owned.quantity))
-      : 1;
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
   const thumbByColor = new Map<number, string>();
@@ -185,14 +168,6 @@ export default async function PartDetailPage({ params }: Props) {
                 </div>
               ) : null}
             </dl>
-            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--border-soft)] pt-4">
-              <span className="text-sm text-[var(--text)]">拥有此零件</span>
-              <PartOwnedStockControl
-                partNum={partNum}
-                initialOwned={initialOwned}
-                initialQuantity={initialOwnedQty}
-              />
-            </div>
           </div>
         </div>
       </section>

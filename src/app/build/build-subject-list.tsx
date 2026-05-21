@@ -7,13 +7,18 @@ import { MocListSortControl } from "@/app/build/moc-list-sort-control";
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
 import { getUserDb } from "@/db/client";
 import {
-  buildFavoriteSubjects,
   buildImages,
   buildOwnedSubjects,
   buildProfiles,
   buildSavedPartsSheets,
 } from "@/db/schema";
-import type { ListMarkFilter } from "@/lib/build-list-mark-filter";
+import {
+  isWorkflowMarkFilter,
+  LIST_MARK_FILTER_OPTIONS,
+  type ListMarkFilter,
+} from "@/lib/build-list-mark-filter";
+import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
+import type { BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
@@ -44,7 +49,7 @@ export async function BuildSubjectListPage({
   listFilterQ?: string;
   /** 仅 MOC 列表：按单个标签精确匹配（忽略大小写） */
   listFilterTag?: string;
-  /** 已存列表：按拥有 / 收藏筛选 */
+  /** 已存列表：按拼搭进度筛选 */
   listFilterMark?: ListMarkFilter;
   /** 仅 MOC 列表：排序（URL sort/dir；中性时不写参数） */
   listMocSortState?: MocListSortState;
@@ -128,21 +133,19 @@ export async function BuildSubjectListPage({
     }
   }
 
-  const ownedSubjectIds = new Set<string>();
-  const favoriteSubjectIds = new Set<string>();
+  const workflowStageBySubjectId = new Map<string, BuildWorkflowStage>();
   if (subjectIds.length > 0) {
-    const [ownedRows, favoriteRows] = await Promise.all([
-      db
-        .select({ subjectId: buildOwnedSubjects.subjectId })
-        .from(buildOwnedSubjects)
-        .where(and(eq(buildOwnedSubjects.subjectKind, kind), inArray(buildOwnedSubjects.subjectId, subjectIds))),
-      db
-        .select({ subjectId: buildFavoriteSubjects.subjectId })
-        .from(buildFavoriteSubjects)
-        .where(and(eq(buildFavoriteSubjects.subjectKind, kind), inArray(buildFavoriteSubjects.subjectId, subjectIds))),
-    ]);
-    for (const r of ownedRows) ownedSubjectIds.add(r.subjectId);
-    for (const r of favoriteRows) favoriteSubjectIds.add(r.subjectId);
+    const ownedRows = await db
+      .select({
+        subjectId: buildOwnedSubjects.subjectId,
+        workflowStage: buildOwnedSubjects.workflowStage,
+      })
+      .from(buildOwnedSubjects)
+      .where(and(eq(buildOwnedSubjects.subjectKind, kind), inArray(buildOwnedSubjects.subjectId, subjectIds)));
+    for (const r of ownedRows) {
+      const s = workflowStageFromRow(r);
+      if (s) workflowStageBySubjectId.set(r.subjectId, s);
+    }
   }
 
   const needle = likeFragment(listFilterQ ?? "").toLowerCase();
@@ -197,8 +200,9 @@ export async function BuildSubjectListPage({
   });
 
   const markFilteredRows = filteredRows.filter((r) => {
-    if (listFilterMark === "owned") return ownedSubjectIds.has(r.subjectId);
-    if (listFilterMark === "favorite") return favoriteSubjectIds.has(r.subjectId);
+    if (isWorkflowMarkFilter(listFilterMark)) {
+      return workflowStageBySubjectId.get(r.subjectId) === listFilterMark;
+    }
     return true;
   });
 
@@ -253,13 +257,7 @@ export async function BuildSubjectListPage({
                 mark={listFilterMark}
                 sortState={mocSortState}
               />
-              {(
-                [
-                  { key: "all" as const, label: "全部" },
-                  { key: "owned" as const, label: "已拥有" },
-                  { key: "favorite" as const, label: "已收藏" },
-                ] as const
-              ).map((opt) => {
+              {LIST_MARK_FILTER_OPTIONS.map((opt) => {
                 const active = listFilterMark === opt.key;
                 const tagArg = hiddenTagValue || undefined;
                 return (
@@ -298,7 +296,7 @@ export async function BuildSubjectListPage({
               />
             </div>
             {hiddenTagValue ? <input type="hidden" name="tag" value={hiddenTagValue} /> : null}
-            {listFilterMark === "owned" || listFilterMark === "favorite" ? (
+            {listFilterMark !== "all" ? (
               <input type="hidden" name="mark" value={listFilterMark} />
             ) : null}
             {!mocSortState.neutral ? (
@@ -404,7 +402,7 @@ export async function BuildSubjectListPage({
                   {(hasQFilter || hasTagFilter) ? "且" : null}
                   仅显示「
                   <span className="text-[var(--text)]">
-                    {listFilterMark === "owned" ? "已拥有" : "已收藏"}
+                    {LIST_MARK_FILTER_OPTIONS.find((o) => o.key === listFilterMark)?.label ?? listFilterMark}
                   </span>
                   」
                 </>
@@ -412,7 +410,7 @@ export async function BuildSubjectListPage({
               {hasQFilter || hasTagFilter ? "筛选，" : hasMarkFilter ? "，" : null}
               共 {markFilteredRows.length.toLocaleString("zh-CN")} 条
               {hasMarkFilter && markFilteredRows.length < filteredRows.length
-                ? `（未加拥有/收藏筛选前 ${filteredRows.length.toLocaleString("zh-CN")} 条）`
+                ? `（未加进度筛选前 ${filteredRows.length.toLocaleString("zh-CN")} 条）`
                 : ""}
               {!hasMarkFilter && filteredRows.length < rows.length
                 ? `（未加搜索/标签筛选前 ${rows.length.toLocaleString("zh-CN")} 条）`
@@ -428,23 +426,27 @@ export async function BuildSubjectListPage({
               尚无已存记录。请使用上方上传入口导入 CSV，在预览页保存到数据库。
             </p>
           ) : filteredRows.length === 0 ? (
-            <p className="px-2 py-6 text-sm text-[var(--muted)]">
-              没有匹配的已存{ui.noun}。可调整关键词或{" "}
-              <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
-                清除筛选
-              </Link>
-              查看全部。
-            </p>
+            hasListFilters ? null : (
+              <p className="px-2 py-6 text-sm text-[var(--muted)]">
+                没有匹配的已存{ui.noun}。可调整关键词或{" "}
+                <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                  清除筛选
+                </Link>
+                查看全部。
+              </p>
+            )
           ) : markFilteredRows.length === 0 ? (
-            <p className="px-2 py-6 text-sm text-[var(--muted)]">
-              当前条件下没有
-              {listFilterMark === "owned" ? "已标记拥有" : "已加入收藏"}
-              的已存{ui.noun}。可更换筛选或{" "}
-              <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
-                清除筛选
-              </Link>
-              。
-            </p>
+            hasListFilters ? null : (
+              <p className="px-2 py-6 text-sm text-[var(--muted)]">
+                当前条件下没有
+                {`已标记「${LIST_MARK_FILTER_OPTIONS.find((o) => o.key === listFilterMark)?.label ?? listFilterMark}」`}
+                的已存{ui.noun}。可更换筛选或{" "}
+                <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
+                  清除筛选
+                </Link>
+                。
+              </p>
+            )
           ) : (
             <ul className="list-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {markFilteredRows.map((r) => {
@@ -461,8 +463,7 @@ export async function BuildSubjectListPage({
                     : uploadCoverUrl;
                 const detailHref = buildSubjectDetailPath(kind, r.subjectId);
 
-                const owned = ownedSubjectIds.has(r.subjectId);
-                const favorite = favoriteSubjectIds.has(r.subjectId);
+                const workflowStage = workflowStageBySubjectId.get(r.subjectId) ?? null;
                 const showInstructionBadge =
                   kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasInstructionsPdf);
                 const showSourceBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasIoSource);
@@ -493,8 +494,7 @@ export async function BuildSubjectListPage({
                     gobricksShortageSyncAt={r.gobricksShortageSyncAt ?? null}
                     gobricksGdsPriceCny={r.gobricksGdsPriceCny ?? null}
                     updatedAtIso={r.updatedAt}
-                    owned={owned}
-                    favorite={favorite}
+                    workflowStage={workflowStage}
                     showInstructionBadge={showInstructionBadge}
                     showSourceBadge={showSourceBadge}
                   />

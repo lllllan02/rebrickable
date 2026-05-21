@@ -129,8 +129,7 @@ export default async function SearchPage({ searchParams }: Props) {
                   const sheet = enrich.sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${subjectId}`);
                   const totalPartQty = sheet?.totalPartQty ?? 0;
                   const updatedAtIso = sheet?.updatedAt ?? "2000-01-01T00:00:00.000Z";
-                  const owned = enrich.ownedMocIds.has(subjectId);
-                  const favorite = enrich.favoriteMocIds.has(subjectId);
+                  const workflowStage = enrich.mocWorkflowStage.get(subjectId) ?? null;
                   return (
                     <SavedSubjectListRow
                       key={h.href}
@@ -148,8 +147,7 @@ export default async function SearchPage({ searchParams }: Props) {
                       gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
                       gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
                       updatedAtIso={updatedAtIso}
-                      owned={owned}
-                      favorite={favorite}
+                      workflowStage={workflowStage}
                       showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
                       showSourceBadge={Boolean(prof?.hasIoSource)}
                     />
@@ -185,8 +183,7 @@ export default async function SearchPage({ searchParams }: Props) {
                   const sheet = enrich.sheetByKindId.get(`${BUILD_SUBJECT_SET}:${setNum}`);
                   const totalPartQty = sheet?.totalPartQty ?? 0;
                   const updatedAtIso = sheet?.updatedAt ?? "2000-01-01T00:00:00.000Z";
-                  const owned = enrich.ownedSetNums.has(setNum);
-                  const favorite = enrich.favoriteSetNums.has(setNum);
+                  const workflowStage = enrich.setWorkflowStage.get(setNum) ?? null;
                   return (
                     <SavedSubjectListRow
                       key={h.href}
@@ -203,8 +200,7 @@ export default async function SearchPage({ searchParams }: Props) {
                       gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
                       gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
                       updatedAtIso={updatedAtIso}
-                      owned={owned}
-                      favorite={favorite}
+                      workflowStage={workflowStage}
                       showInstructionBadge={false}
                       showSourceBadge={false}
                     />

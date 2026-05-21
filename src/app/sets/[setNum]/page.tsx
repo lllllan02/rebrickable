@@ -10,9 +10,7 @@ import type { MocGalleryImage } from "@/app/mocs/moc-image-carousel";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   buildAttachments,
-  buildFavoriteSubjects,
   buildImages,
-  buildOwnedSubjects,
   buildProfiles,
   colors,
   inventories,
@@ -28,6 +26,8 @@ import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
+import { BuildWorkflowProgressPanel } from "@/app/build/build-workflow-progress-panel";
+import { ensureWorkflowCollected } from "@/lib/ensure-workflow-collected";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 
 export const dynamic = "force-dynamic";
@@ -50,13 +50,7 @@ export default async function SetDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, setNum)
   );
   const setProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_SET), eq(buildProfiles.subjectId, setNum));
-  const setOwnedKey = and(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET), eq(buildOwnedSubjects.subjectId, setNum));
-  const setFavoriteKey = and(
-    eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET),
-    eq(buildFavoriteSubjects.subjectId, setNum)
-  );
-
-  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, ownedRow, favoriteRow] = await Promise.all([
+  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, workflowProgress] = await Promise.all([
     catalogDb
       .select({
         id: inventories.id,
@@ -98,8 +92,7 @@ export default async function SetDetailPage({ params }: Props) {
       .orderBy(asc(buildAttachments.createdAt), asc(buildAttachments.id)),
     loadBuildPartsSheetFromDb(BUILD_SUBJECT_SET, setNum),
     userDb.select().from(buildProfiles).where(setProfKey).limit(1),
-    userDb.select().from(buildOwnedSubjects).where(setOwnedKey).limit(1),
-    userDb.select().from(buildFavoriteSubjects).where(setFavoriteKey).limit(1),
+    ensureWorkflowCollected(BUILD_SUBJECT_SET, setNum),
   ]);
 
   if (!inv) notFound();
@@ -154,8 +147,6 @@ export default async function SetDetailPage({ params }: Props) {
   ]);
 
   const profile = profileRow[0];
-  const initialOwned = Boolean(ownedRow[0]);
-  const initialFavorite = Boolean(favoriteRow[0]);
   const initialDisplayName = (profile?.displayName ?? "").trim();
   const initialTags = parseTagsJson(profile?.tagsJson);
 
@@ -252,8 +243,13 @@ export default async function SetDetailPage({ params }: Props) {
         partTotalQty={partTotalQty}
         gobricksGdsPriceCny={gobricksGdsPriceCny}
         setOfficial={setOfficial}
-        initialOwned={initialOwned}
-        initialFavorite={initialFavorite}
+      />
+
+      <BuildWorkflowProgressPanel
+        subjectKind={BUILD_SUBJECT_SET}
+        subjectId={setNum}
+        initialStage={workflowProgress.stage}
+        initialTimes={workflowProgress.times}
       />
 
       <MocDetailPartsSection
@@ -270,7 +266,7 @@ export default async function SetDetailPage({ params }: Props) {
           inventoryId: inv.id,
           version: inv.version,
         }}
-        parentSubjectOwned={initialOwned}
+        parentSubjectOwned={workflowProgress.stage === "complete"}
       />
     </div>
   );

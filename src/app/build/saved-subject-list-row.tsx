@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
-import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
 import { GobricksShortageListInlineCheck } from "@/app/build/gobricks-shortage-list-check-button";
+import { BuildWorkflowStageListMark } from "@/components/build-workflow-stage-list-mark";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { workflowStageCardClass, type BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { buildMocPartsDetailHref } from "@/lib/moc-parts-tab-navigation";
 
 function usableImgUrl(u: string | null | undefined): u is string {
@@ -12,7 +12,7 @@ function usableImgUrl(u: string | null | undefined): u is string {
 }
 
 /**
- * 与 `BuildSubjectListPage` 已存 MOC/套装列表中单卡 DOM 完全一致（拥有 / 搜索等页复用）。
+ * 与 `BuildSubjectListPage` 已存 MOC/套装列表中单卡 DOM 完全一致（搜索等页复用）。
  */
 export function SavedSubjectListRow({
   kind,
@@ -24,8 +24,7 @@ export function SavedSubjectListRow({
   mocTagHref,
   totalPartQty,
   updatedAtIso,
-  owned,
-  favorite,
+  workflowStage,
   showInstructionBadge,
   showSourceBadge,
   shortageLineCount,
@@ -41,25 +40,17 @@ export function SavedSubjectListRow({
   title: string;
   coverUrl: string | null;
   tags: string[];
-  /** 仅 MOC：标签链向 `/mocs?tag=`；套装传 undefined 则标签渲染为 span */
   mocTagHref?: (tag: string) => string;
   totalPartQty: number;
   updatedAtIso: string;
-  owned: boolean;
-  favorite: boolean;
+  workflowStage: BuildWorkflowStage | null;
   showInstructionBadge: boolean;
   showSourceBadge: boolean;
-  /** 缺件表行数；null 表示无缺件表或未写入汇总 */
   shortageLineCount: number | null;
-  /** 缺件表各行列 quantity 之和 */
   shortageTotalQty: number | null;
-  /** 用户「标记为不缺」写入的时间（ISO）；仅非空时表示已确认无缺件表 */
   shortageClearedAt: string | null;
-  /** 最近一次高砖缺件对照成功的时间（ISO） */
   gobricksShortageSyncAt: string | null;
-  /** 高砖整单参考价（元），接口 `gdsPrice` 分片之和；未对照时为 null */
   gobricksGdsPriceCny?: number | null;
-  /** 追加到根 `li`（如首页横向滚动条固定卡片宽度） */
   className?: string;
 }) {
   const coverImageClassName = kind === BUILD_SUBJECT_SET ? "object-contain p-3" : "object-cover";
@@ -67,7 +58,6 @@ export function SavedSubjectListRow({
   const hasShortage = shortageLineCount != null && shortageLineCount > 0;
   const markedNoShortage =
     typeof shortageClearedAt === "string" && shortageClearedAt.trim().length > 0;
-
   const gobricksGdsLabel =
     typeof gobricksGdsPriceCny === "number" &&
     Number.isFinite(gobricksGdsPriceCny) &&
@@ -75,7 +65,7 @@ export function SavedSubjectListRow({
       ? new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gobricksGdsPriceCny)
       : null;
 
-  const liBase = `result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`;
+  const liBase = `result-card flex flex-col gap-0 overflow-hidden p-0${workflowStageCardClass(workflowStage)}`;
   return (
     <li className={className != null && className.trim().length > 0 ? `${liBase} ${className}` : liBase}>
       <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
@@ -116,10 +106,7 @@ export function SavedSubjectListRow({
           </div>
         ) : null}
         <div className="pointer-events-none absolute bottom-2 right-2 z-10">
-          <div className="pointer-events-auto flex flex-row gap-1">
-            <BuildFavoriteToggle subjectKind={kind} subjectId={subjectId} initialFavorite={favorite} />
-            <BuildOwnedToggle subjectKind={kind} subjectId={subjectId} initialOwned={owned} />
-          </div>
+          <BuildWorkflowStageListMark stage={workflowStage} />
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">

@@ -22,15 +22,12 @@ import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { getCatalogDb } from "@/db/client";
 import {
-  buildOwnedSubjects,
   elements,
   inventoryParts,
   partCategories,
   partRelationships,
   parts,
 } from "@/db/schema";
-import { OWNED_SUBJECT_PART } from "@/lib/build-owned-subject";
-import { PART_GRID_TILE_OWNED_HIGHLIGHT } from "@/lib/part-grid-tile-classes";
 import { likeFragment } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
@@ -344,10 +341,8 @@ export default async function PartsPage({ searchParams }: Props) {
   const printedPartNums = new Set<string>();
   const matchedElementsByPart = new Map<string, string[]>();
   const elementMatchTruncated = new Set<string>();
-  const ownedPartNums = new Set<string>();
-
   if (partNums.length > 0) {
-    const [thumbRows, countRows, colorRows, printedRows, matchRows, ownedRows] =
+    const [thumbRows, countRows, colorRows, printedRows, matchRows] =
       await Promise.all([
         db
           .select({
@@ -407,20 +402,7 @@ export default async function PartsPage({ searchParams }: Props) {
           : Promise.resolve(
               [] as { partNum: string; elementId: string }[]
             ),
-        db
-          .select({ subjectId: buildOwnedSubjects.subjectId })
-          .from(buildOwnedSubjects)
-          .where(
-            and(
-              eq(buildOwnedSubjects.subjectKind, OWNED_SUBJECT_PART),
-              inArray(buildOwnedSubjects.subjectId, partNums)
-            )
-          ),
       ]);
-
-    for (const o of ownedRows) {
-      ownedPartNums.add(o.subjectId);
-    }
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
@@ -554,7 +536,6 @@ export default async function PartsPage({ searchParams }: Props) {
                 partNum={r.partNum}
                 thumbUrl={thumb}
                 isPrinted={isPrinted}
-                extraTileClass={ownedPartNums.has(r.partNum) ? PART_GRID_TILE_OWNED_HIGHLIGHT : ""}
               >
                 {colorCount > 0 || elemCount > 0 ? (
                   <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">

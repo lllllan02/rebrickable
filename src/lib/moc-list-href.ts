@@ -16,7 +16,7 @@ export function mocListHref(params: {
   if (q.length > 0) sp.set("q", q);
   const tag = (params.tag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN);
   if (tag.length > 0) sp.set("tag", tag);
-  if (params.mark === "owned" || params.mark === "favorite") sp.set("mark", params.mark);
+  if (params.mark && params.mark !== "all") sp.set("mark", params.mark);
   if (params.mocSort != null) {
     const sortQ = mocSortStateToQueryEntries(params.mocSort);
     if (sortQ.sort != null) sp.set("sort", sortQ.sort);

@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { getUserDb } from "@/db/client";
 import { buildProfiles, buildSavedPartsSheets } from "@/db/schema";
 import { revalidateBuildSubjectPaths } from "@/lib/build-revalidate-paths";
+import { ensureWorkflowCollected } from "@/lib/ensure-workflow-collected";
 import {
   BUILD_SUBJECT_MOC,
   BUILD_SUBJECT_SET,
@@ -602,6 +603,8 @@ export async function saveBuildPartsSheetToDb(input: {
         })
         .run();
     });
+
+    await ensureWorkflowCollected(input.subjectKind, subjectId);
 
     revalidateBuildSubjectPaths(input.subjectKind, subjectId);
     return { ok: true, savedAt };

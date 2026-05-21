@@ -11,13 +11,8 @@ import { createGzip } from "zlib";
 import { pipeline } from "stream/promises";
 import Database from "better-sqlite3";
 
-import {
-  catalogDbGzPath,
-  catalogDbPath,
-  userDbGzPath,
-  userDbPath,
-} from "../src/db/db-paths";
-import { ensureUserBuildTables } from "../src/db/ensure-user-build-tables";
+import { catalogDbGzPath, catalogDbPath } from "../src/db/db-paths";
+import { packUserData } from "../src/lib/pack-user-data";
 
 const ROOT = path.join(__dirname, "..");
 
@@ -63,27 +58,14 @@ async function main() {
     return;
   }
 
-  const dbPath = userDbPath(ROOT);
-  const gzPath = userDbGzPath(ROOT);
-  if (!fs.existsSync(dbPath)) {
-    await fs.promises.mkdir(path.dirname(dbPath), { recursive: true });
-    const u = new Database(dbPath);
-    u.pragma("journal_mode = WAL");
-    ensureUserBuildTables(u, ROOT);
-    u.close();
-    console.log(`已创建空用户库 ${dbPath} 并继续打包`);
-  }
-  try {
-    checkpointWalForPack(dbPath);
-  } catch (e) {
-    console.error(
-      "[pack-local-db] 用户库 WAL checkpoint 失败（请关闭 next dev 等占用该库的进程后重试）:",
-      e
-    );
+  const res = await packUserData(ROOT);
+  if (!res.ok) {
+    console.error("[pack-local-db]", res.error);
     process.exit(1);
   }
-  await gzipFile(dbPath, gzPath);
-  console.log(`已写入用户库压缩包 ${gzPath}（提交此文件即可同步收藏等，无需反复提交 rebrickable.db.gz）`);
+  console.log(
+    `已写入用户库压缩包 ${res.gzPath}（提交此文件即可同步收藏等，无需反复提交 rebrickable.db.gz）`
+  );
 }
 
 main().catch((err) => {

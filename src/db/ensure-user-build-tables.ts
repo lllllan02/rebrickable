@@ -156,11 +156,49 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
 
   if (tableExists(sqlite, "build_owned_subjects")) {
     const cols = tableColumnNames(sqlite, "build_owned_subjects");
-    if (!cols.has("quantity")) {
+    if (!cols.has("workflow_stage")) {
       sqlite.exec(
-        `ALTER TABLE build_owned_subjects ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1`
+        `ALTER TABLE build_owned_subjects ADD COLUMN workflow_stage TEXT NOT NULL DEFAULT 'collected'`
       );
     }
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS build_owned_stage_idx ON build_owned_subjects(workflow_stage)`
+    );
+    sqlite.exec(`DELETE FROM build_owned_subjects WHERE subject_kind = 'part'`);
+    sqlite.exec(`
+      UPDATE build_owned_subjects SET workflow_stage = 'replicate' WHERE workflow_stage = 'restore';
+      UPDATE build_owned_subjects SET workflow_stage = 'purchase' WHERE workflow_stage = 'procure';
+      UPDATE build_owned_subjects SET workflow_stage = 'complete' WHERE workflow_stage = 'owned';
+      UPDATE build_owned_subjects SET workflow_stage = 'collected'
+        WHERE workflow_stage NOT IN ('collected', 'replicate', 'purchase', 'complete');
+    `);
+    const cols2 = tableColumnNames(sqlite, "build_owned_subjects");
+    for (const col of ["collected_at", "replicate_at", "purchase_at", "complete_at"] as const) {
+      if (!cols2.has(col)) {
+        sqlite.exec(`ALTER TABLE build_owned_subjects ADD COLUMN ${col} TEXT`);
+      }
+    }
+    sqlite.exec(`
+      UPDATE build_owned_subjects SET collected_at = marked_at WHERE collected_at IS NULL;
+      UPDATE build_owned_subjects SET replicate_at = marked_at
+        WHERE replicate_at IS NULL AND workflow_stage IN ('replicate', 'purchase', 'complete');
+      UPDATE build_owned_subjects SET purchase_at = marked_at
+        WHERE purchase_at IS NULL AND workflow_stage IN ('purchase', 'complete');
+      UPDATE build_owned_subjects SET complete_at = marked_at
+        WHERE complete_at IS NULL AND workflow_stage = 'complete';
+    `);
+    sqlite.exec(`
+      INSERT OR IGNORE INTO build_owned_subjects (
+        subject_kind, subject_id, workflow_stage, marked_at, collected_at
+      )
+      SELECT
+        subject_kind,
+        subject_id,
+        'collected',
+        COALESCE(NULLIF(trim(first_saved_at), ''), updated_at),
+        COALESCE(NULLIF(trim(first_saved_at), ''), updated_at)
+      FROM build_saved_parts_sheets;
+    `);
   }
 
   if (tableExists(sqlite, "build_profiles")) {

@@ -15,15 +15,13 @@ import {
   type SQL,
 } from "drizzle-orm";
 
-import { BuildFavoriteToggle } from "@/app/build/build-favorite-toggle";
-import { BuildOwnedToggle } from "@/app/build/build-owned-toggle";
+import { BuildWorkflowStageListMark } from "@/components/build-workflow-stage-list-mark";
 import { GobricksShortageListInlineCheck } from "@/app/build/gobricks-shortage-list-check-button";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   inventories,
   inventoryMinifigs,
   inventoryParts,
-  buildFavoriteSubjects,
   buildOwnedSubjects,
   buildSavedPartsSheets,
   legoSets,
@@ -33,7 +31,9 @@ import {
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { SetsCatalogThemeFilter } from "@/app/sets/sets-catalog-theme-filter";
-import { parseListMarkFilter } from "@/lib/build-list-mark-filter";
+import { isWorkflowMarkFilter, parseListMarkFilter } from "@/lib/build-list-mark-filter";
+import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
+import { workflowStageCardClass, type BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { likeFragment } from "@/lib/search";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 
@@ -528,18 +528,16 @@ export async function SetsOfficialCatalogSection({
       : searchWhere ?? themeWhere;
 
   let markWhere: SQL | undefined = undefined;
-  if (markFilter === "owned") {
+  if (isWorkflowMarkFilter(markFilter)) {
     const marked = await userDb
       .select({ subjectId: buildOwnedSubjects.subjectId })
       .from(buildOwnedSubjects)
-      .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET));
-    const nums = [...new Set(marked.map((r) => r.subjectId))];
-    markWhere = nums.length > 0 ? inArray(inventories.setNum, nums) : sql`0=1`;
-  } else if (markFilter === "favorite") {
-    const marked = await userDb
-      .select({ subjectId: buildFavoriteSubjects.subjectId })
-      .from(buildFavoriteSubjects)
-      .where(eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET));
+      .where(
+        and(
+          eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
+          eq(buildOwnedSubjects.workflowStage, markFilter)
+        )
+      );
     const nums = [...new Set(marked.map((r) => r.subjectId))];
     markWhere = nums.length > 0 ? inArray(inventories.setNum, nums) : sql`0=1`;
   }
@@ -605,8 +603,7 @@ export async function SetsOfficialCatalogSection({
     }
   }
 
-  const ownedPageSetNums = new Set<string>();
-  const favoritePageSetNums = new Set<string>();
+  const workflowStageBySetNum = new Map<string, BuildWorkflowStage>();
   /** 本页套装在本站已存零件表（与 MOC 列表卡片同源字段）；无记录时卡片仍展示官方清单粒数作「零件总数」回退 */
   const sheetMetaBySetNum = new Map<
     string,
@@ -621,23 +618,17 @@ export async function SetsOfficialCatalogSection({
     }
   >();
   if (pageSetNums.length > 0) {
-    const [ownedRows, favoriteRows, sheetRows] = await Promise.all([
+    const [ownedRows, sheetRows] = await Promise.all([
       userDb
-        .select({ subjectId: buildOwnedSubjects.subjectId })
+        .select({
+          subjectId: buildOwnedSubjects.subjectId,
+          workflowStage: buildOwnedSubjects.workflowStage,
+        })
         .from(buildOwnedSubjects)
         .where(
           and(
             eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
             inArray(buildOwnedSubjects.subjectId, pageSetNums)
-          )
-        ),
-      userDb
-        .select({ subjectId: buildFavoriteSubjects.subjectId })
-        .from(buildFavoriteSubjects)
-        .where(
-          and(
-            eq(buildFavoriteSubjects.subjectKind, BUILD_SUBJECT_SET),
-            inArray(buildFavoriteSubjects.subjectId, pageSetNums)
           )
         ),
       userDb
@@ -659,8 +650,10 @@ export async function SetsOfficialCatalogSection({
           )
         ),
     ]);
-    for (const r of ownedRows) ownedPageSetNums.add(r.subjectId);
-    for (const r of favoriteRows) favoritePageSetNums.add(r.subjectId);
+    for (const r of ownedRows) {
+      const stage = workflowStageFromRow(r);
+      if (stage) workflowStageBySetNum.set(r.subjectId, stage);
+    }
     for (const r of sheetRows) {
       const p = r.gobricksGdsPriceCny;
       const gobricksGdsPriceCny =
@@ -754,7 +747,7 @@ export async function SetsOfficialCatalogSection({
     if (themeRaw === "all") u.set("theme", "all");
     else if (themeNumericOk && themeRaw.length > 0) u.set("theme", themeRaw);
     if (p > 1) u.set("page", String(p));
-    if (markFilter === "owned" || markFilter === "favorite") u.set("mark", markFilter);
+    if (markFilter !== "all") u.set("mark", markFilter);
     const s = u.toString();
     return s ? `?${s}` : "";
   };
@@ -802,7 +795,7 @@ export async function SetsOfficialCatalogSection({
           className="max-w-full text-sm sm:max-w-[240px]"
         />
         <label className="sr-only" htmlFor="sets-catalog-mark">
-          拥有或收藏
+          拼搭进度
         </label>
         <AutoSubmitSelect
           id="sets-catalog-mark"
@@ -811,8 +804,9 @@ export async function SetsOfficialCatalogSection({
           className="field max-w-full text-sm sm:max-w-[200px]"
         >
           <option value="">全部套装</option>
-          <option value="owned">仅已拥有</option>
-          <option value="favorite">仅已收藏</option>
+          <option value="replicate">仅复刻</option>
+          <option value="purchase">仅购入</option>
+          <option value="complete">仅完成</option>
         </AutoSubmitSelect>
         <input
           name="q"
@@ -842,8 +836,7 @@ export async function SetsOfficialCatalogSection({
                 : null;
             const title = (r.setName ?? "").trim() || `套装 ${r.setNum}`;
             const href = detailPath(r.setNum);
-            const owned = ownedPageSetNums.has(r.setNum);
-            const favorite = favoritePageSetNums.has(r.setNum);
+            const workflowStage = workflowStageBySetNum.get(r.setNum) ?? null;
             const sheet = sheetMetaBySetNum.get(r.setNum);
             const gdsCny = sheet?.gobricksGdsPriceCny ?? null;
             const gobricksGdsLabel =
@@ -859,7 +852,7 @@ export async function SetsOfficialCatalogSection({
             return (
               <li
                 key={r.setNum}
-                className={`result-card flex flex-col gap-0 overflow-hidden p-0${owned ? " result-card--owned" : favorite ? " result-card--favorite" : ""}`}
+                className={`result-card flex flex-col gap-0 overflow-hidden p-0${workflowStageCardClass(workflowStage)}`}
               >
                 <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
                   <Link href={href} className="absolute inset-0 z-0 block" aria-label={`${title} 封面`}>
@@ -879,18 +872,7 @@ export async function SetsOfficialCatalogSection({
                     )}
                   </Link>
                   <div className="pointer-events-none absolute bottom-2 right-2 z-10">
-                    <div className="pointer-events-auto flex flex-row gap-1">
-                      <BuildFavoriteToggle
-                        subjectKind={BUILD_SUBJECT_SET}
-                        subjectId={r.setNum}
-                        initialFavorite={favorite}
-                      />
-                      <BuildOwnedToggle
-                        subjectKind={BUILD_SUBJECT_SET}
-                        subjectId={r.setNum}
-                        initialOwned={owned}
-                      />
-                    </div>
+                    <BuildWorkflowStageListMark stage={workflowStage} />
                   </div>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
