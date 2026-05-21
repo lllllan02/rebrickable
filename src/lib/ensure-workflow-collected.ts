@@ -12,6 +12,22 @@ import {
 } from "@/lib/build-workflow-stage";
 import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
 
+/** 只读加载拼搭进度，不写入数据库。 */
+export async function loadWorkflowProgress(
+  subjectKind: WorkflowSubjectKind,
+  subjectId: string
+): Promise<WorkflowProgressState> {
+  const id = subjectId.trim();
+  if (!id || id.length > BUILD_UPLOAD_MAX_ID_LEN || !isSafeOwnedSubjectId(subjectKind, id)) {
+    return workflowProgressFromRow(undefined);
+  }
+
+  const db = getUserDb();
+  const key = and(eq(buildOwnedSubjects.subjectKind, subjectKind), eq(buildOwnedSubjects.subjectId, id));
+  const [existing] = await db.select().from(buildOwnedSubjects).where(key).limit(1);
+  return workflowProgressFromRow(existing);
+}
+
 /** 尚无进度记录时写入「收录」；已有记录则原样返回（不降级阶段） */
 export async function ensureWorkflowCollected(
   subjectKind: WorkflowSubjectKind,

@@ -17,6 +17,7 @@ import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
 import { mocListHref } from "@/lib/moc-list-href";
+import { mocSubjectIdsWithUserData } from "@/lib/moc-subject-still-exists";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 
@@ -45,11 +46,17 @@ function emptyWorkflowHint(kind: "moc" | "set"): string {
 export async function HomeMocBlock() {
   const userDb = getUserDb();
 
-  const workflowAll = await userDb
+  const workflowRows = await userDb
     .select()
     .from(buildOwnedSubjects)
     .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_MOC))
     .orderBy(desc(buildOwnedSubjects.markedAt));
+
+  const existingMocIds = await mocSubjectIdsWithUserData(
+    userDb,
+    workflowRows.map((r) => r.subjectId)
+  );
+  const workflowAll = workflowRows.filter((r) => existingMocIds.has(r.subjectId));
 
   const workflowPreview = workflowAll.slice(0, HOME_PREVIEW_MAX);
   const enrichIds = workflowPreview.map((r) => r.subjectId);

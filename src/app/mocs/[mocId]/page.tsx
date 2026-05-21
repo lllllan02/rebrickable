@@ -11,7 +11,7 @@ import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { BuildWorkflowProgressPanel } from "@/app/build/build-workflow-progress-panel";
-import { ensureWorkflowCollected } from "@/lib/ensure-workflow-collected";
+import { ensureWorkflowCollected, loadWorkflowProgress } from "@/lib/ensure-workflow-collected";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 
@@ -34,7 +34,7 @@ export default async function MocDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, mocId)
   );
   const mocProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
-  const [imgRows, attRows, sheet, profileRow, ioSplitPlans, workflowProgress] = await Promise.all([
+  const [imgRows, attRows, sheet, profileRow, ioSplitPlans] = await Promise.all([
     db
       .select({
         id: buildImages.id,
@@ -59,10 +59,14 @@ export default async function MocDetailPage({ params }: Props) {
     loadMocPartsSheetFromDb(mocId),
     db.select().from(buildProfiles).where(mocProfKey).limit(1),
     listIoSplitPlanGroupsForMoc(mocId),
-    ensureWorkflowCollected(BUILD_SUBJECT_MOC, mocId),
   ]);
 
   const profile = profileRow[0];
+  const hasMocUserData =
+    profile != null || imgRows.length > 0 || attRows.length > 0 || sheet.ok;
+  const workflowProgress = hasMocUserData
+    ? await ensureWorkflowCollected(BUILD_SUBJECT_MOC, mocId)
+    : await loadWorkflowProgress(BUILD_SUBJECT_MOC, mocId);
   const initialDisplayName = (profile?.displayName ?? "").trim();
   const initialTags = parseTagsJson(profile?.tagsJson);
 

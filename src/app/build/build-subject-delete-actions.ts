@@ -14,19 +14,12 @@ import {
   buildProfiles,
   buildSavedPartsSheets,
 } from "@/db/schema";
-import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildUploadAbsoluteDir, BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
+import { revalidateWorkflowPaths } from "@/lib/build-workflow-revalidate";
 
 function subjectKey(kind: BuildSubjectKind, subjectId: string) {
   return { kind, id: subjectId };
-}
-
-function revalidateAfterBuildSubjectDelete(kind: BuildSubjectKind, subjectId: string): void {
-  revalidatePath("/");
-  revalidatePath("/search");
-  revalidatePath(buildSubjectListPath(kind));
-  revalidatePath(buildSubjectDetailPath(kind, subjectId));
 }
 
 /** 删除本地 MOC 及其全部用户数据（零件表、资料、图、附件、拥有/收藏标记与上传目录）。 */
@@ -76,7 +69,8 @@ export async function deleteBuildSubjectAction(
 
     await fs.rm(buildUploadAbsoluteDir(subjectKind, subjectId), { recursive: true, force: true }).catch(() => {});
 
-    revalidateAfterBuildSubjectDelete(subjectKind, subjectId);
+    revalidateWorkflowPaths(subjectKind, subjectId);
+    revalidatePath("/search");
     return { ok: true };
   } catch {
     return { ok: false, error: "删除失败，请重试。" };
