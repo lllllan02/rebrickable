@@ -208,10 +208,13 @@ export const buildProfiles = sqliteTable(
       .default(false),
     /** 冗余：是否存在 .io 源文件附件 */
     hasIoSource: integer("has_io_source", { mode: "boolean" }).notNull().default(false),
+    /** 仅 MOC：改编自的官方套装 set_num；无则为 null */
+    derivedFromSetNum: text("derived_from_set_num"),
   },
   (t) => [
     primaryKey({ columns: [t.subjectKind, t.subjectId] }),
     index("build_profiles_updated_idx").on(t.profileUpdatedAt),
+    index("build_profiles_derived_set_idx").on(t.derivedFromSetNum),
   ]
 );
 

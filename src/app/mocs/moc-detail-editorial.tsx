@@ -1,28 +1,19 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { MocAttachmentsPanel, type MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import { MocDeleteControl } from "@/app/mocs/moc-delete-control";
 import { MocImageCarousel, type MocGalleryImage } from "@/app/mocs/moc-image-carousel";
 import { MocProfileForm } from "@/app/mocs/moc-profile-form";
-import { buildSubjectListPath } from "@/lib/build-subject-paths";
-import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectDetailPath, buildSubjectListPath } from "@/lib/build-subject-paths";
+import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
+import type { MocDerivedFromSetMeta } from "@/lib/moc-derived-from-set";
+import type { SetDetailOfficialMeta } from "@/lib/set-detail-official-meta";
 
-/** 套装详情：与 Rebrickable 目录同步的官方封面与库存元数据（并入主面板侧栏 / 主图区） */
-export type SetDetailOfficialMeta = {
-  setNum: string;
-  catalogName: string | null;
-  year: number | null;
-  invVersion: number;
-  invId: number;
-  uniqueParts: number;
-  sumQty: number;
-  spareQty: number;
-  heroThumb: string | null;
-  heroIsSetBox: boolean;
-};
+export type { SetDetailOfficialMeta };
 
 type Props = {
   subjectKind?: BuildSubjectKind;
@@ -35,8 +26,14 @@ type Props = {
   partTotalQty: number | null;
   /** 高砖整单参考价（元），来自接口根字段 `gdsPrice`；未对照高砖时为 null */
   gobricksGdsPriceCny?: number | null;
+  /** 仅套装：已存缺件/配货表粒数（与官方库存不同时显示） */
+  savedSheetPartTotalQty?: number | null;
   /** 仅套装：官方盒图 / 占位与目录元数据，与 MOC 主面板同栅格展示 */
   setOfficial?: SetDetailOfficialMeta | null;
+  /** 仅 MOC：改编自的官方套装（详情页链回套装） */
+  derivedFromSet?: MocDerivedFromSetMeta | null;
+  /** 仅套装详情：侧栏「改编为 MOC」区块 */
+  setPageAside?: ReactNode;
 };
 
 export function MocDetailEditorial({
@@ -48,7 +45,10 @@ export function MocDetailEditorial({
   initialTags,
   partTotalQty,
   gobricksGdsPriceCny = null,
+  savedSheetPartTotalQty = null,
   setOfficial = null,
+  derivedFromSet = null,
+  setPageAside = null,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const rbHref = ui.rebrickableUrl(subjectId);
@@ -87,56 +87,30 @@ export function MocDetailEditorial({
         </div>
 
         <aside className="flex min-w-0 flex-col gap-5 border-t border-[var(--border-soft)] pt-6 lg:col-span-1 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-          <p className="page-kicker">{ui.detailSidebarKicker}</p>
-          <MocProfileForm
-            variant="sidebar"
-            subjectKind={subjectKind}
-            subjectId={subjectId}
-            initialDisplayName={initialDisplayName}
-            initialTags={initialTags}
-            partTotalQty={partTotalQty}
-            gobricksGdsPriceCny={gobricksGdsPriceCny}
-          />
+          <p className="page-kicker">{o ? "套装资料" : ui.detailSidebarKicker}</p>
+          <div className={o ? "flex flex-col gap-4" : undefined}>
+            <MocProfileForm
+              variant="sidebar"
+              subjectKind={subjectKind}
+              subjectId={subjectId}
+              initialDisplayName={initialDisplayName}
+              initialTags={initialTags}
+              partTotalQty={partTotalQty}
+              gobricksGdsPriceCny={gobricksGdsPriceCny}
+              setOfficial={o ?? undefined}
+              savedSheetPartTotalQty={o ? savedSheetPartTotalQty : undefined}
+            />
+            {o && setPageAside ? setPageAside : null}
+          </div>
 
-          {o ? (
-            <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] pt-4">
-              <h2 className="text-base font-semibold text-[var(--text)]">官方元数据与库存</h2>
-              <p className="font-mono text-xl font-extrabold tracking-tight text-[var(--accent)]">{o.setNum}</p>
-              {o.catalogName ? <p className="text-sm text-[var(--text)]">{o.catalogName}</p> : null}
-              <dl className="meta-row text-sm">
-                {o.year != null ? (
-                  <div>
-                    <dt className="inline text-[var(--text)]">年份：</dt>
-                    <dd className="inline">{o.year}</dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt className="inline text-[var(--text)]">库存版本：</dt>
-                  <dd className="inline">{o.invVersion}</dd>
-                </div>
-                <div>
-                  <dt className="inline text-[var(--text)]">inventory_id：</dt>
-                  <dd className="inline font-mono">{o.invId}</dd>
-                </div>
-                <div>
-                  <dt className="inline text-[var(--text)]">零件种类：</dt>
-                  <dd className="inline">{o.uniqueParts.toLocaleString("zh-CN")}</dd>
-                </div>
-                <div>
-                  <dt className="inline text-[var(--text)]">主件：</dt>
-                  <dd className="inline">{o.sumQty.toLocaleString("zh-CN")} 粒</dd>
-                </div>
-                <div>
-                  <dt className="inline text-[var(--text)]">备用件：</dt>
-                  <dd className="inline">{o.spareQty.toLocaleString("zh-CN")} 粒</dd>
-                </div>
-              </dl>
-              <p className="text-xs text-[var(--muted)]">
-                其他套装请见{" "}
-                <Link href="/sets" className="text-[var(--accent)] underline underline-offset-2">
-                  套装列表
-                </Link>
-                。
+          {isMoc && derivedFromSet ? (
+            <div className="flex flex-col gap-2 border-t border-[var(--border-soft)] pt-4">
+              <h2 className="text-base font-semibold text-[var(--text)]">改编自官方套装</h2>
+              <p className="text-sm text-[var(--muted)]">
+                本 MOC 由套装{" "}
+                <span className="font-mono text-[var(--text)]">{derivedFromSet.setNum}</span>
+                {derivedFromSet.catalogName ? <>（{derivedFromSet.catalogName}）</> : null}{" "}
+                改编。
               </p>
             </div>
           ) : null}
@@ -144,20 +118,35 @@ export function MocDetailEditorial({
           <MocAttachmentsPanel subjectKind={subjectKind} subjectId={subjectId} attachments={attachments} />
 
           <nav className="flex flex-col gap-2 border-t border-[var(--border-soft)] pt-4 text-sm">
-            <a
-              href={rbHref}
-              className="text-[var(--accent)] underline underline-offset-2"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {ui.rbLinkLabel(subjectId)}
-            </a>
+            {isMoc && derivedFromSet ? (
+              <Link
+                href={buildSubjectDetailPath(BUILD_SUBJECT_SET, derivedFromSet.setNum)}
+                className="text-[var(--accent)] underline underline-offset-2"
+              >
+                打开官方套装 {derivedFromSet.setNum}
+                {derivedFromSet.catalogName ? `（${derivedFromSet.catalogName}）` : ""}
+              </Link>
+            ) : (
+              <a
+                href={rbHref}
+                className="text-[var(--accent)] underline underline-offset-2"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {ui.rbLinkLabel(subjectId)}
+              </a>
+            )}
             <Link
               href={listHref}
               className="text-[var(--muted)] underline-offset-2 hover:text-[var(--text)] hover:underline"
             >
               {ui.backToListLabel}
             </Link>
+            {o ? (
+              <Link href="/sets" className="text-[var(--muted)] underline-offset-2 hover:text-[var(--text)] hover:underline">
+                浏览套装列表
+              </Link>
+            ) : null}
           </nav>
 
           {isMoc ? <MocDeleteControl mocId={subjectId} displayTitle={deleteDisplayTitle} /> : null}

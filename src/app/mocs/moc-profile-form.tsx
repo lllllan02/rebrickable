@@ -14,6 +14,7 @@ import {
   MOC_PROFILE_MAX_TAG_LEN,
   MOC_PROFILE_MAX_TAGS,
 } from "@/lib/moc-profile-parse";
+import type { SetDetailOfficialMeta } from "@/lib/set-detail-official-meta";
 
 type Props = {
   subjectKind?: BuildSubjectKind;
@@ -28,6 +29,10 @@ type Props = {
   gobricksGdsPriceCny?: number | null;
   /** 侧边栏：与主标题同一行右侧（如拥有 / 收藏按钮） */
   sidebarTitleAside?: ReactNode;
+  /** 套装详情：并入标题与元数据行，不再单独展示「官方元数据」区块 */
+  setOfficial?: SetDetailOfficialMeta;
+  /** 已存零件表粒数（与官方库存总数不同时展示） */
+  savedSheetPartTotalQty?: number | null;
 };
 
 type OptimisticProfile = { displayName: string; tags: string[] };
@@ -41,6 +46,8 @@ export function MocProfileForm({
   partTotalQty = null,
   gobricksGdsPriceCny = null,
   sidebarTitleAside = null,
+  setOfficial = undefined,
+  savedSheetPartTotalQty = null,
 }: Props) {
   const ui = buildSubjectUi(subjectKind);
   const router = useRouter();
@@ -73,7 +80,97 @@ export function MocProfileForm({
 
   const viewDisplayName = optimistic?.displayName ?? initialDisplayName;
   const viewTags = optimistic?.tags ?? initialTags;
-  const viewTitle = viewDisplayName.trim() || `${ui.noun} ${subjectId}`;
+  const catalogName = setOfficial?.catalogName?.trim() ?? "";
+  const viewTitle =
+    viewDisplayName.trim() || catalogName || `${ui.noun} ${subjectId}`;
+
+  const officialInvTotal =
+    setOfficial != null ? setOfficial.sumQty + setOfficial.spareQty : null;
+
+  const sidebarMetaLine = (() => {
+    if (!isSidebar || !setOfficial) {
+      if (!isSidebar) return null;
+      return (
+        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
+          <span>
+            {ui.subjectIdLabel} · {subjectId}
+          </span>
+          {partTotalQty !== null ? (
+            <>
+              <span className="select-none text-[var(--muted-2)]" aria-hidden>
+                ·
+              </span>
+              <span>
+                零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
+              </span>
+            </>
+          ) : null}
+        </p>
+      );
+    }
+
+    const o = setOfficial;
+    const invTotal = officialInvTotal ?? 0;
+    const sheetQty =
+      typeof savedSheetPartTotalQty === "number" &&
+      Number.isFinite(savedSheetPartTotalQty) &&
+      savedSheetPartTotalQty >= 0 &&
+      savedSheetPartTotalQty !== invTotal
+        ? savedSheetPartTotalQty
+        : null;
+
+    return (
+      <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 font-mono text-[11px] text-[var(--muted)]">
+        <span className="text-[var(--accent)]">{o.setNum}</span>
+        {o.year != null ? (
+          <>
+            <span className="select-none text-[var(--muted-2)]" aria-hidden>
+              ·
+            </span>
+            <span>{o.year}</span>
+          </>
+        ) : null}
+        <span className="select-none text-[var(--muted-2)]" aria-hidden>
+          ·
+        </span>
+        <span>
+          种类 <span className="tabular-nums">{o.uniqueParts.toLocaleString("zh-CN")}</span>
+        </span>
+        <span className="select-none text-[var(--muted-2)]" aria-hidden>
+          ·
+        </span>
+        <span>
+          主件 <span className="tabular-nums">{o.sumQty.toLocaleString("zh-CN")}</span> 粒
+        </span>
+        {o.spareQty > 0 ? (
+          <>
+            <span className="select-none text-[var(--muted-2)]" aria-hidden>
+              ·
+            </span>
+            <span>
+              备用 <span className="tabular-nums">{o.spareQty.toLocaleString("zh-CN")}</span> 粒
+            </span>
+          </>
+        ) : null}
+        {sheetQty != null ? (
+          <>
+            <span className="select-none text-[var(--muted-2)]" aria-hidden>
+              ·
+            </span>
+            <span title="已上传缺件或配货表的粒数合计">
+              已存表 <span className="tabular-nums">{sheetQty.toLocaleString("zh-CN")}</span> 粒
+            </span>
+          </>
+        ) : null}
+        <span className="select-none text-[var(--muted-2)]" aria-hidden>
+          ·
+        </span>
+        <span className="tabular-nums" title="inventory_id">
+          inv {o.invId}
+        </span>
+      </p>
+    );
+  })();
 
   const enterEdit = useCallback(() => {
     const baseName = (optimistic?.displayName ?? initialDisplayName).slice(0, MOC_PROFILE_MAX_DISPLAY_NAME);
@@ -161,24 +258,14 @@ export function MocProfileForm({
               </span>
             ) : null}
           </p>
-          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
-            <span>
-              {ui.subjectIdLabel} · {subjectId}
-            </span>
-            {isSidebar && partTotalQty !== null ? (
-              <>
-                <span className="select-none text-[var(--muted-2)]" aria-hidden>
-                  ·
-                </span>
-                <span>
-                  零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
-                </span>
-              </>
-            ) : null}
-          </p>
+          {sidebarMetaLine}
           {!isSidebar ? (
             <p className="mt-1 text-xs text-[var(--muted)]">
               显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
+            </p>
+          ) : setOfficial ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              库存版本 {setOfficial.invVersion}；显示名称仅用于本应用，set_num 不变。
             </p>
           ) : null}
         </div>
@@ -249,7 +336,7 @@ export function MocProfileForm({
                 setError(null);
               }}
               maxLength={MOC_PROFILE_MAX_DISPLAY_NAME}
-              placeholder={`${ui.noun} ${subjectId}`}
+              placeholder={catalogName || `${ui.noun} ${subjectId}`}
               aria-label="显示名称"
               className={
                 isSidebar
@@ -266,24 +353,14 @@ export function MocProfileForm({
               高砖整单 {gobricksTotalLabel}
             </p>
           ) : null}
-          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] text-[var(--muted)]">
-            <span>
-              {ui.subjectIdLabel} · {subjectId}
-            </span>
-            {isSidebar && partTotalQty !== null ? (
-              <>
-                <span className="select-none text-[var(--muted-2)]" aria-hidden>
-                  ·
-                </span>
-                <span>
-                  零件总数 <span className="tabular-nums">{partTotalQty.toLocaleString("zh-CN")}</span>
-                </span>
-              </>
-            ) : null}
-          </p>
+          {sidebarMetaLine}
           {!isSidebar ? (
             <p className="mt-1 text-xs text-[var(--muted)]">
               显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
+            </p>
+          ) : setOfficial ? (
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              库存版本 {setOfficial.invVersion}；显示名称仅用于本应用，set_num 不变。
             </p>
           ) : null}
         </div>

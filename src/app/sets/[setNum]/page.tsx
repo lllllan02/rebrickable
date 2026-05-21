@@ -4,6 +4,8 @@ import { and, asc, desc, eq, isNotNull, min, ne } from "drizzle-orm";
 import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { loadBuildPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailEditorial, type SetDetailOfficialMeta } from "@/app/mocs/moc-detail-editorial";
+import { CreateMocFromSetButton } from "@/app/sets/create-moc-from-set-button";
+import { listDerivedMocsForSet } from "@/lib/moc-derived-from-set";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import type { MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import type { MocGalleryImage } from "@/app/mocs/moc-image-carousel";
@@ -50,7 +52,8 @@ export default async function SetDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, setNum)
   );
   const setProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_SET), eq(buildProfiles.subjectId, setNum));
-  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, workflowProgress] = await Promise.all([
+  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, workflowProgress, derivedMocs] =
+    await Promise.all([
     catalogDb
       .select({
         id: inventories.id,
@@ -93,6 +96,7 @@ export default async function SetDetailPage({ params }: Props) {
     loadBuildPartsSheetFromDb(BUILD_SUBJECT_SET, setNum),
     userDb.select().from(buildProfiles).where(setProfKey).limit(1),
     ensureWorkflowCollected(BUILD_SUBJECT_SET, setNum),
+    listDerivedMocsForSet(setNum),
   ]);
 
   if (!inv) notFound();
@@ -167,7 +171,9 @@ export default async function SetDetailPage({ params }: Props) {
 
   const invTotalQty = lines.reduce((a, l) => a + l.quantity, 0);
   const sheetTotalQty = sheet.ok ? sheet.shortage?.totalPartQty ?? null : null;
-  const partTotalQty = sheetTotalQty ?? (lines.length > 0 ? invTotalQty : null);
+  const partTotalQty = invTotalQty > 0 ? invTotalQty : null;
+  const savedSheetPartTotalQty =
+    sheetTotalQty != null && invTotalQty > 0 && sheetTotalQty !== invTotalQty ? sheetTotalQty : null;
 
   const officialInventoryItems = officialInventoryRowsToShortageResolveItems(
     lines.map((l) => ({
@@ -241,8 +247,17 @@ export default async function SetDetailPage({ params }: Props) {
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
         partTotalQty={partTotalQty}
+        savedSheetPartTotalQty={savedSheetPartTotalQty}
         gobricksGdsPriceCny={gobricksGdsPriceCny}
         setOfficial={setOfficial}
+        setPageAside={
+          <CreateMocFromSetButton
+            setNum={setNum}
+            catalogName={catalog?.name ?? null}
+            derivedMocs={derivedMocs}
+            embedded
+          />
+        }
       />
 
       <BuildWorkflowProgressPanel

@@ -12,6 +12,7 @@ import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { BuildWorkflowProgressPanel } from "@/app/build/build-workflow-progress-panel";
 import { ensureWorkflowCollected, loadWorkflowProgress } from "@/lib/ensure-workflow-collected";
+import { loadMocDerivedFromSetMeta } from "@/lib/moc-derived-from-set";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 
@@ -34,7 +35,7 @@ export default async function MocDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, mocId)
   );
   const mocProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
-  const [imgRows, attRows, sheet, profileRow, ioSplitPlans] = await Promise.all([
+  const [imgRows, attRows, sheet, profileRow, ioSplitPlans, derivedFromSet] = await Promise.all([
     db
       .select({
         id: buildImages.id,
@@ -59,6 +60,7 @@ export default async function MocDetailPage({ params }: Props) {
     loadMocPartsSheetFromDb(mocId),
     db.select().from(buildProfiles).where(mocProfKey).limit(1),
     listIoSplitPlanGroupsForMoc(mocId),
+    loadMocDerivedFromSetMeta(mocId),
   ]);
 
   const profile = profileRow[0];
@@ -133,6 +135,7 @@ export default async function MocDetailPage({ params }: Props) {
         initialTags={initialTags}
         partTotalQty={partTotalQty}
         gobricksGdsPriceCny={gobricksGdsPriceCny}
+        derivedFromSet={derivedFromSet}
       />
 
       <BuildWorkflowProgressPanel

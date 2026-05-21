@@ -211,6 +211,12 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     if (!profCols.has("has_io_source")) {
       sqlite.exec(`ALTER TABLE build_profiles ADD COLUMN has_io_source INTEGER NOT NULL DEFAULT 0`);
     }
+    if (!profCols.has("derived_from_set_num")) {
+      sqlite.exec(`ALTER TABLE build_profiles ADD COLUMN derived_from_set_num TEXT`);
+    }
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS build_profiles_derived_set_idx ON build_profiles(derived_from_set_num)`
+    );
   }
 
   if (tableExists(sqlite, "moc_saved_parts_sheets")) {
