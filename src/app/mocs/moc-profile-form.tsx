@@ -63,6 +63,8 @@ export function MocProfileForm({
   const [pending, startTransition] = useTransition();
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
+  /** 提交标签后忽略 IME/浏览器把旧草稿写回受控输入框的一次 onChange */
+  const ignoreTagDraftChangeRef = useRef<string | null>(null);
 
   const isSidebar = variant === "sidebar";
   const tagListHref = subjectKind === BUILD_SUBJECT_MOC ? (tag: string) => mocListHref({ tag }) : null;
@@ -177,6 +179,7 @@ export function MocProfileForm({
     setDisplayName(baseName);
     setTags([...(optimistic?.tags ?? initialTags)]);
     setTagDraft("");
+    ignoreTagDraftChangeRef.current = null;
     setError(null);
     setMessage(null);
     setEditing(true);
@@ -187,10 +190,11 @@ export function MocProfileForm({
     setError(null);
     setMessage(null);
     setTagDraft("");
+    ignoreTagDraftChangeRef.current = null;
   }, []);
 
-  const addTag = useCallback(() => {
-    const t = tagDraft.trim();
+  const commitTagDraft = useCallback((raw: string) => {
+    const t = raw.trim();
     setError(null);
     if (!t) return;
     if (t.length > MOC_PROFILE_MAX_TAG_LEN) {
@@ -205,8 +209,13 @@ export function MocProfileForm({
     const lower = t.toLowerCase();
     if (prev.some((x) => x.toLowerCase() === lower)) return;
     setTags([...prev, t]);
+    ignoreTagDraftChangeRef.current = raw;
     setTagDraft("");
-  }, [tagDraft]);
+  }, []);
+
+  const addTag = useCallback(() => {
+    commitTagDraft(tagDraft);
+  }, [commitTagDraft, tagDraft]);
 
   const removeTag = useCallback((idx: number) => {
     setTags((prev) => prev.filter((_, i) => i !== idx));
@@ -398,13 +407,25 @@ export function MocProfileForm({
             type="text"
             value={tagDraft}
             maxLength={MOC_PROFILE_MAX_TAG_LEN}
-            onChange={(e) => setTagDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTag();
+            onChange={(e) => {
+              const next = e.target.value;
+              const stale = ignoreTagDraftChangeRef.current;
+              if (stale !== null) {
+                if (next === stale || next.trim() === stale.trim()) {
+                  ignoreTagDraftChangeRef.current = null;
+                  return;
+                }
+                ignoreTagDraftChangeRef.current = null;
               }
+              setTagDraft(next);
             }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              commitTagDraft(e.currentTarget.value);
+            }}
+            autoComplete="off"
+            spellCheck={false}
             placeholder="新标签，回车添加"
             className="field min-w-0 flex-1 text-xs text-[var(--text)] sm:text-sm"
           />
