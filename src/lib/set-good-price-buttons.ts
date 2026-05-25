@@ -5,6 +5,9 @@ export const goodPriceBtnPrimary =
 export const goodPriceBtnSecondary =
   "shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-50";
 
+export const goodPriceBtnOwned =
+  "shrink-0 rounded-md border border-emerald-500/40 bg-[var(--surface-2)] px-3 py-1.5 text-sm text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50";
+
 export const goodPriceBtnDanger =
   "shrink-0 rounded-md border border-red-500/40 bg-[var(--surface-2)] px-3 py-1.5 text-sm text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50";
 

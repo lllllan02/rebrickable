@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { GoodPriceListSortControl } from "@/app/sets/good-price-list-sort-control";
-import { clearSetGoodPriceAction } from "@/app/sets/set-good-price-actions";
+import {
+  clearSetGoodPriceAction,
+  markSetOwnedFromGoodPriceAction,
+} from "@/app/sets/set-good-price-actions";
 import {
   SetGoodPriceEditDialog,
   type SetGoodPriceEditDraft,
@@ -12,6 +15,7 @@ import {
 import { SetGoodPriceListRow } from "@/app/sets/set-good-price-list-row";
 import {
   goodPriceBtnDanger,
+  goodPriceBtnOwned,
   goodPriceBtnPrimary,
   goodPriceBtnSecondary,
 } from "@/lib/set-good-price-buttons";
@@ -51,6 +55,17 @@ export function GoodPricesListClient({ items, sortState }: Props) {
       priceNewCny: item.priceNewCny,
       priceUsedCny: item.priceUsedCny,
       channelNew: item.channelNew,
+    });
+  };
+
+  const markOwned = (item: GoodPriceListRowProps) => {
+    startTransition(async () => {
+      const res = await markSetOwnedFromGoodPriceAction({ setNum: item.setNum });
+      if (!res.ok) {
+        alert(res.error);
+        return;
+      }
+      router.refresh();
     });
   };
 
@@ -105,6 +120,14 @@ export function GoodPricesListClient({ items, sortState }: Props) {
                     className={goodPriceBtnSecondary}
                   >
                     编辑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => markOwned(item)}
+                    disabled={pending}
+                    className={goodPriceBtnOwned}
+                  >
+                    拥有
                   </button>
                   <button
                     type="button"

@@ -2,6 +2,7 @@
 
 import { eq } from "drizzle-orm";
 
+import { setBuildWorkflowStageAction } from "@/app/build/build-workflow-actions";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import { buildSetGoodPrices } from "@/db/schema";
 import { BUILD_SUBJECT_SET, isSafeBuildSubjectId } from "@/lib/build-subject";
@@ -80,6 +81,25 @@ export async function saveSetGoodPriceAction(input: {
   } catch {
     return { ok: false, error: "保存失败，请重试。" };
   }
+}
+
+/** 标记套装为拥有，并移出好价榜 */
+export async function markSetOwnedFromGoodPriceAction(input: {
+  setNum: string;
+}): Promise<SaveSetGoodPriceResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  const workflowRes = await setBuildWorkflowStageAction({
+    subjectKind: BUILD_SUBJECT_SET,
+    subjectId: setNum,
+    stage: "complete",
+  });
+  if (!workflowRes.ok) return workflowRes;
+
+  return clearSetGoodPriceAction({ setNum });
 }
 
 export async function clearSetGoodPriceAction(input: {
