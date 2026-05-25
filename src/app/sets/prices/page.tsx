@@ -4,7 +4,7 @@ import { inArray } from "drizzle-orm";
 import { GoodPricesListClient } from "@/app/sets/good-prices-list-client";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import { buildSetGoodPrices, legoSets } from "@/db/schema";
-import { hasAnySetGoodPrice, parseSetGoodPriceChannelNew } from "@/lib/set-good-price-channel";
+import { hasAnySetGoodPrice } from "@/lib/set-good-price-channel";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { batchSetStudVolumeStats } from "@/lib/set-catalog-stud-volume";
 import {
@@ -64,7 +64,6 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       setNum: r.setNum,
       priceNewCny: r.priceNewCny,
       priceUsedCny: r.priceUsedCny,
-      channelNew: parseSetGoodPriceChannelNew(r.channelNew),
       updatedAt: r.updatedAt,
       catalogName: cat?.name ?? null,
       year: cat?.year ?? null,

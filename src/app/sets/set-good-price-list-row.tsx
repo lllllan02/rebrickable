@@ -6,10 +6,6 @@ import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { goodPriceRowActionsClass } from "@/lib/set-good-price-buttons";
 import {
-  SET_GOOD_PRICE_CHANNEL_USED,
-  type SetGoodPriceChannelNew,
-} from "@/lib/set-good-price-channel";
-import {
   formatSetGoodPriceCny,
   formatSetGoodPricePerPiece,
   formatSetGoodPricePerStudUnit,
@@ -137,14 +133,12 @@ function UnitPriceRow({
 function PriceColumn({
   label,
   priceCny,
-  channel,
   numParts,
   totalStudUnits,
   highlighted,
 }: {
   label: string;
   priceCny: number | null;
-  channel: string | null;
   numParts: number | null;
   totalStudUnits: number | null;
   highlighted?: boolean;
@@ -171,7 +165,6 @@ function PriceColumn({
       ) : (
         <p className="mt-1 font-mono text-sm text-[var(--muted-2)]">—</p>
       )}
-      {channel ? <p className="mt-0.5 text-xs text-[var(--text)]">{channel}</p> : null}
       <UnitPriceRow
         perPieceLabel={perPieceLabel}
         perStudLabel={perStudLabel}
@@ -187,7 +180,6 @@ export function SetGoodPriceListRow({
   coverUrl,
   priceNewCny,
   priceUsedCny,
-  channelNew,
   updatedAtIso,
   numParts,
   totalStudUnits,
@@ -201,7 +193,6 @@ export function SetGoodPriceListRow({
   coverUrl: string | null;
   priceNewCny: number | null;
   priceUsedCny: number | null;
-  channelNew: SetGoodPriceChannelNew | null;
   updatedAtIso: string;
   numParts: number | null;
   totalStudUnits: number | null;
@@ -261,7 +252,6 @@ export function SetGoodPriceListRow({
             <PriceColumn
               label="全新"
               priceCny={priceNewCny}
-              channel={channelNew}
               numParts={numParts}
               totalStudUnits={totalStudUnits}
               highlighted={sortKind === "new"}
@@ -269,7 +259,6 @@ export function SetGoodPriceListRow({
             <PriceColumn
               label="二手"
               priceCny={priceUsedCny}
-              channel={priceUsedCny != null ? SET_GOOD_PRICE_CHANNEL_USED : null}
               numParts={numParts}
               totalStudUnits={totalStudUnits}
               highlighted={sortKind === "used"}

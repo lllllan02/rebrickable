@@ -1,5 +1,3 @@
-import type { SetGoodPriceChannelNew } from "@/lib/set-good-price-channel";
-
 export type SetGoodPriceSortKind = "new" | "used";
 export type SetGoodPriceSortMetric = "price" | "per_piece" | "per_stud_unit";
 export type SetGoodPriceSortDir = "asc" | "desc";
@@ -30,7 +28,6 @@ export type SetGoodPriceListItem = {
   setNum: string;
   priceNewCny: number | null;
   priceUsedCny: number | null;
-  channelNew: SetGoodPriceChannelNew | null;
   updatedAt: string;
   catalogName: string | null;
   year: number | null;

@@ -7,12 +7,7 @@ import {
   clearSetGoodPriceAction,
   saveSetGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
-import {
-  hasAnySetGoodPrice,
-  SET_GOOD_PRICE_CHANNELS_NEW,
-  SET_GOOD_PRICE_CHANNEL_USED,
-  type SetGoodPriceChannelNew,
-} from "@/lib/set-good-price-channel";
+import { hasAnySetGoodPrice } from "@/lib/set-good-price-channel";
 import {
   goodPriceBtnDanger,
   goodPriceBtnPrimary,
@@ -25,7 +20,6 @@ export type SetGoodPriceEditDraft = {
   catalogName?: string | null;
   priceNewCny: number | null;
   priceUsedCny: number | null;
-  channelNew: SetGoodPriceChannelNew | null;
 };
 
 function priceToInput(v: number | null): string {
@@ -47,7 +41,6 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
   const [setNumInput, setSetNumInput] = useState("");
   const [newInput, setNewInput] = useState("");
   const [usedInput, setUsedInput] = useState("");
-  const [channelNewInput, setChannelNewInput] = useState("");
 
   const isEdit = draft?.mode === "edit";
   const hasSaved =
@@ -61,7 +54,6 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
     setSetNumInput(draft.setNum);
     setNewInput(priceToInput(draft.priceNewCny));
     setUsedInput(priceToInput(draft.priceUsedCny));
-    setChannelNewInput(draft.channelNew ?? "");
     setError(null);
     dialogRef.current?.showModal();
   }, [draft]);
@@ -82,7 +74,6 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
         setNum: setNumInput,
         priceNewCny: newInput,
         priceUsedCny: usedInput,
-        channelNew: channelNewInput,
       });
       if (!res.ok) {
         setError(res.error);
@@ -109,8 +100,6 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
 
   const inputClass =
     "rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 font-mono text-sm text-[var(--text)] outline-none ring-[var(--accent)]/20 focus-visible:ring-2 w-full";
-  const selectClass =
-    "rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none ring-[var(--accent)]/20 focus-visible:ring-2 w-full";
 
   return (
     <dialog
@@ -158,27 +147,11 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
 
           <p className="text-xs text-[var(--muted)]">
             套装编号可只填数字部分（如 71821），系统会自动匹配目录中的变体（如 71821-1）。
-            至少填写全新或二手价格之一；全新渠道与全新价绑定，二手默认为闲鱼。
+            至少填写全新或二手价格之一。
           </p>
 
           <div className="flex flex-col gap-3 rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-3">
             <p className="text-xs font-medium text-[var(--text)]">全新</p>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-[var(--muted)]">渠道</span>
-              <select
-                value={channelNewInput}
-                onChange={(e) => setChannelNewInput(e.target.value)}
-                disabled={pending}
-                className={selectClass}
-              >
-                <option value="">未选择</option>
-                {SET_GOOD_PRICE_CHANNELS_NEW.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-[var(--muted)]">价格（元）</span>
               <input
@@ -194,10 +167,7 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
           </div>
 
           <div className="flex flex-col gap-3 rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-xs font-medium text-[var(--text)]">二手</p>
-              <span className="text-xs text-[var(--muted)]">渠道：{SET_GOOD_PRICE_CHANNEL_USED}</span>
-            </div>
+            <p className="text-xs font-medium text-[var(--text)]">二手</p>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-[var(--muted)]">价格（元）</span>
               <input

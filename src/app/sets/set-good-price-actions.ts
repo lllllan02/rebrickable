@@ -6,7 +6,6 @@ import { setBuildWorkflowStageAction } from "@/app/build/build-workflow-actions"
 import { getCatalogDb, getUserDb } from "@/db/client";
 import { buildSetGoodPrices } from "@/db/schema";
 import { BUILD_SUBJECT_SET, isSafeBuildSubjectId } from "@/lib/build-subject";
-import { parseSetGoodPriceChannelNew } from "@/lib/set-good-price-channel";
 import { revalidateSetGoodPricePaths } from "@/lib/set-good-price-revalidate";
 import { resolveCatalogSetNum } from "@/lib/resolve-catalog-set-num";
 import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
@@ -27,7 +26,6 @@ export async function saveSetGoodPriceAction(input: {
   setNum: string;
   priceNewCny?: unknown;
   priceUsedCny?: unknown;
-  channelNew?: unknown;
 }): Promise<SaveSetGoodPriceResult> {
   const setNum = input.setNum.trim();
   if (!setNum || setNum.length > BUILD_UPLOAD_MAX_ID_LEN) {
@@ -49,9 +47,6 @@ export async function saveSetGoodPriceAction(input: {
     return { ok: false, error: "请输入有效的价格（0–999999 元）。" };
   }
 
-  const channelNew =
-    priceNewCny != null ? parseSetGoodPriceChannelNew(input.channelNew) : null;
-
   try {
     const catalogDb = getCatalogDb();
     const resolved = await resolveCatalogSetNum(catalogDb, setNum);
@@ -68,12 +63,12 @@ export async function saveSetGoodPriceAction(input: {
         setNum: canonicalSetNum,
         priceNewCny,
         priceUsedCny,
-        channelNew,
+        channelNew: null,
         updatedAt,
       })
       .onConflictDoUpdate({
         target: buildSetGoodPrices.setNum,
-        set: { priceNewCny, priceUsedCny, channelNew, updatedAt },
+        set: { priceNewCny, priceUsedCny, channelNew: null, updatedAt },
       });
 
     revalidateSetGoodPricePaths(canonicalSetNum);

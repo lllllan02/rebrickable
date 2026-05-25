@@ -43,7 +43,6 @@ export function GoodPricesListClient({ items, sortState }: Props) {
       setNum: "",
       priceNewCny: null,
       priceUsedCny: null,
-      channelNew: null,
     });
   };
 
@@ -54,7 +53,6 @@ export function GoodPricesListClient({ items, sortState }: Props) {
       catalogName: item.catalogName,
       priceNewCny: item.priceNewCny,
       priceUsedCny: item.priceUsedCny,
-      channelNew: item.channelNew,
     });
   };
 
@@ -104,7 +102,6 @@ export function GoodPricesListClient({ items, sortState }: Props) {
               coverUrl={item.coverUrl}
               priceNewCny={item.priceNewCny}
               priceUsedCny={item.priceUsedCny}
-              channelNew={item.channelNew}
               updatedAtIso={item.updatedAt}
               numParts={item.numParts}
               totalStudUnits={item.totalStudUnits}
