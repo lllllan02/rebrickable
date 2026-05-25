@@ -115,6 +115,15 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     );
     CREATE INDEX IF NOT EXISTS build_favorite_kind_idx ON build_favorite_subjects(subject_kind);
 
+    CREATE TABLE IF NOT EXISTS build_set_good_prices (
+      set_num TEXT PRIMARY KEY,
+      price_new_cny REAL,
+      price_used_cny REAL,
+      channel_new TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_set_good_prices_updated_idx ON build_set_good_prices(updated_at);
+
     CREATE TABLE IF NOT EXISTS build_io_step_batches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_kind TEXT NOT NULL,
@@ -151,6 +160,69 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       sqlite.exec(
         `ALTER TABLE build_io_step_batches ADD COLUMN rule_label TEXT NOT NULL DEFAULT ''`
       );
+    }
+  }
+
+  if (tableExists(sqlite, "build_set_good_prices")) {
+    const gpCols = tableColumnNames(sqlite, "build_set_good_prices");
+    if (!gpCols.has("price_new_cny")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN price_new_cny REAL`);
+    }
+    if (!gpCols.has("price_used_cny")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN price_used_cny REAL`);
+    }
+    if (!gpCols.has("channel")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN channel TEXT`);
+    }
+    if (!gpCols.has("channel_new")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN channel_new TEXT`);
+    }
+    if (gpCols.has("price_cny")) {
+      sqlite.exec(`
+        UPDATE build_set_good_prices
+        SET price_new_cny = price_cny
+        WHERE price_new_cny IS NULL AND price_cny IS NOT NULL;
+      `);
+      sqlite.exec(`
+        UPDATE build_set_good_prices
+        SET channel = note
+        WHERE channel IS NULL AND note IN ('拼多多', '淘宝', '闲鱼');
+      `);
+    }
+    sqlite.exec(`
+      UPDATE build_set_good_prices
+      SET channel_new = channel
+      WHERE channel_new IS NULL AND channel IN ('拼多多', '淘宝');
+    `);
+
+    // 早期表含 price_cny NOT NULL，Drizzle 只写新列会导致插入失败
+    const gpColsAfter = tableColumnNames(sqlite, "build_set_good_prices");
+    if (gpColsAfter.has("price_cny")) {
+      sqlite.exec(`
+        CREATE TABLE build_set_good_prices__migrate (
+          set_num TEXT PRIMARY KEY,
+          price_new_cny REAL,
+          price_used_cny REAL,
+          channel_new TEXT,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO build_set_good_prices__migrate (
+          set_num, price_new_cny, price_used_cny, channel_new, updated_at
+        )
+        SELECT
+          set_num,
+          COALESCE(price_new_cny, price_cny),
+          price_used_cny,
+          COALESCE(
+            channel_new,
+            CASE WHEN channel IN ('拼多多', '淘宝') THEN channel ELSE NULL END
+          ),
+          updated_at
+        FROM build_set_good_prices;
+        DROP TABLE build_set_good_prices;
+        ALTER TABLE build_set_good_prices__migrate RENAME TO build_set_good_prices;
+        CREATE INDEX IF NOT EXISTS build_set_good_prices_updated_idx ON build_set_good_prices(updated_at);
+      `);
     }
   }
 

@@ -15,10 +15,10 @@ import {
   buildImages,
   buildProfiles,
   colors,
+  legoSets,
   inventories,
   inventoryMinifigs,
   inventoryParts,
-  legoSets,
   minifigs,
   partCategories,
   parts,
@@ -31,7 +31,6 @@ import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { BuildWorkflowProgressPanel } from "@/app/build/build-workflow-progress-panel";
 import { ensureWorkflowCollected } from "@/lib/ensure-workflow-collected";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
-
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ setNum: string }> };
@@ -68,6 +67,7 @@ export default async function SetDetailPage({ params }: Props) {
         name: legoSets.name,
         year: legoSets.year,
         imgUrl: legoSets.imgUrl,
+        numParts: legoSets.numParts,
       })
       .from(legoSets)
       .where(eq(legoSets.setNum, setNum))

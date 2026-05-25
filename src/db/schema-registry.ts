@@ -24,4 +24,5 @@ export const userSchema = {
   buildAttachments: schema.buildAttachments,
   buildOwnedSubjects: schema.buildOwnedSubjects,
   buildFavoriteSubjects: schema.buildFavoriteSubjects,
+  buildSetGoodPrices: schema.buildSetGoodPrices,
 };

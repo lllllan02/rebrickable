@@ -8,6 +8,7 @@ import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 const trailingLinks = [
   { href: "/mocs", label: "MOCs" },
   { href: "/sets", label: "Sets" },
+  { href: "/sets/prices", label: "好价" },
   { href: "/parts", label: "Parts" },
 ] as const;
 

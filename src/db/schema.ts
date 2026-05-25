@@ -322,3 +322,17 @@ export const buildFavoriteSubjects = sqliteTable(
     index("build_favorite_kind_idx").on(t.subjectKind),
   ]
 );
+
+/** 官方套装用户记录的可购买好价（元）；与高砖参考价无关 */
+export const buildSetGoodPrices = sqliteTable(
+  "build_set_good_prices",
+  {
+    setNum: text("set_num").primaryKey(),
+    priceNewCny: real("price_new_cny"),
+    priceUsedCny: real("price_used_cny"),
+    /** 全新价渠道：拼多多 | 淘宝 */
+    channelNew: text("channel_new"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_set_good_prices_updated_idx").on(t.updatedAt)]
+);
