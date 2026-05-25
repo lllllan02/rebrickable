@@ -151,12 +151,13 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
               onChange={(e) => setSetNumInput(e.target.value)}
               readOnly={isEdit}
               disabled={pending || isEdit}
-              placeholder="例如 71821-1"
+              placeholder="例如 71821 或 71821-1"
               className={`${inputClass} ${isEdit ? "opacity-80" : ""}`}
             />
           </label>
 
           <p className="text-xs text-[var(--muted)]">
+            套装编号可只填数字部分（如 71821），系统会自动匹配目录中的变体（如 71821-1）。
             至少填写全新或二手价格之一；全新渠道与全新价绑定，二手默认为闲鱼。
           </p>
 

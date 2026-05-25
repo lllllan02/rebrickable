@@ -3,10 +3,11 @@
 import { eq } from "drizzle-orm";
 
 import { getCatalogDb, getUserDb } from "@/db/client";
-import { buildSetGoodPrices, legoSets } from "@/db/schema";
+import { buildSetGoodPrices } from "@/db/schema";
 import { BUILD_SUBJECT_SET, isSafeBuildSubjectId } from "@/lib/build-subject";
 import { parseSetGoodPriceChannelNew } from "@/lib/set-good-price-channel";
 import { revalidateSetGoodPricePaths } from "@/lib/set-good-price-revalidate";
+import { resolveCatalogSetNum } from "@/lib/resolve-catalog-set-num";
 import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
 
 const MAX_PRICE_CNY = 999_999;
@@ -52,26 +53,29 @@ export async function saveSetGoodPriceAction(input: {
 
   try {
     const catalogDb = getCatalogDb();
-    const [exists] = await catalogDb
-      .select({ setNum: legoSets.setNum })
-      .from(legoSets)
-      .where(eq(legoSets.setNum, setNum))
-      .limit(1);
-    if (!exists) {
-      return { ok: false, error: "目录中未找到该套装编号。" };
+    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
     }
+    const canonicalSetNum = resolved.setNum;
 
     const updatedAt = new Date().toISOString();
     const db = getUserDb();
     await db
       .insert(buildSetGoodPrices)
-      .values({ setNum, priceNewCny, priceUsedCny, channelNew, updatedAt })
+      .values({
+        setNum: canonicalSetNum,
+        priceNewCny,
+        priceUsedCny,
+        channelNew,
+        updatedAt,
+      })
       .onConflictDoUpdate({
         target: buildSetGoodPrices.setNum,
         set: { priceNewCny, priceUsedCny, channelNew, updatedAt },
       });
 
-    revalidateSetGoodPricePaths(setNum);
+    revalidateSetGoodPricePaths(canonicalSetNum);
     return { ok: true };
   } catch {
     return { ok: false, error: "保存失败，请重试。" };
