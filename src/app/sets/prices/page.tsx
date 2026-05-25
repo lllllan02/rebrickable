@@ -89,7 +89,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
             <>
               共 <span className="tabular-nums text-[var(--text)]">{items.length}</span>{" "}
               套已记录入手价；成色下拉选择，总价/单价/占地单价重复点击切换升序与降序。占地单价按官方
-              BOM 长×宽×高汇总，并显示可统计零件占比。默认：全新总价升序。
+              BOM 长×宽汇总（不含高度；无法解析尺寸的主件按 1 单位/颗），并显示可统计零件占比。默认：全新总价升序。
             </>
           ) : (
             <>在此添加、编辑或删除各套装的入手好价；操作按钮在列表右上方。</>

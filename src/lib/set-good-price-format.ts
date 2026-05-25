@@ -25,7 +25,7 @@ export function formatSetGoodPricePerPiece(
   }).format(per)}/片`;
 }
 
-/** 占地单位单价（元/单位，宽×深×高 stud 积） */
+/** 占地单位单价（元/单位，平面占地 stud²） */
 export function formatSetGoodPricePerStudUnit(
   priceCny: number,
   totalStudUnits: number | null | undefined

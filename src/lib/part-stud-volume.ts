@@ -1,6 +1,6 @@
 /**
- * 从 Rebrickable 零件名推算「凸点单位」体积：宽 × 深 × 高（单位：stud）。
- * 名称含三段尺寸时直接解析；仅两段时按砖/板类推断高度（板=1，砖=3）。
+ * 从 Rebrickable 零件名推算占地单位（平面凸点面积，单位：stud²）。
+ * 名称含尺寸时取宽 × 深；仅两段时解析长×宽；无法解析且未排除的零件在汇总时按 1 单位/颗计。
  */
 
 const DIM3_RE = /(\d+)\s*x\s*(\d+)\s*x\s*(\d+)/i;
@@ -35,14 +35,6 @@ export function shouldExcludePartFromStudVolume(
   return false;
 }
 
-function inferHeightStuds(partName: string, categoryName: string | null | undefined): number {
-  const n = partName.toLowerCase();
-  const c = (categoryName ?? "").toLowerCase();
-  if (/\bbrick\b|\bblock\b/.test(n) || c.includes("brick")) return 3;
-  if (/\bplate\b|\btile\b|\bpanel\b|\bbaseplate\b/.test(n) || /plate|tile/.test(c)) return 1;
-  return 1;
-}
-
 export function parseStudVolumeFromPartName(
   partName: string,
   categoryName?: string | null
@@ -55,7 +47,7 @@ export function parseStudVolumeFromPartName(
     const d = clampDim(Number.parseInt(m3[2]!, 10));
     const h = clampDim(Number.parseInt(m3[3]!, 10));
     if (w == null || d == null || h == null) return null;
-    return { width: w, depth: d, height: h, units: w * d * h };
+    return { width: w, depth: d, height: h, units: w * d };
   }
 
   const m2 = DIM2_RE.exec(partName);
@@ -63,8 +55,7 @@ export function parseStudVolumeFromPartName(
     const w = clampDim(Number.parseInt(m2[1]!, 10));
     const d = clampDim(Number.parseInt(m2[2]!, 10));
     if (w == null || d == null) return null;
-    const h = inferHeightStuds(partName, categoryName);
-    return { width: w, depth: d, height: h, units: w * d * h };
+    return { width: w, depth: d, height: 0, units: w * d };
   }
 
   return null;
@@ -75,7 +66,7 @@ export type SetStudVolumeAggregate = {
   totalPieceQty: number;
   /** 能解析占地的主件颗数 */
   coveredPieceQty: number;
-  /** 占地单位总和 Σ(qty × w × d × h) */
+  /** 占地单位总和 Σ(qty × 单位)；可解析为 w×d，否则按 1/颗 */
   totalStudUnits: number;
   /** coveredPieceQty / totalPieceQty；无 BOM 时为 null */
   coverageRatio: number | null;
@@ -92,10 +83,15 @@ export function aggregateStudVolumeFromLines(
     const qty = line.quantity;
     if (!Number.isFinite(qty) || qty < 1) continue;
     totalPieceQty += qty;
+    if (shouldExcludePartFromStudVolume(line.partName, line.categoryName)) continue;
+
     const parsed = parseStudVolumeFromPartName(line.partName, line.categoryName);
-    if (!parsed) continue;
-    coveredPieceQty += qty;
-    totalStudUnits += parsed.units * qty;
+    if (parsed) {
+      coveredPieceQty += qty;
+      totalStudUnits += parsed.units * qty;
+    } else {
+      totalStudUnits += qty;
+    }
   }
 
   const coverageRatio =

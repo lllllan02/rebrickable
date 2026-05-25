@@ -76,7 +76,7 @@ function SetCatalogMetaLine({
       <span
         key="cov"
         className="tabular-nums text-[var(--muted-2)]"
-        title="名称可解析长×宽×高的 BOM 主件颗数占比"
+        title="名称可解析长×宽的 BOM 主件颗数占比；其余主件按 1 单位/颗计入占地"
       >
         可统计 {coverageLabel}
       </span>
