@@ -120,6 +120,9 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       price_new_cny REAL,
       price_used_cny REAL,
       channel_new TEXT,
+      gobricks_price_cny REAL,
+      gobricks_match_percent REAL,
+      gobricks_compared_at TEXT,
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS build_set_good_prices_updated_idx ON build_set_good_prices(updated_at);
@@ -176,6 +179,15 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     }
     if (!gpCols.has("channel_new")) {
       sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN channel_new TEXT`);
+    }
+    if (!gpCols.has("gobricks_price_cny")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN gobricks_price_cny REAL`);
+    }
+    if (!gpCols.has("gobricks_match_percent")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN gobricks_match_percent REAL`);
+    }
+    if (!gpCols.has("gobricks_compared_at")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN gobricks_compared_at TEXT`);
     }
     if (gpCols.has("price_cny")) {
       sqlite.exec(`

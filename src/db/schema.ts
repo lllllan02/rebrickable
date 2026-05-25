@@ -332,6 +332,12 @@ export const buildSetGoodPrices = sqliteTable(
     priceUsedCny: real("price_used_cny"),
     /** 全新价渠道：拼多多 | 淘宝 */
     channelNew: text("channel_new"),
+    /** 官方 BOM 对照高砖后的零件总价（元）；不含零件未匹配行 */
+    gobricksPriceCny: real("gobricks_price_cny"),
+    /** 零件匹配占比（0–100） */
+    gobricksMatchPercent: real("gobricks_match_percent"),
+    /** 最近一次高砖比价完成时间（ISO） */
+    gobricksComparedAt: text("gobricks_compared_at"),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [index("build_set_good_prices_updated_idx").on(t.updatedAt)]

@@ -6,6 +6,7 @@ import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { goodPriceRowActionsClass } from "@/lib/set-good-price-buttons";
 import {
+  formatGobricksMatchPercent,
   formatSetGoodPriceCny,
   formatSetGoodPricePerPiece,
   formatSetGoodPricePerStudUnit,
@@ -174,6 +175,51 @@ function PriceColumn({
   );
 }
 
+function GobricksCompareLine({
+  gobricksPriceCny,
+  gobricksMatchPercent,
+  gobricksComparedAt,
+}: {
+  gobricksPriceCny: number | null;
+  gobricksMatchPercent: number | null;
+  gobricksComparedAt: string | null;
+}) {
+  const priceLabel = formatSetGoodPriceCny(gobricksPriceCny);
+  const matchLabel = formatGobricksMatchPercent(gobricksMatchPercent);
+  if (!priceLabel && !matchLabel) return null;
+
+  const comparedHint =
+    typeof gobricksComparedAt === "string" && gobricksComparedAt.trim()
+      ? gobricksComparedAt.trim().slice(0, 19).replace("T", " ")
+      : null;
+
+  return (
+    <div
+      className="rounded-md border border-sky-500/25 bg-sky-500/5 px-2.5 py-2"
+      title="官方 BOM 对照高砖：颜色未匹配也计入总价，仅「零件未匹配」不计价"
+    >
+      <p className="text-[11px] font-medium text-sky-200/90">高砖比价</p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+        {priceLabel ? (
+          <span className="font-mono text-sm font-semibold tabular-nums text-sky-100/95">
+            {priceLabel}
+          </span>
+        ) : null}
+        {matchLabel ? (
+          <span className="font-mono text-[11px] tabular-nums text-[var(--muted)]">
+            匹配 {matchLabel}
+          </span>
+        ) : null}
+      </div>
+      {comparedHint ? (
+        <p className="mt-1 text-[11px] tabular-nums text-[var(--muted-2)]">
+          比价 <time dateTime={gobricksComparedAt!}>{comparedHint}</time>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function SetGoodPriceListRow({
   setNum,
   title,
@@ -185,6 +231,9 @@ export function SetGoodPriceListRow({
   totalStudUnits,
   studCoverageRatio,
   year,
+  gobricksPriceCny,
+  gobricksMatchPercent,
+  gobricksComparedAt,
   sortKind,
   actions,
 }: {
@@ -198,11 +247,18 @@ export function SetGoodPriceListRow({
   totalStudUnits: number | null;
   studCoverageRatio: number | null;
   year: number | null;
+  gobricksPriceCny?: number | null;
+  gobricksMatchPercent?: number | null;
+  gobricksComparedAt?: string | null;
   sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
 }) {
   const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
   const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
+  const hasGobricks =
+    gobricksPriceCny != null ||
+    gobricksMatchPercent != null ||
+    (typeof gobricksComparedAt === "string" && gobricksComparedAt.trim().length > 0);
 
   return (
     <li className="result-card overflow-hidden p-0">
@@ -264,6 +320,14 @@ export function SetGoodPriceListRow({
               highlighted={sortKind === "used"}
             />
           </div>
+
+          {hasGobricks ? (
+            <GobricksCompareLine
+              gobricksPriceCny={gobricksPriceCny ?? null}
+              gobricksMatchPercent={gobricksMatchPercent ?? null}
+              gobricksComparedAt={gobricksComparedAt ?? null}
+            />
+          ) : null}
 
           <p className="text-[11px] tabular-nums text-[var(--muted-2)]">
             更新 <time dateTime={updatedAtIso}>{savedAt}</time>

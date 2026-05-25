@@ -36,6 +36,11 @@ export type SetGoodPriceListItem = {
   totalStudUnits: number | null;
   /** 能解析尺寸的 BOM 主件占比（0–1） */
   studCoverageRatio: number | null;
+  /** 官方 BOM 高砖比价总价（元） */
+  gobricksPriceCny: number | null;
+  /** 零件匹配占比（0–100） */
+  gobricksMatchPercent: number | null;
+  gobricksComparedAt: string | null;
 };
 
 function parseKind(raw: string | undefined): SetGoodPriceSortKind | null {

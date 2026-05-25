@@ -70,6 +70,9 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       numParts: cat?.numParts ?? null,
       totalStudUnits: hasBom && vol.totalStudUnits > 0 ? vol.totalStudUnits : null,
       studCoverageRatio: hasBom ? vol.coverageRatio : null,
+      gobricksPriceCny: r.gobricksPriceCny ?? null,
+      gobricksMatchPercent: r.gobricksMatchPercent ?? null,
+      gobricksComparedAt: r.gobricksComparedAt ?? null,
     };
   });
 

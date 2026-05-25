@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { GoodPriceListSortControl } from "@/app/sets/good-price-list-sort-control";
 import {
   clearSetGoodPriceAction,
+  fetchSetGoodPriceGobricksCompareAction,
   markSetOwnedFromGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
 import {
@@ -15,6 +16,7 @@ import {
 import { SetGoodPriceListRow } from "@/app/sets/set-good-price-list-row";
 import {
   goodPriceBtnDanger,
+  goodPriceBtnGobricks,
   goodPriceBtnOwned,
   goodPriceBtnPrimary,
   goodPriceBtnSecondary,
@@ -35,6 +37,7 @@ type Props = {
 export function GoodPricesListClient({ items, sortState }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [gobricksSetNum, setGobricksSetNum] = useState<string | null>(null);
   const [draft, setDraft] = useState<SetGoodPriceEditDraft | null>(null);
 
   const openCreate = () => {
@@ -78,6 +81,19 @@ export function GoodPricesListClient({ items, sortState }: Props) {
     });
   };
 
+  const compareGobricks = (item: GoodPriceListRowProps) => {
+    setGobricksSetNum(item.setNum);
+    startTransition(async () => {
+      const res = await fetchSetGoodPriceGobricksCompareAction({ setNum: item.setNum });
+      setGobricksSetNum(null);
+      if (!res.ok) {
+        alert(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
   return (
     <>
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] px-1 pb-3">
@@ -106,9 +122,21 @@ export function GoodPricesListClient({ items, sortState }: Props) {
               totalStudUnits={item.totalStudUnits}
               studCoverageRatio={item.studCoverageRatio}
               year={item.year}
+              gobricksPriceCny={item.gobricksPriceCny}
+              gobricksMatchPercent={item.gobricksMatchPercent}
+              gobricksComparedAt={item.gobricksComparedAt}
               sortKind={sortState.kind}
               actions={
                 <>
+                  <button
+                    type="button"
+                    onClick={() => compareGobricks(item)}
+                    disabled={pending}
+                    className={goodPriceBtnGobricks}
+                    title="用官方 BOM 请求高砖，统计零件总价（颜色未匹配也计价，仅零件未匹配忽略）"
+                  >
+                    {gobricksSetNum === item.setNum ? "比价中…" : "高砖比价"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => openEdit(item)}

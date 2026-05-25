@@ -55,3 +55,11 @@ export function formatStudVolumeCoverageRatio(ratio: number | null | undefined):
   }
   return `${(ratio * 100).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}%`;
 }
+
+/** 高砖零件匹配占比（0–100） */
+export function formatGobricksMatchPercent(percent: number | null | undefined): string | null {
+  if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+    return null;
+  }
+  return `${percent.toLocaleString("zh-CN", { maximumFractionDigits: 1 })}%`;
+}
