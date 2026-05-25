@@ -68,7 +68,6 @@ export function GoodPricesListClient({ items, sortState }: Props) {
   };
 
   const remove = (item: GoodPriceListRowProps) => {
-    if (!window.confirm(`确定删除套装 ${item.setNum} 的好价记录？`)) return;
     startTransition(async () => {
       const res = await clearSetGoodPriceAction({ setNum: item.setNum });
       if (!res.ok) {

@@ -85,7 +85,6 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
   };
 
   const remove = () => {
-    if (!window.confirm(`确定删除套装 ${setNumInput.trim()} 的好价记录？`)) return;
     setError(null);
     startTransition(async () => {
       const res = await clearSetGoodPriceAction({ setNum: setNumInput });
