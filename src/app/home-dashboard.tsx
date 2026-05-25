@@ -291,7 +291,7 @@ export async function HomeSetBlock() {
           套装
         </h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          最多展示 {HOME_PREVIEW_MAX} 条；完整列表请在套装官方目录按阶段筛选。
+          最多展示 {HOME_PREVIEW_MAX} 条；进度为收录 → 心动 → 拥有（收录在列表中不单独标出）。
         </p>
       </header>
       {workflowAll.length > 0 ? (
@@ -304,7 +304,7 @@ export async function HomeSetBlock() {
           hideCategoryTitle
         >
           {workflowPreview.map((r) => {
-            const workflowStage = workflowStageFromRow(r);
+            const workflowStage = workflowStageFromRow(r, BUILD_SUBJECT_SET);
             const prof = setProfileByNum.get(r.subjectId);
             const displayName = prof?.displayName?.trim() ?? "";
             const catalogName = setNameByNum.get(r.subjectId) ?? "";

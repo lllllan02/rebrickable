@@ -9,10 +9,10 @@ import {
 } from "@/app/build/build-workflow-actions";
 import { formatWorkflowStageTime } from "@/lib/build-workflow-timestamps";
 import {
-  BUILD_WORKFLOW_STAGE_HINTS,
-  BUILD_WORKFLOW_STAGE_LABELS,
-  BUILD_WORKFLOW_STAGES,
+  workflowStageHint,
   workflowStageIndex,
+  workflowStageLabel,
+  workflowStagesForKind,
   type BuildWorkflowStage,
   type WorkflowSubjectKind,
 } from "@/lib/build-workflow-stage";
@@ -35,6 +35,7 @@ export function BuildWorkflowProgressPanel({
   const [pending, startTransition] = useTransition();
   const [stage, setStage] = useState<BuildWorkflowStage | null>(initialStage);
   const [times, setTimes] = useState(initialTimes);
+  const stages = workflowStagesForKind(subjectKind);
 
   useEffect(() => {
     setStage(initialStage);
@@ -49,7 +50,7 @@ export function BuildWorkflowProgressPanel({
     initialTimes.complete,
   ]);
 
-  const activeIndex = stage != null ? workflowStageIndex(stage) : -1;
+  const activeIndex = stage != null ? workflowStageIndex(stage, subjectKind) : -1;
 
   const canEditStageTime = (s: BuildWorkflowStage, stageIndex: number) =>
     s !== "collected" && activeIndex >= 0 && stageIndex <= activeIndex;
@@ -76,10 +77,10 @@ export function BuildWorkflowProgressPanel({
     const prevStage = stage;
     const prevTimes = times;
     const now = new Date().toISOString();
-    const idx = workflowStageIndex(next);
+    const idx = workflowStageIndex(next, subjectKind);
     const optimistic: WorkflowStageTimestamps = { ...times };
     for (let i = 0; i <= idx; i++) {
-      const s = BUILD_WORKFLOW_STAGES[i]!;
+      const s = stages[i]!;
       if (!optimistic[s]) optimistic[s] = now;
     }
     setStage(next);
@@ -95,6 +96,8 @@ export function BuildWorkflowProgressPanel({
     });
   };
 
+  const defaultLabel = workflowStageLabel("collected", subjectKind);
+
   return (
     <section className="workflow-detail-panel table-shell" aria-label="拼搭进度">
       <div className="workflow-detail-panel__head">
@@ -102,16 +105,18 @@ export function BuildWorkflowProgressPanel({
         <p className="workflow-detail-panel__current text-xs text-[var(--muted)]">
           当前：
           <span className="font-medium text-[var(--accent)]">
-            {stage ? BUILD_WORKFLOW_STAGE_LABELS[stage] : BUILD_WORKFLOW_STAGE_LABELS.collected}
+            {stage ? workflowStageLabel(stage, subjectKind) : defaultLabel}
           </span>
         </p>
       </div>
       <div className="workflow-progress workflow-progress--detail" role="group">
         <div className="workflow-progress__track">
-          {BUILD_WORKFLOW_STAGES.map((s, i) => {
+          {stages.map((s, i) => {
             const isPast = activeIndex >= 0 && i < activeIndex;
             const isCurrent = activeIndex === i;
             const timeLabel = formatWorkflowStageTime(times[s]);
+            const label = workflowStageLabel(s, subjectKind);
+            const hint = workflowStageHint(s, subjectKind);
             const stepClass = [
               "workflow-progress__step",
               isPast ? "workflow-progress__step--past" : "",
@@ -133,13 +138,13 @@ export function BuildWorkflowProgressPanel({
                     type="button"
                     disabled={pending}
                     className="workflow-progress__step-main"
-                    title={BUILD_WORKFLOW_STAGE_HINTS[s]}
-                    aria-label={`${BUILD_WORKFLOW_STAGE_LABELS[s]}${isCurrent ? "（当前）" : ""}`}
+                    title={hint}
+                    aria-label={`${label}${isCurrent ? "（当前）" : ""}`}
                     aria-current={isCurrent ? "step" : undefined}
                     onClick={() => pickStage(s)}
                   >
                     <span className="workflow-progress__dot" aria-hidden />
-                    <span className="workflow-progress__label">{BUILD_WORKFLOW_STAGE_LABELS[s]}</span>
+                    <span className="workflow-progress__label">{label}</span>
                   </button>
                   {s === "collected" ? (
                     <time className="workflow-progress__time" dateTime={times[s] ?? undefined}>
@@ -153,8 +158,8 @@ export function BuildWorkflowProgressPanel({
                       title={timeEditable ? "点击更新为当前时间" : "尚未到达此阶段"}
                       aria-label={
                         timeEditable
-                          ? `${BUILD_WORKFLOW_STAGE_LABELS[s]}时间：${timeLabel ?? "未记录"}，点击更新为当前时间`
-                          : `${BUILD_WORKFLOW_STAGE_LABELS[s]}时间：尚未到达此阶段`
+                          ? `${label}时间：${timeLabel ?? "未记录"}，点击更新为当前时间`
+                          : `${label}时间：尚未到达此阶段`
                       }
                       onClick={() => refreshStageTime(s)}
                     >

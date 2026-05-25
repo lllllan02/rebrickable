@@ -31,7 +31,7 @@ import {
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { SetsCatalogThemeFilter } from "@/app/sets/sets-catalog-theme-filter";
-import { isWorkflowMarkFilter, parseListMarkFilter } from "@/lib/build-list-mark-filter";
+import { isSetWorkflowMarkFilter, parseSetListMarkFilter } from "@/lib/build-list-mark-filter";
 import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
 import { workflowStageCardClass, type BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { likeFragment } from "@/lib/search";
@@ -334,7 +334,7 @@ export async function SetsOfficialCatalogSection({
   const q = likeFragment(qRaw);
   const themeRaw = (searchParams.theme ?? "").trim();
   const requestedPage = Math.max(1, Number.parseInt(searchParams.page ?? "1", 10) || 1);
-  const markFilter = parseListMarkFilter(searchParams.mark);
+  const markFilter = parseSetListMarkFilter(searchParams.mark);
 
   const catalogDb = getCatalogDb();
   const userDb = getUserDb();
@@ -528,16 +528,18 @@ export async function SetsOfficialCatalogSection({
       : searchWhere ?? themeWhere;
 
   let markWhere: SQL | undefined = undefined;
-  if (isWorkflowMarkFilter(markFilter)) {
+  if (isSetWorkflowMarkFilter(markFilter)) {
+    const stageWhere =
+      markFilter === "complete"
+        ? or(
+            eq(buildOwnedSubjects.workflowStage, "complete"),
+            eq(buildOwnedSubjects.workflowStage, "purchase")
+          )
+        : eq(buildOwnedSubjects.workflowStage, markFilter);
     const marked = await userDb
       .select({ subjectId: buildOwnedSubjects.subjectId })
       .from(buildOwnedSubjects)
-      .where(
-        and(
-          eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET),
-          eq(buildOwnedSubjects.workflowStage, markFilter)
-        )
-      );
+      .where(and(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET), stageWhere));
     const nums = [...new Set(marked.map((r) => r.subjectId))];
     markWhere = nums.length > 0 ? inArray(inventories.setNum, nums) : sql`0=1`;
   }
@@ -651,7 +653,7 @@ export async function SetsOfficialCatalogSection({
         ),
     ]);
     for (const r of ownedRows) {
-      const stage = workflowStageFromRow(r);
+      const stage = workflowStageFromRow(r, BUILD_SUBJECT_SET);
       if (stage) workflowStageBySetNum.set(r.subjectId, stage);
     }
     for (const r of sheetRows) {
@@ -804,9 +806,8 @@ export async function SetsOfficialCatalogSection({
           className="field max-w-full text-sm sm:max-w-[200px]"
         >
           <option value="">全部套装</option>
-          <option value="replicate">仅复刻</option>
-          <option value="purchase">仅购入</option>
-          <option value="complete">仅完成</option>
+          <option value="replicate">仅心动</option>
+          <option value="complete">仅拥有</option>
         </AutoSubmitSelect>
         <input
           name="q"
@@ -852,7 +853,7 @@ export async function SetsOfficialCatalogSection({
             return (
               <li
                 key={r.setNum}
-                className={`result-card flex flex-col gap-0 overflow-hidden p-0${workflowStageCardClass(workflowStage)}`}
+                className={`result-card flex flex-col gap-0 overflow-hidden p-0${workflowStageCardClass(workflowStage, BUILD_SUBJECT_SET)}`}
               >
                 <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
                   <Link href={href} className="absolute inset-0 z-0 block" aria-label={`${title} 封面`}>
@@ -872,7 +873,7 @@ export async function SetsOfficialCatalogSection({
                     )}
                   </Link>
                   <div className="pointer-events-none absolute bottom-2 right-2 z-10">
-                    <BuildWorkflowStageListMark stage={workflowStage} />
+                    <BuildWorkflowStageListMark stage={workflowStage} subjectKind={BUILD_SUBJECT_SET} />
                   </div>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">

@@ -1,5 +1,6 @@
+import type { BuildSubjectKind } from "@/lib/build-subject";
 import {
-  BUILD_WORKFLOW_STAGES,
+  workflowStagesForKind,
   type BuildWorkflowStage,
 } from "@/lib/build-workflow-stage";
 
@@ -66,7 +67,8 @@ export function workflowStageTimestampsFromRow(
 export function workflowTimestampSetsForStage(
   stage: BuildWorkflowStage,
   now: string,
-  existing: WorkflowStageTimestamps | null
+  existing: WorkflowStageTimestamps | null,
+  subjectKind?: BuildSubjectKind
 ): {
   collectedAt?: string;
   replicateAt?: string;
@@ -74,7 +76,8 @@ export function workflowTimestampSetsForStage(
   completeAt?: string;
 } {
   const prev = existing ?? emptyWorkflowStageTimestamps();
-  const idx = BUILD_WORKFLOW_STAGES.indexOf(stage);
+  const stages = workflowStagesForKind(subjectKind ?? "moc");
+  const idx = stages.indexOf(stage);
   const out: {
     collectedAt?: string;
     replicateAt?: string;
@@ -82,7 +85,7 @@ export function workflowTimestampSetsForStage(
     completeAt?: string;
   } = {};
   for (let i = 0; i <= idx; i++) {
-    const s = BUILD_WORKFLOW_STAGES[i]!;
+    const s = stages[i]!;
     const key = STAGE_AT_KEYS[s];
     if (!prev[s]) out[key] = now;
   }

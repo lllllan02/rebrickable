@@ -25,7 +25,7 @@ export async function loadWorkflowProgress(
   const db = getUserDb();
   const key = and(eq(buildOwnedSubjects.subjectKind, subjectKind), eq(buildOwnedSubjects.subjectId, id));
   const [existing] = await db.select().from(buildOwnedSubjects).where(key).limit(1);
-  return workflowProgressFromRow(existing);
+  return workflowProgressFromRow(existing, subjectKind);
 }
 
 /** 尚无进度记录时写入「收录」；已有记录则原样返回（不降级阶段） */
@@ -42,7 +42,7 @@ export async function ensureWorkflowCollected(
   const key = and(eq(buildOwnedSubjects.subjectKind, subjectKind), eq(buildOwnedSubjects.subjectId, id));
   const [existing] = await db.select().from(buildOwnedSubjects).where(key).limit(1);
   if (existing) {
-    return workflowProgressFromRow(existing);
+    return workflowProgressFromRow(existing, subjectKind);
   }
 
   const now = new Date().toISOString();
@@ -61,5 +61,5 @@ export async function ensureWorkflowCollected(
     .onConflictDoNothing();
 
   const rows = await db.select().from(buildOwnedSubjects).where(key).limit(1);
-  return workflowProgressFromRow(rows[0]);
+  return workflowProgressFromRow(rows[0], subjectKind);
 }

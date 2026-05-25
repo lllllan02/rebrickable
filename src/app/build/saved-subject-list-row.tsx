@@ -65,7 +65,7 @@ export function SavedSubjectListRow({
       ? new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(gobricksGdsPriceCny)
       : null;
 
-  const liBase = `result-card flex flex-col gap-0 overflow-hidden p-0${workflowStageCardClass(workflowStage)}`;
+  const liBase = `result-card flex flex-col gap-0 overflow-hidden p-0${workflowStageCardClass(workflowStage, kind)}`;
   return (
     <li className={className != null && className.trim().length > 0 ? `${liBase} ${className}` : liBase}>
       <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]">
@@ -106,7 +106,7 @@ export function SavedSubjectListRow({
           </div>
         ) : null}
         <div className="pointer-events-none absolute bottom-2 right-2 z-10">
-          <BuildWorkflowStageListMark stage={workflowStage} />
+          <BuildWorkflowStageListMark stage={workflowStage} subjectKind={kind} />
         </div>
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">

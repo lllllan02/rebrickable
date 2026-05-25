@@ -145,10 +145,13 @@ export async function enrichSearchSubjectHits(mocIds: string[], setNums: string[
     });
   }
   for (const o of ownRows as { subjectKind: string; subjectId: string; workflowStage: string }[]) {
-    const stage = workflowStageFromRow(o);
-    if (!stage) continue;
-    if (o.subjectKind === BUILD_SUBJECT_MOC) mocWorkflowStage.set(o.subjectId, stage);
-    else if (o.subjectKind === BUILD_SUBJECT_SET) setWorkflowStage.set(o.subjectId, stage);
+    if (o.subjectKind === BUILD_SUBJECT_MOC) {
+      const stage = workflowStageFromRow(o, BUILD_SUBJECT_MOC);
+      if (stage) mocWorkflowStage.set(o.subjectId, stage);
+    } else if (o.subjectKind === BUILD_SUBJECT_SET) {
+      const stage = workflowStageFromRow(o, BUILD_SUBJECT_SET);
+      if (stage) setWorkflowStage.set(o.subjectId, stage);
+    }
   }
   for (const p of mocProfRows as (typeof buildProfiles.$inferSelect)[]) {
     mocProfileById.set(p.subjectId, {

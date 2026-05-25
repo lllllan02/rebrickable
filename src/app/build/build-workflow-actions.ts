@@ -13,8 +13,8 @@ import {
 } from "@/lib/build-workflow-timestamps";
 import {
   BUILD_WORKFLOW_DEFAULT_STAGE,
-  isBuildWorkflowStage,
-  normalizeWorkflowStage,
+  isWorkflowStageForKind,
+  normalizeWorkflowStageForKind,
   workflowStageIndex,
   type BuildWorkflowStage,
   type WorkflowSubjectKind,
@@ -35,7 +35,12 @@ export async function setBuildWorkflowStageAction(input: {
   if (!isSafeOwnedSubjectId(input.subjectKind, subjectId)) {
     return { ok: false, error: "主体 ID 含有非法字符。" };
   }
-  const stage = isBuildWorkflowStage(input.stage) ? input.stage : BUILD_WORKFLOW_DEFAULT_STAGE;
+  const stageRaw = input.stage;
+  if (!isWorkflowStageForKind(stageRaw, input.subjectKind)) {
+    return { ok: false, error: "阶段无效。" };
+  }
+  const stage =
+    normalizeWorkflowStageForKind(stageRaw, input.subjectKind) ?? BUILD_WORKFLOW_DEFAULT_STAGE;
 
   try {
     const db = getUserDb();
@@ -48,7 +53,8 @@ export async function setBuildWorkflowStageAction(input: {
     const tsSets = workflowTimestampSetsForStage(
       stage,
       markedAt,
-      existing ? workflowStageTimestampsFromRow(existing) : null
+      existing ? workflowStageTimestampsFromRow(existing) : null,
+      input.subjectKind
     );
 
     await db
@@ -91,13 +97,14 @@ export async function setBuildWorkflowStageTimestampAction(input: {
   if (!isSafeOwnedSubjectId(input.subjectKind, subjectId)) {
     return { ok: false, error: "主体 ID 含有非法字符。" };
   }
-  if (!isBuildWorkflowStage(input.stage)) {
+  if (!isWorkflowStageForKind(input.stage, input.subjectKind)) {
     return { ok: false, error: "阶段无效。" };
   }
   if (input.stage === "collected") {
     return { ok: false, error: "收录时间不可修改。" };
   }
-  const stage = input.stage;
+  const stage =
+    normalizeWorkflowStageForKind(input.stage, input.subjectKind) ?? BUILD_WORKFLOW_DEFAULT_STAGE;
 
   try {
     const db = getUserDb();
@@ -110,8 +117,10 @@ export async function setBuildWorkflowStageTimestampAction(input: {
     const timePatch = workflowStageTimestampDbSet(stage, markedAt);
 
     if (existing) {
-      const currentStage = normalizeWorkflowStage(existing.workflowStage) ?? BUILD_WORKFLOW_DEFAULT_STAGE;
-      if (workflowStageIndex(stage) > workflowStageIndex(currentStage)) {
+      const currentStage =
+        normalizeWorkflowStageForKind(existing.workflowStage, input.subjectKind) ??
+        BUILD_WORKFLOW_DEFAULT_STAGE;
+      if (workflowStageIndex(stage, input.subjectKind) > workflowStageIndex(currentStage, input.subjectKind)) {
         return { ok: false, error: "尚未到达该阶段，无法更新时间。" };
       }
       await db
@@ -119,7 +128,7 @@ export async function setBuildWorkflowStageTimestampAction(input: {
         .set({ markedAt, ...timePatch })
         .where(key);
     } else {
-      const tsSets = workflowTimestampSetsForStage(stage, markedAt, null);
+      const tsSets = workflowTimestampSetsForStage(stage, markedAt, null, input.subjectKind);
       await db.insert(buildOwnedSubjects).values({
         subjectKind: input.subjectKind,
         subjectId,
