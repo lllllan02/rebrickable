@@ -5,27 +5,6 @@ import {
   type BuildWorkflowStage,
 } from "@/lib/build-workflow-stage";
 
-const MOC_MARK_BY_STAGE: Partial<
-  Record<
-    BuildWorkflowStage,
-    { symbol: string; btnClass: string }
-  >
-> = {
-  replicate: {
-    symbol: "复",
-    btnClass: "border-sky-600 bg-sky-600 text-white shadow-sm ring-1 ring-black/20",
-  },
-  purchase: {
-    symbol: "采",
-    btnClass: "border-orange-600 bg-orange-600 text-white shadow-sm ring-1 ring-black/20",
-  },
-  complete: {
-    symbol: "✓",
-    btnClass:
-      "border-[var(--accent-dim)] bg-[var(--accent)] text-[#141414] shadow-sm ring-1 ring-black/20",
-  },
-};
-
 function SetHeartIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden fill="currentColor">
@@ -34,7 +13,7 @@ function SetHeartIcon({ className }: { className?: string }) {
   );
 }
 
-function SetCheckIcon({ className }: { className?: string }) {
+function WorkflowCheckIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none">
       <path
@@ -43,6 +22,35 @@ function SetCheckIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="3"
+      />
+    </svg>
+  );
+}
+
+/** 复刻：积木块 */
+function MocReplicateIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="currentColor">
+      <path d="M4 8h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" opacity="0.35" />
+      <path d="M6 6h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2z" />
+      <circle cx="9" cy="11" r="1.35" />
+      <circle cx="15" cy="11" r="1.35" />
+      <circle cx="9" cy="15" r="1.35" />
+      <circle cx="15" cy="15" r="1.35" />
+    </svg>
+  );
+}
+
+/** 购入：购物车 */
+function MocPurchaseIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none">
+      <path
+        d="M3 5h2l1.2 6.2M7 11h11l2.5-7H6.2M7 11l-1.2 6.2M7 11h11M9 19a1.25 1.25 0 100-2.5A1.25 1.25 0 009 19zm8 0a1.25 1.25 0 100-2.5A1.25 1.25 0 0017 19z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
       />
     </svg>
   );
@@ -75,14 +83,62 @@ function SetWorkflowListMark({
         title={`${label}：${hint}`}
         aria-label={`拼搭进度：${label}`}
       >
-        <SetCheckIcon className="h-4 w-4" />
+        <WorkflowCheckIcon className="h-4 w-4" />
       </span>
     );
   }
   return null;
 }
 
-/** 列表卡片角标：MOC 用圆钮单字；套装用心形 / 勾号图标 */
+function MocWorkflowListMark({
+  stage,
+  label,
+  hint,
+}: {
+  stage: BuildWorkflowStage;
+  label: string;
+  hint: string;
+}) {
+  const badgeBase =
+    "pointer-events-none inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border shadow-[0_1px_4px_rgba(0,0,0,0.45)] ring-1 ring-black/15";
+
+  if (stage === "replicate") {
+    return (
+      <span
+        className={`${badgeBase} border-sky-600 bg-sky-600 text-white`}
+        title={`${label}：${hint}`}
+        aria-label={`拼搭进度：${label}`}
+      >
+        <MocReplicateIcon className="h-4 w-4" />
+      </span>
+    );
+  }
+  if (stage === "purchase") {
+    return (
+      <span
+        className={`${badgeBase} border-orange-600 bg-orange-600 text-white`}
+        title={`${label}：${hint}`}
+        aria-label={`拼搭进度：${label}`}
+      >
+        <MocPurchaseIcon className="h-4 w-4" />
+      </span>
+    );
+  }
+  if (stage === "complete") {
+    return (
+      <span
+        className={`${badgeBase} border-[var(--accent-dim)] bg-[var(--accent)] text-[#141414]`}
+        title={`${label}：${hint}`}
+        aria-label={`拼搭进度：${label}`}
+      >
+        <WorkflowCheckIcon className="h-4 w-4" />
+      </span>
+    );
+  }
+  return null;
+}
+
+/** 列表卡片角标：MOC 用积木 / 购物车 / 勾号；套装用心形 / 勾号图标 */
 export function BuildWorkflowStageListMark({
   stage,
   subjectKind = "moc",
@@ -99,16 +155,5 @@ export function BuildWorkflowStageListMark({
     return <SetWorkflowListMark stage={stage} label={label} hint={hint} />;
   }
 
-  const mark = MOC_MARK_BY_STAGE[stage];
-  if (!mark) return null;
-
-  return (
-    <span
-      className={`pointer-events-none inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold leading-none ${mark.btnClass}`}
-      title={`${label}：${hint}`}
-      aria-label={`拼搭进度：${label}`}
-    >
-      {mark.symbol}
-    </span>
-  );
+  return <MocWorkflowListMark stage={stage} label={label} hint={hint} />;
 }

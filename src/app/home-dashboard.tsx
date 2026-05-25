@@ -1,7 +1,9 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
-import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
-import { HomeListStrip } from "@/app/home-list-strip";
+import {
+  HomeWorkflowPreviewBlock,
+  type HomeWorkflowPreviewItem,
+} from "@/components/home-workflow-preview-block";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import {
   buildImages,
@@ -15,8 +17,8 @@ import {
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
+import { countWorkflowStagesByMark } from "@/lib/count-workflow-stages-by-mark";
 import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
-import { mocListHref } from "@/lib/moc-list-href";
 import { mocSubjectIdsWithUserData } from "@/lib/moc-subject-still-exists";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
@@ -24,7 +26,6 @@ import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 export const dynamic = "force-dynamic";
 
 const HOME_PREVIEW_MAX = 4;
-const PREVIEW_SUBJECT_LI = "min-w-0";
 
 type SheetMeta = {
   totalPartQty: number;
@@ -58,8 +59,8 @@ export async function HomeMocBlock() {
   );
   const workflowAll = workflowRows.filter((r) => existingMocIds.has(r.subjectId));
 
-  const workflowPreview = workflowAll.slice(0, HOME_PREVIEW_MAX);
-  const enrichIds = workflowPreview.map((r) => r.subjectId);
+  const stageCounts = countWorkflowStagesByMark(workflowAll, BUILD_SUBJECT_MOC);
+  const enrichIds = workflowAll.map((r) => r.subjectId);
 
   const mocProfileById = new Map<
     string,
@@ -115,66 +116,51 @@ export async function HomeMocBlock() {
     }
   }
 
+  const previewItems: HomeWorkflowPreviewItem[] = workflowAll.map((r) => {
+    const workflowStage = workflowStageFromRow(r);
+    const prof = mocProfileById.get(r.subjectId);
+    const displayName = prof?.displayName?.trim() ?? "";
+    const title = displayName || `MOC ${r.subjectId}`;
+    const stored = mocCoverStored.get(r.subjectId);
+    const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.subjectId, stored) : null;
+    const sheet = sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${r.subjectId}`);
+    return {
+      subjectId: r.subjectId,
+      workflowStage,
+      detailHref: buildSubjectDetailPath(BUILD_SUBJECT_MOC, r.subjectId),
+      title,
+      coverUrl: uploadCoverUrl,
+      tags: prof?.tags ?? [],
+      totalPartQty: sheet?.totalPartQty ?? 0,
+      updatedAtIso: sheet?.updatedAt ?? r.markedAt,
+      showInstructionBadge: Boolean(prof?.hasInstructionsPdf),
+      showSourceBadge: Boolean(prof?.hasIoSource),
+      shortageLineCount: sheet?.shortageLineCount ?? null,
+      shortageTotalQty: sheet?.shortageTotalQty ?? null,
+      shortageClearedAt: sheet?.shortageClearedAt ?? null,
+      gobricksShortageSyncAt: sheet?.gobricksShortageSyncAt ?? null,
+      gobricksGdsPriceCny: sheet?.gobricksGdsPriceCny ?? null,
+    };
+  });
+
   return (
     <section className="section-panel" aria-labelledby="home-moc-block-heading">
-      <header className="mb-4">
+      <header className="mb-3">
         <p className="page-kicker">本地标记</p>
         <h2 id="home-moc-block-heading" className="section-title text-[var(--text)]">
           MOC
         </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          最多展示 {HOME_PREVIEW_MAX} 条；进度为收录 → 复刻 → 购入 → 完成（收录在列表中不单独标出）。
-        </p>
       </header>
-      {workflowAll.length > 0 ? (
-        <HomeListStrip
-          heading="MOC"
-          total={workflowAll.length}
-          moreHref="/mocs"
-          moreLabel="MOC 目录（已存零件表）"
-          previewCap={HOME_PREVIEW_MAX}
-          hideCategoryTitle
-        >
-          {workflowPreview.map((r) => {
-            const workflowStage = workflowStageFromRow(r);
-            const prof = mocProfileById.get(r.subjectId);
-            const displayName = prof?.displayName?.trim() ?? "";
-            const title = displayName || `MOC ${r.subjectId}`;
-            const tags = prof?.tags ?? [];
-            const stored = mocCoverStored.get(r.subjectId);
-            const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_MOC, r.subjectId, stored) : null;
-            const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_MOC, r.subjectId);
-            const sheet = sheetByKindId.get(`${BUILD_SUBJECT_MOC}:${r.subjectId}`);
-            const totalPartQty = sheet?.totalPartQty ?? 0;
-            const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
-            return (
-              <SavedSubjectListRow
-                key={`moc-wf-${r.subjectId}`}
-                className={PREVIEW_SUBJECT_LI}
-                kind={BUILD_SUBJECT_MOC}
-                subjectId={r.subjectId}
-                detailHref={detailHref}
-                title={title}
-                coverUrl={uploadCoverUrl}
-                tags={tags}
-                mocTagHref={(tag) => mocListHref({ tag })}
-                totalPartQty={totalPartQty}
-                shortageLineCount={sheet?.shortageLineCount ?? null}
-                shortageTotalQty={sheet?.shortageTotalQty ?? null}
-                shortageClearedAt={sheet?.shortageClearedAt ?? null}
-                gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
-                gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
-                updatedAtIso={updatedAtIso}
-                workflowStage={workflowStage}
-                showInstructionBadge={Boolean(prof?.hasInstructionsPdf)}
-                showSourceBadge={Boolean(prof?.hasIoSource)}
-              />
-            );
-          })}
-        </HomeListStrip>
-      ) : (
-        <p className="text-sm text-[var(--muted)]">{emptyWorkflowHint("moc")}</p>
-      )}
+      <HomeWorkflowPreviewBlock
+        subjectKind={BUILD_SUBJECT_MOC}
+        counts={stageCounts}
+        items={previewItems}
+        previewCap={HOME_PREVIEW_MAX}
+        moreLabel="MOC 目录（已存零件表）"
+      />
+      {workflowAll.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--muted)]">{emptyWorkflowHint("moc")}</p>
+      ) : null}
     </section>
   );
 }
@@ -190,8 +176,8 @@ export async function HomeSetBlock() {
     .where(eq(buildOwnedSubjects.subjectKind, BUILD_SUBJECT_SET))
     .orderBy(desc(buildOwnedSubjects.markedAt));
 
-  const workflowPreview = workflowAll.slice(0, HOME_PREVIEW_MAX);
-  const enrichNums = workflowPreview.map((r) => r.subjectId);
+  const stageCounts = countWorkflowStagesByMark(workflowAll, BUILD_SUBJECT_SET);
+  const enrichNums = workflowAll.map((r) => r.subjectId);
 
   const setNameByNum = new Map<string, string>();
   let setHeroByNum = new Map<string, string | null>();
@@ -283,68 +269,54 @@ export async function HomeSetBlock() {
     setOfficialPartQtyByNum = officialQty;
   }
 
+  const previewItems: HomeWorkflowPreviewItem[] = workflowAll.map((r) => {
+    const workflowStage = workflowStageFromRow(r, BUILD_SUBJECT_SET);
+    const prof = setProfileByNum.get(r.subjectId);
+    const displayName = prof?.displayName?.trim() ?? "";
+    const catalogName = setNameByNum.get(r.subjectId) ?? "";
+    const title = displayName || catalogName || `套装 ${r.subjectId}`;
+    const officialUrl = setHeroByNum.get(r.subjectId) ?? null;
+    const stored = setCoverStored.get(r.subjectId);
+    const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, r.subjectId, stored) : null;
+    const coverUrl = (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
+    const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
+    return {
+      subjectId: r.subjectId,
+      workflowStage,
+      detailHref: buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId),
+      title,
+      coverUrl,
+      tags: prof?.tags ?? [],
+      totalPartQty: sheet?.totalPartQty ?? setOfficialPartQtyByNum.get(r.subjectId) ?? 0,
+      updatedAtIso: sheet?.updatedAt ?? r.markedAt,
+      showInstructionBadge: false,
+      showSourceBadge: false,
+      shortageLineCount: sheet?.shortageLineCount ?? null,
+      shortageTotalQty: sheet?.shortageTotalQty ?? null,
+      shortageClearedAt: sheet?.shortageClearedAt ?? null,
+      gobricksShortageSyncAt: sheet?.gobricksShortageSyncAt ?? null,
+      gobricksGdsPriceCny: sheet?.gobricksGdsPriceCny ?? null,
+    };
+  });
+
   return (
     <section className="section-panel" aria-labelledby="home-set-block-heading">
-      <header className="mb-4">
+      <header className="mb-3">
         <p className="page-kicker">本地标记</p>
         <h2 id="home-set-block-heading" className="section-title text-[var(--text)]">
           套装
         </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          最多展示 {HOME_PREVIEW_MAX} 条；进度为收录 → 心动 → 拥有（收录在列表中不单独标出）。
-        </p>
       </header>
-      {workflowAll.length > 0 ? (
-        <HomeListStrip
-          heading="套装"
-          total={workflowAll.length}
-          moreHref="/sets?theme=all"
-          moreLabel="套装官方目录"
-          previewCap={HOME_PREVIEW_MAX}
-          hideCategoryTitle
-        >
-          {workflowPreview.map((r) => {
-            const workflowStage = workflowStageFromRow(r, BUILD_SUBJECT_SET);
-            const prof = setProfileByNum.get(r.subjectId);
-            const displayName = prof?.displayName?.trim() ?? "";
-            const catalogName = setNameByNum.get(r.subjectId) ?? "";
-            const title = displayName || catalogName || `套装 ${r.subjectId}`;
-            const tags = prof?.tags ?? [];
-            const officialUrl = setHeroByNum.get(r.subjectId) ?? null;
-            const stored = setCoverStored.get(r.subjectId);
-            const uploadCoverUrl = stored ? buildImagePublicPath(BUILD_SUBJECT_SET, r.subjectId, stored) : null;
-            const coverUrl = (officialUrl && officialUrl.length > 0 ? officialUrl : null) ?? uploadCoverUrl ?? null;
-            const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, r.subjectId);
-            const sheet = sheetByKindId.get(`${BUILD_SUBJECT_SET}:${r.subjectId}`);
-            const totalPartQty = sheet?.totalPartQty ?? setOfficialPartQtyByNum.get(r.subjectId) ?? 0;
-            const updatedAtIso = sheet?.updatedAt ?? r.markedAt;
-            return (
-              <SavedSubjectListRow
-                key={`set-wf-${r.subjectId}`}
-                className={PREVIEW_SUBJECT_LI}
-                kind={BUILD_SUBJECT_SET}
-                subjectId={r.subjectId}
-                detailHref={detailHref}
-                title={title}
-                coverUrl={coverUrl}
-                tags={tags}
-                totalPartQty={totalPartQty}
-                shortageLineCount={sheet?.shortageLineCount ?? null}
-                shortageTotalQty={sheet?.shortageTotalQty ?? null}
-                shortageClearedAt={sheet?.shortageClearedAt ?? null}
-                gobricksShortageSyncAt={sheet?.gobricksShortageSyncAt ?? null}
-                gobricksGdsPriceCny={sheet?.gobricksGdsPriceCny ?? null}
-                updatedAtIso={updatedAtIso}
-                workflowStage={workflowStage}
-                showInstructionBadge={false}
-                showSourceBadge={false}
-              />
-            );
-          })}
-        </HomeListStrip>
-      ) : (
-        <p className="text-sm text-[var(--muted)]">{emptyWorkflowHint("set")}</p>
-      )}
+      <HomeWorkflowPreviewBlock
+        subjectKind={BUILD_SUBJECT_SET}
+        counts={stageCounts}
+        items={previewItems}
+        previewCap={HOME_PREVIEW_MAX}
+        moreLabel="套装官方目录"
+      />
+      {workflowAll.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--muted)]">{emptyWorkflowHint("set")}</p>
+      ) : null}
     </section>
   );
 }
