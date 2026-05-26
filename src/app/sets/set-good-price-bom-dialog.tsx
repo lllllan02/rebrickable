@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type RefObject,
+} from "react";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { fetchSetGoodPriceBomPreviewAction } from "@/app/sets/set-good-price-bom-actions";
@@ -117,52 +125,117 @@ function BomGroupThumb({
   );
 }
 
-function BomGroupRow({
+function bomGroupPanelId(key: string): string {
+  return `bom-group-panel-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+}
+
+function BomGroupHeader({
   group,
   mode,
   expanded,
+  panelId,
   onToggle,
 }: {
   group: SetBomPreviewGroup;
   mode: SetBomPreviewGroupMode;
   expanded: boolean;
+  panelId: string;
   onToggle: () => void;
 }) {
-  const groupId = useId();
-  const panelId = `${groupId}-panel`;
+  return (
+    <button
+      type="button"
+      className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+        expanded
+          ? "bg-[var(--surface-2)] hover:bg-[var(--surface-3)]"
+          : "hover:bg-[var(--surface-3)]/50"
+      }`}
+      aria-expanded={expanded}
+      aria-controls={panelId}
+      onClick={onToggle}
+    >
+      <BomGroupThumb thumbUrl={group.thumbUrl} colorRgb={group.colorRgb} mode={mode} />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]">
+        {group.label}
+      </span>
+      <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
+        {group.pieceQty.toLocaleString("zh-CN")} 片
+        <span className="text-[var(--muted-2)]"> · {group.lineCount} 行</span>
+      </span>
+      <span className="shrink-0 text-[var(--muted-2)]" aria-hidden>
+        {expanded ? "▾" : "▸"}
+      </span>
+    </button>
+  );
+}
+
+function BomGroupPartsPanel({
+  group,
+  panelId,
+  panelRef,
+}: {
+  group: SetBomPreviewGroup;
+  panelId: string;
+  panelRef?: RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <div ref={panelRef} id={panelId} className="px-3 pb-3 pt-2">
+      <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+        {group.parts.map((part) => (
+          <li key={`${part.partNum}-${part.colorId}-${part.isSpare ? "s" : "m"}`}>
+            <BomPartTile part={part} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function BomGroupRow({
+  group,
+  mode,
+  expanded,
+  hideInlineHeaderVisually,
+  partsPanelRef,
+  onToggle,
+}: {
+  group: SetBomPreviewGroup;
+  mode: SetBomPreviewGroupMode;
+  expanded: boolean;
+  hideInlineHeaderVisually: boolean;
+  partsPanelRef?: RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+}) {
+  const panelId = bomGroupPanelId(group.key);
 
   return (
-    <li className="rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]/30">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-3)]/50"
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        onClick={onToggle}
-      >
-        <BomGroupThumb thumbUrl={group.thumbUrl} colorRgb={group.colorRgb} mode={mode} />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]">
-          {group.label}
-        </span>
-        <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
-          {group.pieceQty.toLocaleString("zh-CN")} 片
-          <span className="text-[var(--muted-2)]"> · {group.lineCount} 行</span>
-        </span>
-        <span className="shrink-0 text-[var(--muted-2)]" aria-hidden>
-          {expanded ? "▾" : "▸"}
-        </span>
-      </button>
+    <li
+      className={`rounded-md border border-[var(--border-soft)] ${
+        expanded ? "bg-[var(--surface-2)]" : "bg-[var(--surface-2)]/30"
+      }`}
+    >
       {expanded ? (
-        <div id={panelId} className="border-t border-[var(--border-soft)] px-3 pb-3 pt-2">
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-            {group.parts.map((part) => (
-              <li key={`${part.partNum}-${part.colorId}-${part.isSpare ? "s" : "m"}`}>
-                <BomPartTile part={part} />
-              </li>
-            ))}
-          </ul>
+        <div className={hideInlineHeaderVisually ? "pointer-events-none invisible" : undefined}>
+          <BomGroupHeader
+            group={group}
+            mode={mode}
+            expanded
+            panelId={panelId}
+            onToggle={onToggle}
+          />
         </div>
       ) : null}
+      {expanded ? (
+        <BomGroupPartsPanel group={group} panelId={panelId} panelRef={partsPanelRef} />
+      ) : (
+        <BomGroupHeader
+          group={group}
+          mode={mode}
+          expanded={false}
+          panelId={panelId}
+          onToggle={onToggle}
+        />
+      )}
     </li>
   );
 }
@@ -226,14 +299,59 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
     onClose();
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const expandedPartsRef = useRef<HTMLDivElement>(null);
+  const pinExpandedHeaderRef = useRef(false);
+  const [pinExpandedHeader, setPinExpandedHeader] = useState(false);
+
+  const expandedKey = expandedKeys.size > 0 ? [...expandedKeys][0] : null;
+  const expandedGroup = expandedKey
+    ? groups.find((group) => group.key === expandedKey)
+    : undefined;
+
   const toggleGroup = (key: string) => {
-    setExpandedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setExpandedKeys((prev) => (prev.has(key) ? new Set() : new Set([key])));
   };
+
+  useEffect(() => {
+    if (!expandedKey) {
+      pinExpandedHeaderRef.current = false;
+      setPinExpandedHeader(false);
+      return;
+    }
+
+    let observer: IntersectionObserver | null = null;
+    let raf = 0;
+
+    const setPin = (next: boolean) => {
+      if (pinExpandedHeaderRef.current === next) return;
+      pinExpandedHeaderRef.current = next;
+      setPinExpandedHeader(next);
+    };
+
+    const connect = () => {
+      const root = scrollRef.current;
+      const target = expandedPartsRef.current;
+      if (!root || !target) return false;
+
+      observer?.disconnect();
+      observer = new IntersectionObserver(
+        ([entry]) => setPin(entry?.isIntersecting ?? false),
+        { root, threshold: 0 }
+      );
+      observer.observe(target);
+      return true;
+    };
+
+    if (!connect()) {
+      raf = requestAnimationFrame(() => connect());
+    }
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+    };
+  }, [expandedKey, groups]);
 
   const displayTitle = meta?.catalogName?.trim() || target?.title || meta?.setNum || "";
   const detailHref =
@@ -242,7 +360,7 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
   return (
     <dialog
       ref={dialogRef}
-      className="fixed left-1/2 top-1/2 z-[200] m-0 hidden max-h-[min(92dvh,44rem)] w-[min(96vw,42rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/70 open:flex"
+      className="fixed left-1/2 top-1/2 z-[200] m-0 hidden h-[min(92dvh,44rem)] max-h-[min(92dvh,44rem)] min-h-0 w-[min(96vw,42rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden overscroll-contain rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text)] shadow-[var(--shadow)] backdrop:bg-black/70 open:flex"
       aria-labelledby={dialogTitleId}
       onClose={onClose}
       onClick={(e) => {
@@ -250,7 +368,7 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
       }}
     >
       {target ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-3">
             <div className="min-w-0">
               <h3 id={dialogTitleId} className="text-base font-semibold">
@@ -315,26 +433,50 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            {pending && !lines ? (
-              <p className="py-8 text-center text-sm text-[var(--muted)]">加载零件清单…</p>
-            ) : error ? (
-              <p className="py-8 text-center text-sm text-red-400">{error}</p>
-            ) : groups.length === 0 ? (
-              <p className="py-8 text-center text-sm text-[var(--muted)]">无零件数据。</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {groups.map((group) => (
-                  <BomGroupRow
-                    key={group.key}
-                    group={group}
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            {expandedGroup && pinExpandedHeader ? (
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-4">
+                <div className="pointer-events-auto border-b border-[var(--border-soft)] bg-[var(--surface-2)] shadow-[0_6px_10px_-10px_rgba(0,0,0,0.5)]">
+                  <BomGroupHeader
+                    group={expandedGroup}
                     mode={groupMode}
-                    expanded={expandedKeys.has(group.key)}
-                    onToggle={() => toggleGroup(group.key)}
+                    expanded
+                    panelId={bomGroupPanelId(expandedGroup.key)}
+                    onToggle={() => toggleGroup(expandedGroup.key)}
                   />
-                ))}
-              </ul>
-            )}
+                </div>
+              </div>
+            ) : null}
+
+            <div
+              ref={scrollRef}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3"
+            >
+              {pending && !lines ? (
+                <p className="py-8 text-center text-sm text-[var(--muted)]">加载零件清单…</p>
+              ) : error ? (
+                <p className="py-8 text-center text-sm text-red-400">{error}</p>
+              ) : groups.length === 0 ? (
+                <p className="py-8 text-center text-sm text-[var(--muted)]">无零件数据。</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {groups.map((group) => {
+                    const expanded = expandedKeys.has(group.key);
+                    return (
+                      <BomGroupRow
+                        key={group.key}
+                        group={group}
+                        mode={groupMode}
+                        expanded={expanded}
+                        hideInlineHeaderVisually={expanded && pinExpandedHeader}
+                        partsPanelRef={expanded ? expandedPartsRef : undefined}
+                        onToggle={() => toggleGroup(group.key)}
+                      />
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       ) : null}
