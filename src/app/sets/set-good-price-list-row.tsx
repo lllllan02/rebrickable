@@ -31,12 +31,14 @@ function SetCatalogMetaLine({
   numParts,
   totalStudUnits,
   studCoverageRatio,
+  onPartsClick,
 }: {
   setNum: string;
   year: number | null;
   numParts: number | null;
   totalStudUnits: number | null;
   studCoverageRatio: number | null;
+  onPartsClick?: () => void;
 }) {
   const coverageLabel = formatStudVolumeCoverageRatio(studCoverageRatio);
   const hasStudUnits =
@@ -59,10 +61,23 @@ function SetCatalogMetaLine({
     );
   }
   if (typeof numParts === "number" && numParts > 0) {
+    const partsLabel = `${numParts.toLocaleString("zh-CN")} 片`;
     items.push(
-      <span key="parts" className="tabular-nums text-[var(--muted-2)]">
-        {numParts.toLocaleString("zh-CN")} 片
-      </span>
+      onPartsClick ? (
+        <button
+          key="parts"
+          type="button"
+          onClick={onPartsClick}
+          className="tabular-nums text-[var(--accent)] underline-offset-2 hover:underline"
+          title="查看官方 BOM 零件清单"
+        >
+          {partsLabel}
+        </button>
+      ) : (
+        <span key="parts" className="tabular-nums text-[var(--muted-2)]">
+          {partsLabel}
+        </span>
+      )
     );
   }
   if (hasStudUnits) {
@@ -236,6 +251,7 @@ export function SetGoodPriceListRow({
   gobricksComparedAt,
   sortKind,
   actions,
+  onPartsClick,
 }: {
   setNum: string;
   title: string;
@@ -252,6 +268,7 @@ export function SetGoodPriceListRow({
   gobricksComparedAt?: string | null;
   sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
+  onPartsClick?: () => void;
 }) {
   const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
   const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
@@ -299,6 +316,7 @@ export function SetGoodPriceListRow({
                 numParts={numParts}
                 totalStudUnits={totalStudUnits}
                 studCoverageRatio={studCoverageRatio}
+                onPartsClick={onPartsClick}
               />
             </div>
             {actions ? <div className={goodPriceRowActionsClass}>{actions}</div> : null}

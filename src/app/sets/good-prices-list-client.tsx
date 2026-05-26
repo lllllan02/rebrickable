@@ -10,6 +10,10 @@ import {
   markSetOwnedFromGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
 import {
+  SetGoodPriceBomDialog,
+  type SetGoodPriceBomDialogTarget,
+} from "@/app/sets/set-good-price-bom-dialog";
+import {
   SetGoodPriceEditDialog,
   type SetGoodPriceEditDraft,
 } from "@/app/sets/set-good-price-edit-dialog";
@@ -39,6 +43,7 @@ export function GoodPricesListClient({ items, sortState }: Props) {
   const [pending, startTransition] = useTransition();
   const [gobricksSetNum, setGobricksSetNum] = useState<string | null>(null);
   const [draft, setDraft] = useState<SetGoodPriceEditDraft | null>(null);
+  const [bomTarget, setBomTarget] = useState<SetGoodPriceBomDialogTarget | null>(null);
 
   const openCreate = () => {
     setDraft({
@@ -126,6 +131,11 @@ export function GoodPricesListClient({ items, sortState }: Props) {
               gobricksMatchPercent={item.gobricksMatchPercent}
               gobricksComparedAt={item.gobricksComparedAt}
               sortKind={sortState.kind}
+              onPartsClick={
+                typeof item.numParts === "number" && item.numParts > 0
+                  ? () => setBomTarget({ setNum: item.setNum, title: item.title })
+                  : undefined
+              }
               actions={
                 <>
                   <button
@@ -169,6 +179,7 @@ export function GoodPricesListClient({ items, sortState }: Props) {
       )}
 
       <SetGoodPriceEditDialog draft={draft} onClose={() => setDraft(null)} />
+      <SetGoodPriceBomDialog target={bomTarget} onClose={() => setBomTarget(null)} />
     </>
   );
 }
