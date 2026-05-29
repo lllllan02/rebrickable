@@ -90,6 +90,7 @@ export function HomeWorkflowStagePanel({
                     </span>
                   )}
                   <span className="workflow-stage-panel-label">{opt.label}</span>
+                  <span className="workflow-stage-panel-count tabular-nums">{formatStageCount(count)}</span>
                 </span>
               </button>
             </li>

@@ -658,6 +658,14 @@ select {
   letter-spacing: -0.01em;
 }
 
+.workflow-stage-panel-count {
+  margin-left: 0.1rem;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .workflow-stage-panel-mark {
   display: inline-flex;
   flex-shrink: 0;

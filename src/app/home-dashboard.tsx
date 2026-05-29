@@ -149,6 +149,9 @@ export async function HomeMocBlock() {
         <p className="page-kicker">本地标记</p>
         <h2 id="home-moc-block-heading" className="section-title text-[var(--text)]">
           MOC
+          <span className="ml-2 font-normal text-sm text-[var(--muted)] tabular-nums">
+            （{(stageCounts.all ?? 0).toLocaleString("zh-CN")}）
+          </span>
         </h2>
       </header>
       <HomeWorkflowPreviewBlock
@@ -305,6 +308,9 @@ export async function HomeSetBlock() {
         <p className="page-kicker">本地标记</p>
         <h2 id="home-set-block-heading" className="section-title text-[var(--text)]">
           套装
+          <span className="ml-2 font-normal text-sm text-[var(--muted)] tabular-nums">
+            （{(stageCounts.all ?? 0).toLocaleString("zh-CN")}）
+          </span>
         </h2>
       </header>
       <HomeWorkflowPreviewBlock
