@@ -8,6 +8,7 @@ export function mocListHref(params: {
   q?: string;
   tag?: string;
   mark?: ListMarkFilter;
+  premium?: boolean;
   /** 不传则 URL 不带排序参数 */
   mocSort?: MocListSortState | null;
 }): string {
@@ -17,6 +18,7 @@ export function mocListHref(params: {
   const tag = (params.tag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN);
   if (tag.length > 0) sp.set("tag", tag);
   if (params.mark && params.mark !== "all") sp.set("mark", params.mark);
+  if (params.premium === true) sp.set("premium", "1");
   if (params.mocSort != null) {
     const sortQ = mocSortStateToQueryEntries(params.mocSort);
     if (sortQ.sort != null) sp.set("sort", sortQ.sort);

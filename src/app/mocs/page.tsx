@@ -5,7 +5,7 @@ import { parseMocListSort } from "@/lib/moc-list-sort";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ q?: string; tag?: string; mark?: string; sort?: string; dir?: string }> };
+type Props = { searchParams: Promise<{ q?: string; tag?: string; mark?: string; premium?: string; sort?: string; dir?: string }> };
 
 export default async function MocsPage({ searchParams }: Props) {
   const sp = await searchParams;
@@ -16,6 +16,7 @@ export default async function MocsPage({ searchParams }: Props) {
       listFilterQ={sp.q}
       listFilterTag={sp.tag}
       listFilterMark={parseListMarkFilter(sp.mark)}
+      listFilterPremium={sp.premium === "1" || sp.premium === "true"}
       listMocSortState={listMocSortState}
       listHeroTitleOnly
     />

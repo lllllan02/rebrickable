@@ -39,6 +39,7 @@ export async function BuildSubjectListPage({
   listFilterQ,
   listFilterTag,
   listFilterMark = "all",
+  listFilterPremium = false,
   listHeroTitleOnly = false,
   listMocSortState,
 }: {
@@ -51,6 +52,8 @@ export async function BuildSubjectListPage({
   listFilterTag?: string;
   /** 已存列表：按拼搭进度筛选 */
   listFilterMark?: ListMarkFilter;
+  /** 仅 MOC 列表：仅显示 Premium 标记 */
+  listFilterPremium?: boolean;
   /** 仅 MOC 列表：排序（URL sort/dir；中性时不写参数） */
   listMocSortState?: MocListSortState;
   /** 仅 MOC 列表页：顶部与套装目录页一致，仅一条 `page-title text-xl sm:text-2xl` 标题，无 hero-panel */
@@ -101,7 +104,14 @@ export async function BuildSubjectListPage({
   if (subjectIds.length > 0) {
     const [profiles, imgs] = await Promise.all([
       db
-        .select()
+        .select({
+          subjectId: buildProfiles.subjectId,
+          displayName: buildProfiles.displayName,
+          tagsJson: buildProfiles.tagsJson,
+          hasInstructionsPdf: buildProfiles.hasInstructionsPdf,
+          hasIoSource: buildProfiles.hasIoSource,
+          isPremium: buildProfiles.isPremium,
+        })
         .from(buildProfiles)
         .where(and(eq(buildProfiles.subjectKind, kind), inArray(buildProfiles.subjectId, subjectIds))),
       db
@@ -155,6 +165,7 @@ export async function BuildSubjectListPage({
     kind === BUILD_SUBJECT_MOC
       ? (listFilterTag ?? "").trim().slice(0, MOC_PROFILE_MAX_TAG_LEN).toLowerCase()
       : "";
+  const premiumNeedle = kind === BUILD_SUBJECT_MOC && listFilterPremium;
 
   const tagFacetList: { key: string; display: string; count: number }[] = [];
   if (kind === BUILD_SUBJECT_MOC && rows.length > 0) {
@@ -198,6 +209,7 @@ export async function BuildSubjectListPage({
       const tags = profileBySubject.get(r.subjectId)?.tags ?? [];
       if (!tags.some((t) => t.toLowerCase() === tagNeedle)) return false;
     }
+    if (premiumNeedle && !profileBySubject.get(r.subjectId)?.isPremium) return false;
     return true;
   });
 
@@ -212,7 +224,8 @@ export async function BuildSubjectListPage({
   const hasQFilter = needle.length > 0;
   const hasTagFilter = kind === BUILD_SUBJECT_MOC && tagNeedle.length > 0;
   const hasMarkFilter = listFilterMark !== "all";
-  const hasListFilters = hasQFilter || hasTagFilter || hasMarkFilter;
+  const hasPremiumFilter = premiumNeedle;
+  const hasListFilters = hasQFilter || hasTagFilter || hasMarkFilter || hasPremiumFilter;
   const clearListHref =
     hasListFilters && kind === BUILD_SUBJECT_MOC
       ? mocListHref({ mocSort: mocSortState })
@@ -257,6 +270,7 @@ export async function BuildSubjectListPage({
                 qSafe={safeQForHref}
                 tagHidden={hiddenTagValue}
                 mark={listFilterMark}
+                premium={hasPremiumFilter}
                 sortState={mocSortState}
               />
               {LIST_MARK_FILTER_OPTIONS.map((opt) => {
@@ -269,6 +283,7 @@ export async function BuildSubjectListPage({
                       q: safeQForHref,
                       tag: tagArg,
                       mark: opt.key === "all" ? undefined : opt.key,
+                      premium: hasPremiumFilter,
                       mocSort: mocSortState,
                     })}
                     className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
@@ -281,6 +296,23 @@ export async function BuildSubjectListPage({
                   </Link>
                 );
               })}
+              <Link
+                href={mocListHref({
+                  q: safeQForHref,
+                  tag: hiddenTagValue || undefined,
+                  mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                  premium: !hasPremiumFilter,
+                  mocSort: mocSortState,
+                })}
+                aria-current={hasPremiumFilter ? "true" : undefined}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  hasPremiumFilter
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                    : "border-[var(--border-soft)] bg-[var(--surface-2)] text-[var(--text)] hover:border-[var(--accent)]/35"
+                }`}
+              >
+                Premium
+              </Link>
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[12rem]">
               <label htmlFor="moc-list-q" className="text-xs font-medium text-[var(--muted)]">
@@ -301,6 +333,7 @@ export async function BuildSubjectListPage({
             {listFilterMark !== "all" ? (
               <input type="hidden" name="mark" value={listFilterMark} />
             ) : null}
+            {hasPremiumFilter ? <input type="hidden" name="premium" value="1" /> : null}
             {!mocSortState.neutral ? (
               <>
                 <input type="hidden" name="sort" value={mocSortState.key} />
@@ -351,6 +384,7 @@ export async function BuildSubjectListPage({
                           q: safeQForHref,
                           tag: x.display,
                           mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                          premium: hasPremiumFilter,
                           mocSort: mocSortState,
                         })}
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
@@ -371,6 +405,7 @@ export async function BuildSubjectListPage({
                       href={mocListHref({
                         q: safeQForHref,
                         mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                        premium: hasPremiumFilter,
                         mocSort: mocSortState,
                       })}
                       className="text-[var(--accent)] underline-offset-2 hover:underline"
@@ -399,9 +434,15 @@ export async function BuildSubjectListPage({
                   按标签「<span className="text-[var(--text)]">{activeTagDisplay}</span>」
                 </>
               ) : null}
+              {hasPremiumFilter ? (
+                <>
+                  {(hasQFilter || hasTagFilter) ? "且 " : null}
+                  仅显示 <span className="font-medium text-[var(--text)]">Premium</span>
+                </>
+              ) : null}
               {hasMarkFilter ? (
                 <>
-                  {(hasQFilter || hasTagFilter) ? "且" : null}
+                  {(hasQFilter || hasTagFilter || hasPremiumFilter) ? "且 " : null}
                   仅显示「
                   <span className="text-[var(--text)]">
                     {LIST_MARK_FILTER_OPTIONS.find((o) => o.key === listFilterMark)?.label ?? listFilterMark}
@@ -409,13 +450,13 @@ export async function BuildSubjectListPage({
                   」
                 </>
               ) : null}
-              {hasQFilter || hasTagFilter ? "筛选，" : hasMarkFilter ? "，" : null}
+              {hasQFilter || hasTagFilter || hasPremiumFilter ? "筛选，" : hasMarkFilter ? "，" : null}
               共 {markFilteredRows.length.toLocaleString("zh-CN")} 条
               {hasMarkFilter && markFilteredRows.length < filteredRows.length
                 ? `（未加进度筛选前 ${filteredRows.length.toLocaleString("zh-CN")} 条）`
                 : ""}
               {!hasMarkFilter && filteredRows.length < rows.length
-                ? `（未加搜索/标签筛选前 ${rows.length.toLocaleString("zh-CN")} 条）`
+                ? `（未加当前筛选前 ${rows.length.toLocaleString("zh-CN")} 条）`
                 : ""}
               {" · "}
               <Link href={clearListHref} className="text-[var(--accent)] underline-offset-2 hover:underline">
@@ -486,6 +527,7 @@ export async function BuildSubjectListPage({
                               q: safeQForHref,
                               tag,
                               mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                              premium: hasPremiumFilter,
                               mocSort: mocSortState,
                             })
                         : undefined

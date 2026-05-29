@@ -54,10 +54,11 @@ type Props = {
   qSafe: string;
   tagHidden: string;
   mark: ListMarkFilter;
+  premium: boolean;
   sortState: MocListSortState;
 };
 
-export function MocListSortControl({ qSafe, tagHidden, mark, sortState }: Props) {
+export function MocListSortControl({ qSafe, tagHidden, mark, premium, sortState }: Props) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const markParam = mark !== "all" ? mark : undefined;
   const tagParam = tagHidden.length > 0 ? tagHidden : undefined;
@@ -70,6 +71,7 @@ export function MocListSortControl({ qSafe, tagHidden, mark, sortState }: Props)
       q: qSafe,
       tag: tagParam,
       mark: markParam,
+      premium,
       mocSort: nextMocListSortOnPickerClick(pick, sortState),
     });
 
