@@ -23,6 +23,7 @@ type Props = {
   subjectId: string;
   initialStage: BuildWorkflowStage | null;
   initialTimes: WorkflowStageTimestamps;
+  embedded?: boolean;
 };
 
 export function BuildWorkflowProgressPanel({
@@ -30,6 +31,7 @@ export function BuildWorkflowProgressPanel({
   subjectId,
   initialStage,
   initialTimes,
+  embedded = false,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -99,7 +101,10 @@ export function BuildWorkflowProgressPanel({
   const defaultLabel = workflowStageLabel("collected", subjectKind);
 
   return (
-    <section className="workflow-detail-panel table-shell" aria-label="拼搭进度">
+    <section
+      className={embedded ? "workflow-detail-panel workflow-detail-panel--embedded" : "workflow-detail-panel table-shell"}
+      aria-label="拼搭进度"
+    >
       <div className="workflow-detail-panel__head">
         <p className="page-kicker">拼搭进度</p>
         <p className="workflow-detail-panel__current text-xs text-[var(--muted)]">

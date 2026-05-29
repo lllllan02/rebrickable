@@ -386,6 +386,68 @@ select {
   padding: clamp(1.25rem, 3vw, 2rem);
 }
 
+.moc-detail-page {
+  gap: 0.75rem;
+}
+
+.moc-detail-hero {
+  min-height: calc(100dvh - 7.25rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.moc-detail-hero-grid {
+  min-height: 0;
+}
+
+@media (min-width: 1024px) {
+  .moc-detail-hero {
+    display: flex;
+  }
+
+  .moc-detail-hero-grid {
+    flex: 1;
+    width: 100%;
+  }
+
+  .moc-detail-media-column,
+  .moc-detail-media-column .moc-image-carousel,
+  .moc-detail-media-column .moc-image-carousel-region,
+  .moc-detail-media-column .moc-image-carousel-region > div {
+    min-height: 0;
+  }
+
+  .moc-detail-media-column .moc-image-carousel {
+    flex: 1 1 auto;
+  }
+
+  .moc-detail-media-column .moc-image-carousel-region {
+    flex: 1 1 auto;
+  }
+
+  .moc-detail-media-column .moc-image-carousel-region > div {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+  }
+
+  .moc-detail-media-column .moc-image-carousel-main {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: auto;
+    max-height: none;
+  }
+
+  .moc-detail-media-column .moc-image-carousel-empty {
+    height: 100%;
+  }
+
+  .moc-detail-sidebar {
+    min-height: 0;
+    height: 100%;
+  }
+}
+
 /* MOC/套装详情轮播：仅自动切换时由组件挂上此类名，做轻微淡入与高亮回落 */
 @keyframes moc-carousel-autoplay-enter {
   from {
@@ -1024,12 +1086,23 @@ select {
 }
 
 .workflow-detail-panel {
-  padding: 0.625rem 0.875rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.workflow-detail-panel--embedded {
+  padding: 0.5rem 0 0;
+  border-top: 1px solid var(--border-soft);
+  background: transparent;
+  box-shadow: none;
 }
 
 @media (min-width: 640px) {
   .workflow-detail-panel {
-    padding: 0.75rem 1rem;
+    padding: 0.625rem 0.875rem;
+  }
+
+  .workflow-detail-panel--embedded {
+    padding: 0.625rem 0 0;
   }
 }
 
@@ -1038,8 +1111,8 @@ select {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.375rem 1rem;
-  margin-bottom: 0.5rem;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.375rem;
 }
 
 .workflow-detail-panel__current {

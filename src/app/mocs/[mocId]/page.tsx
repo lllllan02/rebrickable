@@ -10,7 +10,6 @@ import { buildAttachments, buildImages, buildProfiles } from "@/db/schema";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 import { buildAttachmentPublicPath } from "@/lib/build-attachment-public-path";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
-import { BuildWorkflowProgressPanel } from "@/app/build/build-workflow-progress-panel";
 import { ensureWorkflowCollected, loadWorkflowProgress } from "@/lib/ensure-workflow-collected";
 import { loadMocDerivedFromSetMeta } from "@/lib/moc-derived-from-set";
 import { parseTagsJson } from "@/lib/moc-profile-parse";
@@ -127,7 +126,7 @@ export default async function MocDetailPage({ params }: Props) {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack moc-detail-page">
       <MocDetailEditorial
         subjectId={mocId}
         images={galleryImages}
@@ -138,13 +137,7 @@ export default async function MocDetailPage({ params }: Props) {
         partTotalQty={partTotalQty}
         gobricksGdsPriceCny={gobricksGdsPriceCny}
         derivedFromSet={derivedFromSet}
-      />
-
-      <BuildWorkflowProgressPanel
-        subjectKind={BUILD_SUBJECT_MOC}
-        subjectId={mocId}
-        initialStage={workflowProgress.stage}
-        initialTimes={workflowProgress.times}
+        workflowProgress={workflowProgress}
       />
 
       <Suspense fallback={null}>

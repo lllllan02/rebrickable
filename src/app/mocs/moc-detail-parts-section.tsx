@@ -409,7 +409,7 @@ export function MocDetailPartsSection({
     : hasAnySheet || hasOfficial || hasIoPlans;
 
   return (
-    <div id="moc-parts-sheet-tools" className="scroll-mt-24 border-t border-[var(--border-soft)] pt-8">
+    <div id="moc-parts-sheet-tools" className="scroll-mt-24 pt-8">
       <div className="section-panel space-y-5">
         <header className="space-y-2">
           <h2 className="text-base font-semibold text-[var(--text)]">零件表</h2>

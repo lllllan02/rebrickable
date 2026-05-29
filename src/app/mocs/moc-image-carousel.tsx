@@ -283,14 +283,14 @@ export function MocImageCarousel({
   const currentIsUpload = current?.kind === "upload";
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="moc-image-carousel flex min-w-0 flex-col gap-2">
       <div
         ref={wrapRef}
         tabIndex={0}
         role="region"
         aria-roledescription="carousel"
         aria-labelledby={regionId}
-        className="relative min-h-[min(52vw,22rem)] outline-none ring-[var(--accent)]/40 focus-visible:ring-2 sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]"
+        className="moc-image-carousel-region relative min-h-[min(52vw,22rem)] outline-none ring-[var(--accent)]/40 focus-visible:ring-2 sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]"
       >
         <p id={regionId} className="sr-only">
           {galleryKind === "set"
@@ -299,7 +299,7 @@ export function MocImageCarousel({
         </p>
 
         {slideCount === 0 ? (
-          <div className="flex min-h-[min(52vw,22rem)] flex-col items-center justify-center gap-4 rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-10 text-center sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]">
+          <div className="moc-image-carousel-empty flex min-h-[min(52vw,22rem)] flex-col items-center justify-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-6 text-center sm:min-h-[min(40vw,26rem)] lg:min-h-[min(36vw,28rem)]">
             {galleryKind === "set" ? (
               <p className="max-w-sm text-sm text-[var(--muted)]">
                 尚无套装官方图与参考图。支持 JPEG / PNG / WebP / GIF，单张不超过 8 MB；可{" "}
@@ -330,7 +330,7 @@ export function MocImageCarousel({
         ) : (
           <div className="relative isolate z-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-3)]">
             <div
-              className={`relative z-0 isolate aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem] select-none ${current ? "cursor-zoom-in" : "cursor-default"} ${autoplayEnterFx ? "moc-carousel-autoplay-enter" : ""}`}
+              className={`moc-image-carousel-main relative z-0 isolate aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem] select-none ${current ? "cursor-zoom-in" : "cursor-default"} ${autoplayEnterFx ? "moc-carousel-autoplay-enter" : ""}`}
               onClick={() => {
                 if (!current) return;
                 stopAutoplay();
@@ -350,7 +350,7 @@ export function MocImageCarousel({
                   }
                   src={current.url}
                   fill
-                  className="pointer-events-none object-contain p-2"
+                  className="pointer-events-none object-contain p-1.5"
                   sizes="(max-width: 1024px) 100vw, 66vw"
                   alt={
                     current.kind === "catalog"
@@ -366,7 +366,7 @@ export function MocImageCarousel({
               {current ? (
                 <button
                   type="button"
-                  className="absolute bottom-3 right-3 z-20 rounded-md border border-[var(--border)] bg-[var(--surface)]/95 px-2.5 py-1.5 text-xs font-medium text-[var(--text)] shadow backdrop-blur-sm transition hover:bg-[var(--surface-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  className="absolute bottom-2 right-2 z-20 rounded-md border border-[var(--border)] bg-[var(--surface)]/95 px-2 py-1 text-[11px] font-medium text-[var(--text)] shadow backdrop-blur-sm transition hover:bg-[var(--surface-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
                   aria-label="放大查看当前图片"
                   title="放大查看"
                   onClick={(e) => {
@@ -388,7 +388,7 @@ export function MocImageCarousel({
                 <button
                   type="button"
                   aria-label="上一张"
-                  className="absolute left-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm font-medium text-[var(--text)] opacity-85 shadow backdrop-blur-sm transition-all duration-200 ease-out hover:scale-105 hover:border-[var(--accent)] hover:bg-[var(--accent)]/18 hover:opacity-100 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/45 active:scale-100"
+                  className="absolute left-2 top-[calc(50%-1.75rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2 py-1.5 text-sm font-medium text-[var(--text)] opacity-85 shadow backdrop-blur-sm transition-all duration-200 ease-out hover:scale-105 hover:border-[var(--accent)] hover:bg-[var(--accent)]/18 hover:opacity-100 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/45 active:scale-100"
                   onClick={() => {
                     stopAutoplay();
                     go(-1);
@@ -399,7 +399,7 @@ export function MocImageCarousel({
                 <button
                   type="button"
                   aria-label="下一张"
-                  className="absolute right-2 top-[calc(50%-2.25rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2.5 py-2 text-sm font-medium text-[var(--text)] opacity-85 shadow backdrop-blur-sm transition-all duration-200 ease-out hover:scale-105 hover:border-[var(--accent)] hover:bg-[var(--accent)]/18 hover:opacity-100 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/45 active:scale-100"
+                  className="absolute right-2 top-[calc(50%-1.75rem)] z-10 -translate-y-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)]/90 px-2 py-1.5 text-sm font-medium text-[var(--text)] opacity-85 shadow backdrop-blur-sm transition-all duration-200 ease-out hover:scale-105 hover:border-[var(--accent)] hover:bg-[var(--accent)]/18 hover:opacity-100 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/45 active:scale-100"
                   onClick={() => {
                     stopAutoplay();
                     go(1);
@@ -413,7 +413,7 @@ export function MocImageCarousel({
             {slideCount > 1 ? (
               <div
                 ref={thumbStripRef}
-                className="relative z-10 flex gap-2 overflow-x-auto border-t border-[var(--border-soft)] bg-[var(--surface-2)]/80 px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:thin]"
+                className="relative z-10 flex gap-1.5 overflow-x-auto border-t border-[var(--border-soft)] bg-[var(--surface-2)]/80 px-2 py-1.5 [-ms-overflow-style:none] [scrollbar-width:thin]"
                 role="tablist"
                 aria-label="缩略图，点击切换大图"
               >
@@ -436,7 +436,7 @@ export function MocImageCarousel({
                         ? "官方目录图（封面）"
                         : (img.originalName ?? `图片 ${i + 1}`)
                     }
-                    className={`relative h-14 w-14 shrink-0 overflow-hidden rounded-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
+                    className={`relative h-10 w-10 shrink-0 overflow-hidden rounded-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
                       i === idx
                         ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--surface-2)]"
                         : "opacity-75 ring-1 ring-[var(--border)]"
@@ -451,7 +451,7 @@ export function MocImageCarousel({
                       src={img.url}
                       fill
                       className="pointer-events-none object-cover"
-                      sizes="56px"
+                      sizes="40px"
                       alt=""
                       unoptimized={img.kind === "upload"}
                       fallbackLabel="·"
@@ -466,7 +466,7 @@ export function MocImageCarousel({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <label className="button-primary cursor-pointer text-xs sm:text-sm">
+        <label className="button-primary cursor-pointer px-3 py-1 text-xs">
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif"
@@ -483,7 +483,7 @@ export function MocImageCarousel({
         {currentIsUpload ? (
           <button
             type="button"
-            className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-red-400/40 hover:bg-[var(--danger-soft)] hover:text-red-200/95 sm:text-sm"
+            className="rounded-md border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)] hover:border-red-400/40 hover:bg-[var(--danger-soft)] hover:text-red-200/95"
             disabled={pending}
             onClick={onDeleteCurrent}
           >
@@ -496,14 +496,6 @@ export function MocImageCarousel({
           </span>
         ) : null}
       </div>
-
-      {current?.kind === "catalog" ? (
-        <p className="truncate text-center text-[11px] text-[var(--muted)]">官方目录图（封面）</p>
-      ) : current?.originalName ? (
-        <p className="truncate text-center text-[11px] text-[var(--muted)]" title={current.originalName}>
-          {current.originalName}
-        </p>
-      ) : null}
 
       {message ? (
         <p className="text-xs text-emerald-200/95" role="status">

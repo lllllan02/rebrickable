@@ -86,11 +86,15 @@ export function MocAttachmentsPanel({
   );
 
   return (
-    <div className="border-t border-[var(--border-soft)] pt-4">
-      <h3 className="text-sm font-medium text-[var(--text)]">附件</h3>
-
-      <div className="mt-2">
-        <label className="inline-flex cursor-pointer items-center rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text)] hover:border-[var(--accent)]/50 sm:text-sm">
+    <div className="flex min-h-0 flex-col border-t border-[var(--border-soft)] pt-3 lg:flex-1">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium text-[var(--text)]">
+          附件
+          {attachments.length > 0 ? (
+            <span className="ml-1 font-normal text-[var(--muted)]">({attachments.length})</span>
+          ) : null}
+        </h3>
+        <label className="inline-flex shrink-0 cursor-pointer items-center rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-xs text-[var(--text)] hover:border-[var(--accent)]/50">
           <input
             type="file"
             accept=".pdf,.io,application/pdf"
@@ -107,24 +111,26 @@ export function MocAttachmentsPanel({
       </div>
 
       {attachments.length > 0 ? (
-        <ul className="mt-3 space-y-2.5">
+        <ul className="mt-2 min-h-0 space-y-1.5 overflow-y-auto pr-1 lg:flex-1">
           {attachments.map((a) => {
             const label = (a.originalName ?? "").trim() || `附件 #${a.id}`;
             return (
               <li
                 key={a.id}
-                className="rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]/60 px-3 py-2.5 text-xs sm:text-sm"
+                className="rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]/60 px-2.5 py-1.5 text-xs"
               >
-                <p className="min-w-0 break-all font-medium leading-snug text-[var(--text)]">{label}</p>
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                <p className="min-w-0 truncate font-medium leading-snug text-[var(--text)]" title={label}>
+                  {label}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                   <span className="tabular-nums text-[var(--muted)]">{formatBytes(a.byteSize)}</span>
-                  <span className="flex shrink-0 flex-wrap gap-3">
+                  <span className="flex shrink-0 flex-wrap gap-2.5">
                     {subjectKind === BUILD_SUBJECT_MOC && isIoAttachment(a.originalName, a.url) ? (
                       <a
                         href={`${buildSubjectDetailPath(BUILD_SUBJECT_MOC, subjectId)}/io-split?attachmentId=${a.id}`}
                         className="text-[var(--accent)] underline underline-offset-2"
                       >
-                        分步导出零件表
+                        分步导出
                       </a>
                     ) : null}
                     <a href={a.url} className="text-[var(--accent)] underline underline-offset-2" download>

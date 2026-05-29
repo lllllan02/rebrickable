@@ -253,14 +253,14 @@ export function MocProfileForm({
       : null;
 
   const readOnlyBlock = (
-    <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
-      <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-start gap-x-3 gap-y-2" : undefined}>
+    <div className={isSidebar ? "space-y-2" : "mt-4 space-y-3"}>
+      <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-start gap-x-2 gap-y-1.5" : undefined}>
         <div className={isSidebar && sidebarTitleAside ? "min-w-0 flex-1" : undefined}>
           <p
             id={isSidebar ? formTitleId : undefined}
             className={
               isSidebar
-                ? "flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xl font-extrabold tracking-tight text-[var(--text)] sm:text-2xl"
+                ? "flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-lg font-extrabold tracking-tight text-[var(--text)] sm:text-xl"
                 : "text-lg font-semibold text-[var(--text)]"
             }
           >
@@ -275,7 +275,7 @@ export function MocProfileForm({
             ) : null}
             {isSidebar && gobricksTotalLabel ? (
               <span
-                className="shrink-0 font-mono text-base font-semibold tabular-nums text-emerald-200/95 sm:text-xl"
+                className="shrink-0 font-mono text-sm font-semibold tabular-nums text-emerald-200/95 sm:text-base"
                 title="高砖整单参考价：接口根字段 gdsPrice（按完整清单分片请求时求和），非缺件子集小计"
               >
                 {gobricksTotalLabel}
@@ -287,51 +287,40 @@ export function MocProfileForm({
             <p className="mt-1 text-xs text-[var(--muted)]">
               显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
             </p>
-          ) : setOfficial ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              库存版本 {setOfficial.invVersion}；显示名称仅用于本应用，set_num 不变。
-            </p>
           ) : null}
         </div>
         {isSidebar && sidebarTitleAside ? (
-          <div className="flex shrink-0 items-center gap-2 self-start pt-0.5">{sidebarTitleAside}</div>
+          <div className="flex shrink-0 items-center gap-2 self-start">{sidebarTitleAside}</div>
         ) : null}
       </div>
 
-      <div>
-        <p className="text-xs text-[var(--muted)]">
-          标签（<span className="tabular-nums">{viewTags.length}</span> / {MOC_PROFILE_MAX_TAGS}）
-        </p>
-        {viewTags.length === 0 ? (
-          <p className="mt-1.5 text-xs text-[var(--muted-2)]">暂无标签</p>
-        ) : (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {viewTags.map((t, i) =>
-              tagListHref != null ? (
-                <Link
-                  key={`${t}-${i}`}
-                  href={tagListHref(t)}
-                  className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] text-[var(--text)] underline-offset-2 hover:border-[var(--accent)]/40 hover:underline"
-                >
-                  {t}
-                </Link>
-              ) : (
-                <span
-                  key={`${t}-${i}`}
-                  className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] text-[var(--text)]"
-                >
-                  {t}
-                </span>
-              ),
-            )}
-          </div>
-        )}
-      </div>
+      {viewTags.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {viewTags.map((t, i) =>
+            tagListHref != null ? (
+              <Link
+                key={`${t}-${i}`}
+                href={tagListHref(t)}
+                className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] leading-5 text-[var(--text)] underline-offset-2 hover:border-[var(--accent)]/40 hover:underline"
+              >
+                {t}
+              </Link>
+            ) : (
+              <span
+                key={`${t}-${i}`}
+                className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-px text-[11px] leading-5 text-[var(--text)]"
+              >
+                {t}
+              </span>
+            ),
+          )}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-3)] sm:text-sm"
+          className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-3)]"
           onClick={enterEdit}
         >
           编辑
@@ -346,8 +335,8 @@ export function MocProfileForm({
   );
 
   const editFields = (
-    <div className={isSidebar ? "space-y-3" : "mt-4 space-y-3"}>
-      <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-end gap-x-3 gap-y-2" : undefined}>
+    <div className={isSidebar ? "space-y-2.5" : "mt-4 space-y-3"}>
+      <div className={isSidebar && sidebarTitleAside ? "flex flex-wrap items-end gap-x-2 gap-y-1.5" : undefined}>
         <div className={isSidebar && sidebarTitleAside ? "min-w-0 flex-1" : undefined}>
           <label className={isSidebar ? "block" : "block text-xs text-[var(--muted)]"}>
             {isSidebar ? <span className="sr-only">显示名称</span> : "显示名称"}
@@ -364,7 +353,7 @@ export function MocProfileForm({
               aria-label="显示名称"
               className={
                 isSidebar
-                  ? "field mt-0 w-full border-0 border-b border-[var(--border-soft)] bg-transparent px-0 py-1.5 text-xl font-extrabold tracking-tight text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-0 sm:text-2xl"
+                  ? "field mt-0 w-full border-0 border-b border-[var(--border-soft)] bg-transparent px-0 py-1 text-lg font-extrabold tracking-tight text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-0 sm:text-xl"
                   : "field mt-1 w-full max-w-md text-sm text-[var(--text)]"
               }
             />
@@ -382,13 +371,9 @@ export function MocProfileForm({
             <p className="mt-1 text-xs text-[var(--muted)]">
               显示名称仅用于本应用列表与标题；{ui.subjectIdLabel}（<span className="font-mono">{subjectId}</span>）不变。
             </p>
-          ) : setOfficial ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              库存版本 {setOfficial.invVersion}；显示名称仅用于本应用，set_num 不变。
-            </p>
           ) : null}
           {supportsPremium ? (
-            <label className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-[var(--text)]">
+            <label className="mt-2 inline-flex items-center gap-2 rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-1 text-xs text-[var(--text)]">
               <input
                 type="checkbox"
                 checked={isPremium}
@@ -404,7 +389,7 @@ export function MocProfileForm({
           ) : null}
         </div>
         {isSidebar && sidebarTitleAside ? (
-          <div className="flex shrink-0 items-center gap-2 pb-1">{sidebarTitleAside}</div>
+          <div className="flex shrink-0 items-center gap-2">{sidebarTitleAside}</div>
         ) : null}
       </div>
 
@@ -412,7 +397,7 @@ export function MocProfileForm({
         <p className="text-xs text-[var(--muted)]">
           标签（<span className="tabular-nums">{tags.length}</span> / {MOC_PROFILE_MAX_TAGS}）
         </p>
-        <div className="mt-1.5 flex flex-wrap gap-1">
+        <div className="mt-1 flex flex-wrap gap-1">
           {tags.map((t, i) => (
             <span
               key={`${t}-${i}`}
@@ -431,7 +416,7 @@ export function MocProfileForm({
             </span>
           ))}
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <input
             id={tagInputId}
             type="text"
@@ -457,11 +442,11 @@ export function MocProfileForm({
             autoComplete="off"
             spellCheck={false}
             placeholder="新标签，回车添加"
-            className="field min-w-0 flex-1 text-xs text-[var(--text)] sm:text-sm"
+            className="field min-w-0 flex-1 py-1 text-xs text-[var(--text)]"
           />
           <button
             type="button"
-            className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)] sm:px-3 sm:text-sm"
+            className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--surface-3)]"
             disabled={pending}
             onClick={addTag}
           >
@@ -471,12 +456,12 @@ export function MocProfileForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="button-primary text-xs sm:text-sm" disabled={pending} onClick={onSave}>
+        <button type="button" className="button-primary px-3 py-1 text-xs" disabled={pending} onClick={onSave}>
           {pending ? "保存中…" : "保存资料"}
         </button>
         <button
           type="button"
-          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] sm:text-sm"
+          className="rounded-md border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
           disabled={pending}
           onClick={cancelEdit}
         >
