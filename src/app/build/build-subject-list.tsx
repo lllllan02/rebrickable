@@ -93,6 +93,7 @@ export async function BuildSubjectListPage({
       tags: string[];
       hasInstructionsPdf: boolean;
       hasIoSource: boolean;
+      isPremium: boolean;
     }
   >();
   let officialHeroBySet = new Map<string, string | null>();
@@ -120,6 +121,7 @@ export async function BuildSubjectListPage({
         tags: parseTagsJson(p.tagsJson),
         hasInstructionsPdf: Boolean(p.hasInstructionsPdf),
         hasIoSource: Boolean(p.hasIoSource),
+        isPremium: Boolean(p.isPremium),
       });
     }
     for (const im of imgs) {
@@ -467,6 +469,7 @@ export async function BuildSubjectListPage({
                 const showInstructionBadge =
                   kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasInstructionsPdf);
                 const showSourceBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.hasIoSource);
+                const showPremiumBadge = kind === BUILD_SUBJECT_MOC && Boolean(prof?.isPremium);
                 return (
                   <SavedSubjectListRow
                     key={r.subjectId}
@@ -497,6 +500,7 @@ export async function BuildSubjectListPage({
                     workflowStage={workflowStage}
                     showInstructionBadge={showInstructionBadge}
                     showSourceBadge={showSourceBadge}
+                    showPremiumBadge={showPremiumBadge}
                   />
                 );
               })}

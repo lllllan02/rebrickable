@@ -27,6 +27,7 @@ export function SavedSubjectListRow({
   workflowStage,
   showInstructionBadge,
   showSourceBadge,
+  showPremiumBadge = false,
   shortageLineCount,
   shortageTotalQty,
   shortageClearedAt,
@@ -46,6 +47,7 @@ export function SavedSubjectListRow({
   workflowStage: BuildWorkflowStage | null;
   showInstructionBadge: boolean;
   showSourceBadge: boolean;
+  showPremiumBadge?: boolean;
   shortageLineCount: number | null;
   shortageTotalQty: number | null;
   shortageClearedAt: string | null;
@@ -83,9 +85,17 @@ export function SavedSubjectListRow({
             <span className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">无参考图</span>
           )}
         </Link>
-        {showInstructionBadge || showSourceBadge ? (
+        {showInstructionBadge || showSourceBadge || showPremiumBadge ? (
           <div className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[calc(100%-1rem)] flex-col items-end gap-1">
             <div className="flex flex-wrap justify-end gap-1">
+              {showPremiumBadge ? (
+                <span
+                  className="rounded-md bg-gradient-to-br from-fuchsia-500 to-amber-500 px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-white shadow-md ring-1 ring-white/35 sm:text-[10px]"
+                  title="Premium MOC"
+                >
+                  Premium
+                </span>
+              ) : null}
               {showInstructionBadge ? (
                 <span
                   className="rounded-md bg-gradient-to-br from-amber-400 to-orange-600 px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-white shadow-md ring-1 ring-white/35 sm:text-[10px]"

@@ -71,6 +71,7 @@ export default async function MocDetailPage({ params }: Props) {
     : await loadWorkflowProgress(BUILD_SUBJECT_MOC, mocId);
   const initialDisplayName = (profile?.displayName ?? "").trim();
   const initialTags = parseTagsJson(profile?.tagsJson);
+  const initialPremium = Boolean(profile?.isPremium);
 
   const galleryImages: MocGalleryImage[] = imgRows.map((r) => ({
     id: r.id,
@@ -133,6 +134,7 @@ export default async function MocDetailPage({ params }: Props) {
         attachments={attachmentRows}
         initialDisplayName={initialDisplayName}
         initialTags={initialTags}
+        initialPremium={initialPremium}
         partTotalQty={partTotalQty}
         gobricksGdsPriceCny={gobricksGdsPriceCny}
         derivedFromSet={derivedFromSet}

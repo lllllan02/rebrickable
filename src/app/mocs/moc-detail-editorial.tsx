@@ -22,6 +22,7 @@ type Props = {
   attachments: MocAttachmentRow[];
   initialDisplayName: string;
   initialTags: string[];
+  initialPremium?: boolean;
   /** 已存零件表各行列 quantity 之和；无表时为 null */
   partTotalQty: number | null;
   /** 高砖整单参考价（元），来自接口根字段 `gdsPrice`；未对照高砖时为 null */
@@ -43,6 +44,7 @@ export function MocDetailEditorial({
   attachments,
   initialDisplayName,
   initialTags,
+  initialPremium = false,
   partTotalQty,
   gobricksGdsPriceCny = null,
   savedSheetPartTotalQty = null,
@@ -95,6 +97,7 @@ export function MocDetailEditorial({
               subjectId={subjectId}
               initialDisplayName={initialDisplayName}
               initialTags={initialTags}
+              initialPremium={isMoc ? initialPremium : false}
               partTotalQty={partTotalQty}
               gobricksGdsPriceCny={gobricksGdsPriceCny}
               setOfficial={o ?? undefined}

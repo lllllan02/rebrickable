@@ -21,6 +21,7 @@ type Props = {
   subjectId: string;
   initialDisplayName: string;
   initialTags: string[];
+  initialPremium?: boolean;
   /** `sidebar`：与轮播并排时的紧凑形态（无外层大卡片） */
   variant?: "default" | "sidebar";
   /** 侧边栏：显示在标题与主体 ID 之下、标签之上（无已存零件表时为 null 则不显示） */
@@ -35,13 +36,14 @@ type Props = {
   savedSheetPartTotalQty?: number | null;
 };
 
-type OptimisticProfile = { displayName: string; tags: string[] };
+type OptimisticProfile = { displayName: string; tags: string[]; isPremium: boolean };
 
 export function MocProfileForm({
   subjectKind = BUILD_SUBJECT_MOC,
   subjectId,
   initialDisplayName,
   initialTags,
+  initialPremium = false,
   variant = "default",
   partTotalQty = null,
   gobricksGdsPriceCny = null,
@@ -56,6 +58,7 @@ export function MocProfileForm({
   const [editing, setEditing] = useState(false);
   const [optimistic, setOptimistic] = useState<OptimisticProfile | null>(null);
   const [displayName, setDisplayName] = useState(initialDisplayName);
+  const [isPremium, setIsPremium] = useState(initialPremium);
   const [tags, setTags] = useState<string[]>(() => [...initialTags]);
   const [tagDraft, setTagDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -67,6 +70,7 @@ export function MocProfileForm({
   const ignoreTagDraftChangeRef = useRef<string | null>(null);
 
   const isSidebar = variant === "sidebar";
+  const supportsPremium = subjectKind === BUILD_SUBJECT_MOC;
   const tagListHref = subjectKind === BUILD_SUBJECT_MOC ? (tag: string) => mocListHref({ tag }) : null;
 
   const tagsSyncKey = initialTags.join("\u0001");
@@ -76,12 +80,14 @@ export function MocProfileForm({
     if (!optimistic) return;
     const match =
       optimistic.displayName.trim() === initialDisplayName.trim() &&
-      optimisticTagsKey === tagsSyncKey;
+      optimisticTagsKey === tagsSyncKey &&
+      optimistic.isPremium === (supportsPremium && initialPremium);
     if (match) setOptimistic(null);
-  }, [initialDisplayName, optimistic, optimisticTagsKey, tagsSyncKey]);
+  }, [initialDisplayName, initialPremium, optimistic, optimisticTagsKey, supportsPremium, tagsSyncKey]);
 
   const viewDisplayName = optimistic?.displayName ?? initialDisplayName;
   const viewTags = optimistic?.tags ?? initialTags;
+  const viewIsPremium = supportsPremium && (optimistic?.isPremium ?? initialPremium);
   const catalogName = setOfficial?.catalogName?.trim() ?? "";
   const viewTitle =
     viewDisplayName.trim() || catalogName || `${ui.noun} ${subjectId}`;
@@ -177,13 +183,14 @@ export function MocProfileForm({
   const enterEdit = useCallback(() => {
     const baseName = (optimistic?.displayName ?? initialDisplayName).slice(0, MOC_PROFILE_MAX_DISPLAY_NAME);
     setDisplayName(baseName);
+    setIsPremium(supportsPremium && (optimistic?.isPremium ?? initialPremium));
     setTags([...(optimistic?.tags ?? initialTags)]);
     setTagDraft("");
     ignoreTagDraftChangeRef.current = null;
     setError(null);
     setMessage(null);
     setEditing(true);
-  }, [initialDisplayName, initialTags, optimistic]);
+  }, [initialDisplayName, initialPremium, initialTags, optimistic, supportsPremium]);
 
   const cancelEdit = useCallback(() => {
     setEditing(false);
@@ -226,9 +233,9 @@ export function MocProfileForm({
     setMessage(null);
     setError(null);
     startTransition(async () => {
-      const r = await saveBuildProfileAction({ subjectKind, subjectId, displayName, tags });
+      const r = await saveBuildProfileAction({ subjectKind, subjectId, displayName, tags, isPremium });
       if (r.ok) {
-        setOptimistic({ displayName, tags: [...tags] });
+        setOptimistic({ displayName, tags: [...tags], isPremium: supportsPremium && isPremium });
         setMessage("已保存。");
         setEditing(false);
         router.refresh();
@@ -236,7 +243,7 @@ export function MocProfileForm({
         setError(r.error);
       }
     });
-  }, [displayName, router, subjectId, subjectKind, tags]);
+  }, [displayName, isPremium, router, subjectId, subjectKind, supportsPremium, tags]);
 
   const gobricksTotalLabel =
     typeof gobricksGdsPriceCny === "number" &&
@@ -258,6 +265,14 @@ export function MocProfileForm({
             }
           >
             <span className="min-w-0 break-words">{viewTitle}</span>
+            {viewIsPremium ? (
+              <span
+                className="shrink-0 rounded-md bg-gradient-to-br from-fuchsia-500 to-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-white shadow-sm ring-1 ring-white/35"
+                title="Premium MOC"
+              >
+                Premium
+              </span>
+            ) : null}
             {isSidebar && gobricksTotalLabel ? (
               <span
                 className="shrink-0 font-mono text-base font-semibold tabular-nums text-emerald-200/95 sm:text-xl"
@@ -372,6 +387,21 @@ export function MocProfileForm({
               库存版本 {setOfficial.invVersion}；显示名称仅用于本应用，set_num 不变。
             </p>
           ) : null}
+          {supportsPremium ? (
+            <label className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-[var(--text)]">
+              <input
+                type="checkbox"
+                checked={isPremium}
+                onChange={(e) => {
+                  setIsPremium(e.target.checked);
+                  setError(null);
+                }}
+                disabled={pending}
+                className="h-3.5 w-3.5 accent-[var(--accent)]"
+              />
+              <span>标记为 Premium</span>
+            </label>
+          ) : null}
         </div>
         {isSidebar && sidebarTitleAside ? (
           <div className="flex shrink-0 items-center gap-2 pb-1">{sidebarTitleAside}</div>
@@ -442,7 +472,7 @@ export function MocProfileForm({
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="button-primary text-xs sm:text-sm" disabled={pending} onClick={onSave}>
-          {pending ? "保存中…" : "保存名称与标签"}
+          {pending ? "保存中…" : "保存资料"}
         </button>
         <button
           type="button"
@@ -471,7 +501,7 @@ export function MocProfileForm({
       aria-labelledby={formTitleId}
     >
       <h2 id={formTitleId} className="text-sm font-semibold text-[var(--text)]">
-        名称与标签
+        {supportsPremium ? "名称、标签与标识" : "名称与标签"}
       </h2>
       {editing ? editFields : readOnlyBlock}
     </section>

@@ -20,6 +20,7 @@ export async function saveBuildProfileAction(input: {
   subjectId: string;
   displayName: string;
   tags: unknown;
+  isPremium?: unknown;
 }): Promise<SaveBuildProfileResult> {
   const subjectId = input.subjectId.trim();
   if (!subjectId || subjectId.length > BUILD_UPLOAD_MAX_ID_LEN) {
@@ -38,6 +39,7 @@ export async function saveBuildProfileAction(input: {
     : [];
   const tags = normalizeMocTags(rawTags);
   const tagsJson = serializeTagsJson(tags);
+  const isPremium = input.subjectKind === BUILD_SUBJECT_MOC && input.isPremium === true;
   const profileUpdatedAt = new Date().toISOString();
 
   try {
@@ -49,6 +51,7 @@ export async function saveBuildProfileAction(input: {
         subjectId,
         displayName,
         tagsJson,
+        isPremium,
         profileUpdatedAt,
       })
       .onConflictDoUpdate({
@@ -56,6 +59,7 @@ export async function saveBuildProfileAction(input: {
         set: {
           displayName,
           tagsJson,
+          isPremium,
           profileUpdatedAt,
         },
       });
@@ -71,11 +75,13 @@ export async function saveMocProfileAction(input: {
   mocId: string;
   displayName: string;
   tags: unknown;
+  isPremium?: unknown;
 }): Promise<SaveMocProfileResult> {
   return saveBuildProfileAction({
     subjectKind: BUILD_SUBJECT_MOC,
     subjectId: input.mocId,
     displayName: input.displayName,
     tags: input.tags,
+    isPremium: input.isPremium,
   });
 }

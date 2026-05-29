@@ -11,6 +11,8 @@ import { ensureUserBuildTables } from "./ensure-user-build-tables";
 import { migrateLegacyBuildDataFromCatalogDb } from "./migrate-legacy-build-to-user-db";
 import { catalogSchema, userSchema } from "./schema-registry";
 
+const USER_SCHEMA_ENSURE_VERSION = "build_profiles_is_premium";
+
 function openCatalogSqlite(): Database.Database {
   const dbPath = catalogDbPath();
   if (!fs.existsSync(dbPath)) {
@@ -39,6 +41,7 @@ const globalForDb = globalThis as typeof globalThis & {
   __userSqlite?: Database.Database;
   __catalogDb?: ReturnType<typeof drizzle<typeof catalogSchema>>;
   __userDb?: ReturnType<typeof drizzle<typeof userSchema>>;
+  __userSchemaEnsureVersion?: string;
 };
 
 export function getCatalogDb() {
@@ -59,6 +62,13 @@ export function getUserDb() {
     const userSqlite = openUserSqlite(cat);
     globalForDb.__userSqlite = userSqlite;
     globalForDb.__userDb = drizzle(userSqlite, { schema: userSchema });
+    globalForDb.__userSchemaEnsureVersion = USER_SCHEMA_ENSURE_VERSION;
+  } else if (
+    globalForDb.__userSqlite &&
+    globalForDb.__userSchemaEnsureVersion !== USER_SCHEMA_ENSURE_VERSION
+  ) {
+    ensureUserBuildTables(globalForDb.__userSqlite);
+    globalForDb.__userSchemaEnsureVersion = USER_SCHEMA_ENSURE_VERSION;
   }
   return globalForDb.__userDb;
 }

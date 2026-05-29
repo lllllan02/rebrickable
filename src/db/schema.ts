@@ -208,6 +208,8 @@ export const buildProfiles = sqliteTable(
       .default(false),
     /** 冗余：是否存在 .io 源文件附件 */
     hasIoSource: integer("has_io_source", { mode: "boolean" }).notNull().default(false),
+    /** 仅 MOC：是否标记为 Premium */
+    isPremium: integer("is_premium", { mode: "boolean" }).notNull().default(false),
     /** 仅 MOC：改编自的官方套装 set_num；无则为 null */
     derivedFromSetNum: text("derived_from_set_num"),
   },
