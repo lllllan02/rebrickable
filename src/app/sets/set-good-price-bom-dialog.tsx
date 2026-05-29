@@ -4,11 +4,12 @@ import Link from "next/link";
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useTransition,
-  type RefObject,
+  type Ref,
 } from "react";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
@@ -172,14 +173,12 @@ function BomGroupHeader({
 function BomGroupPartsPanel({
   group,
   panelId,
-  panelRef,
 }: {
   group: SetBomPreviewGroup;
   panelId: string;
-  panelRef?: RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <div ref={panelRef} id={panelId} className="px-3 pb-3 pt-2">
+    <div id={panelId} className="px-3 pb-3 pt-2">
       <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
         {group.parts.map((part) => (
           <li key={`${part.partNum}-${part.colorId}-${part.isSpare ? "s" : "m"}`}>
@@ -195,38 +194,35 @@ function BomGroupRow({
   group,
   mode,
   expanded,
-  hideInlineHeaderVisually,
-  partsPanelRef,
+  rowRef,
   onToggle,
 }: {
   group: SetBomPreviewGroup;
   mode: SetBomPreviewGroupMode;
   expanded: boolean;
-  hideInlineHeaderVisually: boolean;
-  partsPanelRef?: RefObject<HTMLDivElement | null>;
+  rowRef?: Ref<HTMLLIElement>;
   onToggle: () => void;
 }) {
   const panelId = bomGroupPanelId(group.key);
 
   return (
     <li
+      ref={rowRef}
       className={`rounded-md border border-[var(--border-soft)] ${
         expanded ? "bg-[var(--surface-2)]" : "bg-[var(--surface-2)]/30"
       }`}
     >
       {expanded ? (
-        <div className={hideInlineHeaderVisually ? "pointer-events-none invisible" : undefined}>
-          <BomGroupHeader
-            group={group}
-            mode={mode}
-            expanded
-            panelId={panelId}
-            onToggle={onToggle}
-          />
-        </div>
+        <BomGroupHeader
+          group={group}
+          mode={mode}
+          expanded
+          panelId={panelId}
+          onToggle={onToggle}
+        />
       ) : null}
       {expanded ? (
-        <BomGroupPartsPanel group={group} panelId={panelId} panelRef={partsPanelRef} />
+        <BomGroupPartsPanel group={group} panelId={panelId} />
       ) : (
         <BomGroupHeader
           group={group}
@@ -254,11 +250,20 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
   } | null>(null);
   const [groupMode, setGroupMode] = useState<SetBomPreviewGroupMode>("category");
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const groupRowRefs = useRef(new Map<string, HTMLLIElement>());
+  const pendingScrollKeyRef = useRef<string | null>(null);
+  const [pinExpandedHeader, setPinExpandedHeader] = useState(false);
 
   const groups = useMemo(
     () => (lines ? groupSetBomPreviewLines(lines, groupMode) : []),
     [lines, groupMode]
   );
+
+  const expandedKey = expandedKeys.size > 0 ? [...expandedKeys][0] : null;
+  const expandedGroup = expandedKey
+    ? groups.find((group) => group.key === expandedKey)
+    : undefined;
 
   useEffect(() => {
     setExpandedKeys(new Set());
@@ -299,57 +304,65 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
     onClose();
   };
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const expandedPartsRef = useRef<HTMLDivElement>(null);
-  const pinExpandedHeaderRef = useRef(false);
-  const [pinExpandedHeader, setPinExpandedHeader] = useState(false);
-
-  const expandedKey = expandedKeys.size > 0 ? [...expandedKeys][0] : null;
-  const expandedGroup = expandedKey
-    ? groups.find((group) => group.key === expandedKey)
-    : undefined;
-
   const toggleGroup = (key: string) => {
-    setExpandedKeys((prev) => (prev.has(key) ? new Set() : new Set([key])));
+    setExpandedKeys((prev) => {
+      if (prev.has(key)) return new Set();
+
+      const prevKey = prev.size > 0 ? [...prev][0] : null;
+      const prevIndex = prevKey ? groups.findIndex((group) => group.key === prevKey) : -1;
+      const nextIndex = groups.findIndex((group) => group.key === key);
+      pendingScrollKeyRef.current = prevIndex >= 0 && nextIndex > prevIndex ? key : null;
+      return new Set([key]);
+    });
   };
+
+  useLayoutEffect(() => {
+    const key = pendingScrollKeyRef.current;
+    if (!key || key !== expandedKey) return;
+
+    pendingScrollKeyRef.current = null;
+
+    const root = scrollRef.current;
+    const row = groupRowRefs.current.get(key);
+    if (!root || !row) return;
+
+    const rootRect = root.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const nextTop = root.scrollTop + rowRect.top - rootRect.top;
+    root.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
+  }, [expandedKey, groups]);
 
   useEffect(() => {
     if (!expandedKey) {
-      pinExpandedHeaderRef.current = false;
       setPinExpandedHeader(false);
       return;
     }
 
-    let observer: IntersectionObserver | null = null;
+    const root = scrollRef.current;
+    if (!root) return;
+
     let raf = 0;
+    const updatePin = () => {
+      const row = groupRowRefs.current.get(expandedKey);
+      if (!row) {
+        setPinExpandedHeader(false);
+        return;
+      }
 
-    const setPin = (next: boolean) => {
-      if (pinExpandedHeaderRef.current === next) return;
-      pinExpandedHeaderRef.current = next;
-      setPinExpandedHeader(next);
+      const rootTop = root.getBoundingClientRect().top;
+      const rowRect = row.getBoundingClientRect();
+      setPinExpandedHeader(rowRect.top < rootTop && rowRect.bottom > rootTop + 56);
     };
 
-    const connect = () => {
-      const root = scrollRef.current;
-      const target = expandedPartsRef.current;
-      if (!root || !target) return false;
-
-      observer?.disconnect();
-      observer = new IntersectionObserver(
-        ([entry]) => setPin(entry?.isIntersecting ?? false),
-        { root, threshold: 0 }
-      );
-      observer.observe(target);
-      return true;
-    };
-
-    if (!connect()) {
-      raf = requestAnimationFrame(() => connect());
-    }
+    updatePin();
+    raf = requestAnimationFrame(updatePin);
+    root.addEventListener("scroll", updatePin, { passive: true });
+    window.addEventListener("resize", updatePin);
 
     return () => {
       cancelAnimationFrame(raf);
-      observer?.disconnect();
+      root.removeEventListener("scroll", updatePin);
+      window.removeEventListener("resize", updatePin);
     };
   }, [expandedKey, groups]);
 
@@ -468,8 +481,10 @@ export function SetGoodPriceBomDialog({ target, onClose }: Props) {
                         group={group}
                         mode={groupMode}
                         expanded={expanded}
-                        hideInlineHeaderVisually={expanded && pinExpandedHeader}
-                        partsPanelRef={expanded ? expandedPartsRef : undefined}
+                        rowRef={(node) => {
+                          if (node) groupRowRefs.current.set(group.key, node);
+                          else groupRowRefs.current.delete(group.key);
+                        }}
                         onToggle={() => toggleGroup(group.key)}
                       />
                     );
