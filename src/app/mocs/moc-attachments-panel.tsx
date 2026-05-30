@@ -97,7 +97,7 @@ export function MocAttachmentsPanel({
         <label className="inline-flex shrink-0 cursor-pointer items-center rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-xs text-[var(--text)] hover:border-[var(--accent)]/50">
           <input
             type="file"
-            accept=".pdf,.io,application/pdf"
+            accept=".pdf,.io,.ldr,application/pdf"
             className="sr-only"
             disabled={pending}
             onChange={(e) => {

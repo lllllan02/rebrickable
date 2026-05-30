@@ -53,7 +53,7 @@ export async function uploadBuildAttachmentAction(
 
   const attKind = inferBuildAttachmentKindFromName(file.name);
   if (!attKind) {
-    return { ok: false, error: "仅支持 PDF（说明书）与 .io（Studio 等源文件）。" };
+    return { ok: false, error: "仅支持 PDF（说明书）、.io 与 .ldr 源文件。" };
   }
 
   const mime = resolveBuildAttachmentMime(file, attKind);

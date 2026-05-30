@@ -72,12 +72,13 @@ export const BUILD_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
 
 export const BUILD_ATTACHMENT_MAX_FILES_PER_SUBJECT = 24;
 
-export type BuildAttachmentKind = "pdf" | "io";
+export type BuildAttachmentKind = "pdf" | "io" | "ldr";
 
 export function inferBuildAttachmentKindFromName(fileName: string): BuildAttachmentKind | null {
   const n = fileName.toLowerCase();
   if (n.endsWith(".pdf")) return "pdf";
   if (n.endsWith(".io")) return "io";
+  if (n.endsWith(".ldr")) return "ldr";
   return null;
 }
 
