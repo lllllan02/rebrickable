@@ -28,7 +28,10 @@ import {
   parseOptionalBricktimePriceInput,
 } from "@/lib/set-good-price-format";
 import type { BricktimeSetMetaFields } from "@/lib/set-good-price-format";
-import type { BricktimePriceHistoryPoint } from "@/lib/bricktime-price-history";
+import {
+  hasBricktimePriceHistoryForCurrentMonth,
+  type BricktimePriceHistoryPoint,
+} from "@/lib/bricktime-price-history";
 import type { SetGoodPricePriceHistoryDialogTarget } from "@/app/sets/set-good-price-price-history-dialog";
 
 export type SetGoodPriceEditDraft = {
@@ -333,6 +336,10 @@ export function SetGoodPriceEditForm({
     bricktimeMeta.weight != null ||
     bricktimeMeta.buildingTime != null;
   const hideSalesStatusPreview = isBricktimeRetiredSalesStatus(bricktimeMeta.salesStatus);
+  const hidePriceHistoryPreview = hasBricktimePriceHistoryForCurrentMonth(priceHistory);
+  const hideGobricksPreview =
+    typeof referencePreview.gobricksPriceCny === "number" &&
+    Number.isFinite(referencePreview.gobricksPriceCny);
 
   const syncOfficialInput = (value: string) => {
     setOfficialInput(value);
@@ -451,21 +458,23 @@ export function SetGoodPriceEditForm({
                 {officialLoading ? "查询中…" : "查官方价"}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={fetchPriceHistoryPreview}
-              disabled={
-                !canPreview ||
-                officialLoading ||
-                priceHistoryLoading ||
-                salesStatusLoading ||
-                gobricksLoading
-              }
-              className={goodPriceBtnSecondary}
-              title="只调用 Bricktime /sets/{id}/prices_history，读取价格历史"
-            >
-              {priceHistoryLoading ? "查询中…" : "查价格历史"}
-            </button>
+            {hidePriceHistoryPreview ? null : (
+              <button
+                type="button"
+                onClick={fetchPriceHistoryPreview}
+                disabled={
+                  !canPreview ||
+                  officialLoading ||
+                  priceHistoryLoading ||
+                  salesStatusLoading ||
+                  gobricksLoading
+                }
+                className={goodPriceBtnSecondary}
+                title="只调用 Bricktime /sets/{id}/prices_history，读取价格历史"
+              >
+                {priceHistoryLoading ? "查询中…" : "查价格历史"}
+              </button>
+            )}
             {hideSalesStatusPreview ? null : (
               <button
                 type="button"
@@ -483,20 +492,22 @@ export function SetGoodPriceEditForm({
                 {salesStatusLoading ? "查询中…" : "查销售状态"}
               </button>
             )}
-            <button
-              type="button"
-              onClick={fetchGobricksPreview}
-              disabled={
-                !canPreview ||
-                officialLoading ||
-                priceHistoryLoading ||
-                salesStatusLoading ||
-                gobricksLoading
-              }
-              className={goodPriceBtnSecondary}
-            >
-              {gobricksLoading ? "比价中…" : "高砖比价"}
-            </button>
+            {hideGobricksPreview ? null : (
+              <button
+                type="button"
+                onClick={fetchGobricksPreview}
+                disabled={
+                  !canPreview ||
+                  officialLoading ||
+                  priceHistoryLoading ||
+                  salesStatusLoading ||
+                  gobricksLoading
+                }
+                className={goodPriceBtnSecondary}
+              >
+                {gobricksLoading ? "比价中…" : "高砖比价"}
+              </button>
+            )}
           </div>
         </div>
         {previewError ? <p className="text-xs text-red-400">{previewError}</p> : null}

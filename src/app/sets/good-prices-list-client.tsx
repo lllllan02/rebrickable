@@ -36,7 +36,10 @@ import type { SetGoodPriceHeatFilter } from "@/lib/set-good-price-heat";
 import { setGoodPriceHeatFilterLabel } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceListItem } from "@/lib/set-good-price-list-sort";
 import type { SetGoodPriceListSortState } from "@/lib/set-good-price-list-sort";
-import { parseBricktimePriceHistoryJson } from "@/lib/bricktime-price-history";
+import {
+  hasBricktimePriceHistoryForCurrentMonth,
+  parseBricktimePriceHistoryJson,
+} from "@/lib/bricktime-price-history";
 import { isBricktimeRetiredSalesStatus } from "@/lib/set-good-price-format";
 
 export type GoodPriceListRowProps = SetGoodPriceListItem & {
@@ -199,9 +202,15 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
         <ul className="flex flex-col gap-2">
           {items.map((item) => {
             const isEditing = draft?.mode === "edit" && draft.setNum === item.setNum;
+            const parsedPriceHistory = parseBricktimePriceHistoryJson(item.bricktimePriceHistory);
+            const hidePriceHistoryRefresh = hasBricktimePriceHistoryForCurrentMonth(
+              parsedPriceHistory
+            );
             const hideSalesStatusRefresh = isBricktimeRetiredSalesStatus(
               item.bricktimeSalesStatus
             );
+            const hideGobricksCompare =
+              typeof item.gobricksPriceCny === "number" && Number.isFinite(item.gobricksPriceCny);
             return (
             <SetGoodPriceListRow
               key={item.setNum}
@@ -246,15 +255,17 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
               }
               actions={
                 <>
-                  <button
-                    type="button"
-                    onClick={() => refreshPriceHistory(item)}
-                    disabled={pending}
-                    className={goodPriceBtnSecondary}
-                    title="只调用 Bricktime /sets/{id}/prices_history，更新价格历史与史低"
-                  >
-                    {priceHistorySetNum === item.setNum ? "更新中…" : "价格历史"}
-                  </button>
+                  {hidePriceHistoryRefresh ? null : (
+                    <button
+                      type="button"
+                      onClick={() => refreshPriceHistory(item)}
+                      disabled={pending}
+                      className={goodPriceBtnSecondary}
+                      title="只调用 Bricktime /sets/{id}/prices_history，更新价格历史与史低"
+                    >
+                      {priceHistorySetNum === item.setNum ? "更新中…" : "价格历史"}
+                    </button>
+                  )}
                   {hideSalesStatusRefresh ? null : (
                     <button
                       type="button"
@@ -266,15 +277,17 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
                       {salesStatusSetNum === item.setNum ? "更新中…" : "销售状态"}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => compareGobricks(item)}
-                    disabled={pending}
-                    className={goodPriceBtnGobricks}
-                    title="用官方 BOM 请求高砖，统计零件总价（颜色未匹配也计价，仅零件未匹配忽略）"
-                  >
-                    {gobricksSetNum === item.setNum ? "比价中…" : "高砖比价"}
-                  </button>
+                  {hideGobricksCompare ? null : (
+                    <button
+                      type="button"
+                      onClick={() => compareGobricks(item)}
+                      disabled={pending}
+                      className={goodPriceBtnGobricks}
+                      title="用官方 BOM 请求高砖，统计零件总价（颜色未匹配也计价，仅零件未匹配忽略）"
+                    >
+                      {gobricksSetNum === item.setNum ? "比价中…" : "高砖比价"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => (isEditing ? setDraft(null) : openEdit(item))}

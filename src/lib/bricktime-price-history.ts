@@ -51,6 +51,27 @@ export function parseBricktimePriceHistoryJson(
   }
 }
 
+function currentMonthKey(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function historyPointMonthKey(updateTime: string): string | null {
+  const match = /^(\d{4})-(\d{1,2})/.exec(updateTime.trim());
+  if (!match) return null;
+  return `${match[1]}-${match[2]!.padStart(2, "0")}`;
+}
+
+export function hasBricktimePriceHistoryForCurrentMonth(
+  history: readonly BricktimePriceHistoryPoint[],
+  now = new Date()
+): boolean {
+  if (history.length === 0) return false;
+  const month = currentMonthKey(now);
+  return history.some((point) => historyPointMonthKey(point.updateTime) === month);
+}
+
 export type BricktimePriceChartPoint = {
   x: number;
   y: number;
