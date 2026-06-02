@@ -8,7 +8,6 @@ import { buildSetGoodPrices, legoSets } from "@/db/schema";
 import { loadBricktimeConfigPublic } from "@/lib/bricktime-config";
 import { hasAnySetGoodPrice } from "@/lib/set-good-price-channel";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
-import { batchSetStudVolumeStats } from "@/lib/set-catalog-stud-volume";
 import {
   parseSetGoodPriceListSort,
   sortSetGoodPriceListItems,
@@ -54,15 +53,11 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       : [];
 
   const heroUrls = setNums.length > 0 ? await batchSetCatalogHeroUrls(setNums) : new Map();
-  const studStats =
-    setNums.length > 0 ? await batchSetStudVolumeStats(setNums) : new Map();
 
   const catalogBySet = new Map(catalogRows.map((c) => [c.setNum, c]));
 
   const merged: SetGoodPriceListItem[] = priceRows.map((r) => {
     const cat = catalogBySet.get(r.setNum);
-    const vol = studStats.get(r.setNum);
-    const hasBom = vol != null && vol.totalPieceQty > 0;
     return {
       setNum: r.setNum,
       priceNewCny: r.priceNewCny,
@@ -71,8 +66,6 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       catalogName: cat?.name ?? null,
       year: cat?.year ?? null,
       numParts: cat?.numParts ?? null,
-      totalStudUnits: hasBom && vol.totalStudUnits > 0 ? vol.totalStudUnits : null,
-      studCoverageRatio: hasBom ? vol.coverageRatio : null,
       gobricksPriceCny: r.gobricksPriceCny ?? null,
       gobricksMatchPercent: r.gobricksMatchPercent ?? null,
       gobricksComparedAt: r.gobricksComparedAt ?? null,
@@ -99,8 +92,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
           {items.length > 0 ? (
             <>
               共 <span className="tabular-nums text-[var(--text)]">{items.length}</span>{" "}
-              套已记录入手价；成色下拉选择，总价/单价/占地单价重复点击切换升序与降序。占地单价按官方
-              BOM 长×宽汇总（不含高度；无法解析尺寸的主件按 1 单位/颗），并显示可统计零件占比。默认：全新总价升序。
+              套已记录入手价；成色下拉选择，总价/折扣力度重复点击切换升序与降序（折扣升序时折扣越大越靠前）。默认：全新总价升序。
             </>
           ) : (
             <>在此添加、编辑或删除各套装的入手好价；操作按钮在列表右上方。</>

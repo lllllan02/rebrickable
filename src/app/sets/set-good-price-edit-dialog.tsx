@@ -13,6 +13,7 @@ import {
   SetGoodPriceReferencePanel,
   type SetGoodPriceReferencePreview,
 } from "@/app/sets/set-good-price-reference-panel";
+import { SetGoodPriceTimestampsLine } from "@/app/sets/set-good-price-timestamps-line";
 import { hasAnySetGoodPrice } from "@/lib/set-good-price-channel";
 import {
   goodPriceBtnDanger,
@@ -267,11 +268,13 @@ export function SetGoodPriceEditDialog({ draft, onClose }: Props) {
             </div>
             {previewError ? <p className="text-xs text-red-400">{previewError}</p> : null}
             {hasReferenceData ? (
-              <SetGoodPriceReferencePanel
-                preview={referencePreview}
-                bricktimeFetchedAt={bricktimeFetchedAt}
-                gobricksComparedAt={gobricksComparedAt}
-              />
+              <>
+                <SetGoodPriceReferencePanel preview={referencePreview} />
+                <SetGoodPriceTimestampsLine
+                  bricktimeFetchedAt={bricktimeFetchedAt}
+                  gobricksComparedAt={gobricksComparedAt}
+                />
+              </>
             ) : (
               <p className="text-xs text-[var(--muted-2)]">
                 填写套装编号后，可先查官方价或高砖比价，对比后再录入入手价。

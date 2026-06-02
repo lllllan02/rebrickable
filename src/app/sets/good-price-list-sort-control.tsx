@@ -47,8 +47,7 @@ function SortGlyph({ className, arrowDown }: { className?: string; arrowDown: bo
 
 const METRIC_ROWS: readonly { key: SetGoodPriceSortMetric; label: string }[] = [
   { key: "price", label: "总价" },
-  { key: "per_piece", label: "单价/片" },
-  { key: "per_stud_unit", label: "单价/单位" },
+  { key: "discount", label: "折扣力度" },
 ];
 
 const selectClass =

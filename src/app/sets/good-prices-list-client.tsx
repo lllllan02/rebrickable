@@ -140,8 +140,6 @@ export function GoodPricesListClient({ items, sortState }: Props) {
               priceUsedCny={item.priceUsedCny}
               updatedAtIso={item.updatedAt}
               numParts={item.numParts}
-              totalStudUnits={item.totalStudUnits}
-              studCoverageRatio={item.studCoverageRatio}
               year={item.year}
               gobricksPriceCny={item.gobricksPriceCny}
               gobricksMatchPercent={item.gobricksMatchPercent}

@@ -63,6 +63,81 @@ export function formatBricktimePriceValue(value: string | null | undefined): str
   return /^[\d.,]+(?:\s*[~～-]\s*[\d.,]+)?$/.test(s) ? `¥${s}` : s;
 }
 
+function parseBricktimePriceAmount(raw: string): number | null {
+  const n = Number(raw.replace(/,/g, "").trim());
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** 解析 Bricktime 价格字符串为数值区间（单价时 min === max） */
+export function parseBricktimePriceRange(
+  value: string | null | undefined
+): { min: number; max: number } | null {
+  const s = value?.trim();
+  if (!s) return null;
+  const rangeMatch = s.match(/^([\d.,]+)\s*[~～-]\s*([\d.,]+)$/);
+  if (rangeMatch) {
+    const a = parseBricktimePriceAmount(rangeMatch[1]!);
+    const b = parseBricktimePriceAmount(rangeMatch[2]!);
+    if (a == null || b == null) return null;
+    return { min: Math.min(a, b), max: Math.max(a, b) };
+  }
+  const single = parseBricktimePriceAmount(s);
+  if (single == null) return null;
+  return { min: single, max: single };
+}
+
+function formatDiscountFoldNumber(fold: number): string {
+  const rounded = Math.round(fold * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/** 相对官方原价计算折扣力度，如「9折」「4.7~4.9折」 */
+export function formatDiscountVsOfficialPrice(
+  comparePrice: string | number | null | undefined,
+  officialPrice: string | null | undefined
+): string | null {
+  const official = parseBricktimePriceRange(officialPrice);
+  if (!official || official.min <= 0) return null;
+
+  let min: number;
+  let max: number;
+  if (typeof comparePrice === "number") {
+    if (!Number.isFinite(comparePrice) || comparePrice < 0) return null;
+    min = max = comparePrice;
+  } else {
+    const parsed = parseBricktimePriceRange(comparePrice);
+    if (!parsed) return null;
+    min = parsed.min;
+    max = parsed.max;
+  }
+
+  const base = official.min;
+  const minFold = (min / base) * 10;
+  const maxFold = (max / base) * 10;
+  if (!Number.isFinite(minFold) || !Number.isFinite(maxFold) || minFold <= 0) return null;
+
+  const loFold = Math.min(minFold, maxFold);
+  const hiFold = Math.max(minFold, maxFold);
+  const loLabel = formatDiscountFoldNumber(loFold);
+  const hiLabel = formatDiscountFoldNumber(hiFold);
+  if (loLabel === hiLabel) return `${loLabel}折`;
+  return `${loLabel}~${hiLabel}折`;
+}
+
+/** 相对官方原价的折扣折数（数值，用于排序；越小折扣越大） */
+export function discountFoldVsOfficialPrice(
+  comparePrice: number | null | undefined,
+  officialPrice: string | null | undefined
+): number | null {
+  if (typeof comparePrice !== "number" || !Number.isFinite(comparePrice) || comparePrice < 0) {
+    return null;
+  }
+  const official = parseBricktimePriceRange(officialPrice);
+  if (!official || official.min <= 0) return null;
+  const fold = (comparePrice / official.min) * 10;
+  return Number.isFinite(fold) && fold > 0 ? fold : null;
+}
+
 /** 高砖零件匹配占比（0–100） */
 export function formatGobricksMatchPercent(percent: number | null | undefined): string | null {
   if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100) {
