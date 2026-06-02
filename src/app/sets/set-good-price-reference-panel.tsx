@@ -4,6 +4,7 @@ import {
   formatGobricksMatchPercent,
   formatSetGoodPriceCny,
 } from "@/lib/set-good-price-format";
+import type { BricktimePriceHistoryPoint } from "@/lib/bricktime-price-history";
 
 export type SetGoodPriceReferencePreview = {
   officialPrice: string | null;
@@ -52,8 +53,12 @@ function ReferencePriceCell({
 
 export function SetGoodPriceReferencePanel({
   preview,
+  priceHistory,
+  onViewPriceHistory,
 }: {
   preview: SetGoodPriceReferencePreview;
+  priceHistory?: readonly BricktimePriceHistoryPoint[] | null;
+  onViewPriceHistory?: () => void;
 }) {
   const officialLabel = formatBricktimePriceValue(preview.officialPrice);
   const lowestLabel = formatBricktimePriceValue(preview.lowestPrice);
@@ -74,10 +79,24 @@ export function SetGoodPriceReferencePanel({
     goodLabel != null ||
     gobricksLabel != null;
 
+  const hasHistory = (priceHistory?.length ?? 0) > 0;
+
   if (!hasAny) return null;
 
   return (
     <div className="rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)]/50 px-2.5 py-2 sm:px-3">
+      {hasHistory && onViewPriceHistory ? (
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            onClick={onViewPriceHistory}
+            className="text-[11px] text-[var(--accent)] underline-offset-2 hover:underline"
+            title="查看 Bricktime 电商价格历史曲线"
+          >
+            价格曲线
+          </button>
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
         <ReferencePriceCell label="官方原价" value={officialLabel} />
         <ReferencePriceCell

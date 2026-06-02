@@ -238,6 +238,9 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     if (!gpCols.has("bricktime_building_time")) {
       sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_building_time TEXT`);
     }
+    if (!gpCols.has("bricktime_price_history")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_price_history TEXT`);
+    }
     if (gpCols.has("price_cny")) {
       sqlite.exec(`
         UPDATE build_set_good_prices

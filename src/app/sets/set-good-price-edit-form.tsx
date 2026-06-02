@@ -23,6 +23,8 @@ import {
 } from "@/lib/set-good-price-buttons";
 import { parseOptionalBricktimePriceInput } from "@/lib/set-good-price-format";
 import type { BricktimeSetMetaFields } from "@/lib/set-good-price-format";
+import type { BricktimePriceHistoryPoint } from "@/lib/bricktime-price-history";
+import type { SetGoodPricePriceHistoryDialogTarget } from "@/app/sets/set-good-price-price-history-dialog";
 
 export type SetGoodPriceEditDraft = {
   mode: "create" | "edit";
@@ -39,6 +41,7 @@ export type SetGoodPriceEditDraft = {
   bricktimeSalesStatus?: string | null;
   bricktimeWeight?: string | null;
   bricktimeBuildingTime?: string | null;
+  bricktimePriceHistory?: BricktimePriceHistoryPoint[] | null;
   gobricksPriceCny?: number | null;
   gobricksMatchPercent?: number | null;
   gobricksComparedAt?: string | null;
@@ -68,9 +71,15 @@ type Props = {
   draft: SetGoodPriceEditDraft;
   onClose: () => void;
   variant?: "create" | "inline";
+  onViewPriceHistory?: (target: SetGoodPricePriceHistoryDialogTarget) => void;
 };
 
-export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Props) {
+export function SetGoodPriceEditForm({
+  draft,
+  onClose,
+  variant = "inline",
+  onViewPriceHistory,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +99,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
   const [bricktimeLoading, setBricktimeLoading] = useState(false);
   const [gobricksLoading, setGobricksLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [priceHistory, setPriceHistory] = useState<BricktimePriceHistoryPoint[]>([]);
 
   const isEdit = draft.mode === "edit";
   const isCreate = variant === "create";
@@ -119,6 +129,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
       weight: draft.bricktimeWeight?.trim() || null,
       buildingTime: draft.bricktimeBuildingTime?.trim() || null,
     });
+    setPriceHistory(draft.bricktimePriceHistory ?? []);
     setPreviewError(null);
     setError(null);
   }, [draft]);
@@ -152,6 +163,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
         weight: res.weight,
         buildingTime: res.buildingTime,
       });
+      setPriceHistory(res.priceHistory);
       setBricktimeFetchedAt(new Date().toISOString());
     });
   };
@@ -218,6 +230,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
               salesStatus: bricktimeMeta.salesStatus,
               weight: bricktimeMeta.weight,
               buildingTime: bricktimeMeta.buildingTime,
+              priceHistory,
             }
           : undefined,
       });
@@ -373,7 +386,21 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
         {previewError ? <p className="text-xs text-red-400">{previewError}</p> : null}
         {hasReferenceData ? (
           <>
-            <SetGoodPriceReferencePanel preview={referencePreview} />
+            <SetGoodPriceReferencePanel
+              preview={referencePreview}
+              priceHistory={priceHistory}
+              onViewPriceHistory={
+                priceHistory.length > 0 && onViewPriceHistory
+                  ? () =>
+                      onViewPriceHistory({
+                        setNum: setNumInput.trim(),
+                        title: draft.catalogName?.trim() || setNumInput.trim(),
+                        officialPrice: officialInput.trim() || referencePreview.officialPrice,
+                        priceHistory,
+                      })
+                  : undefined
+              }
+            />
             <SetGoodPriceBricktimeMetaLine meta={bricktimeMeta} />
             <SetGoodPriceTimestampsLine
               bricktimeFetchedAt={bricktimeFetchedAt}

@@ -17,6 +17,7 @@ import {
 } from "@/lib/set-good-price-format";
 import { computeSetGoodPriceHeat } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceSortKind } from "@/lib/set-good-price-list-sort";
+import { parseBricktimePriceHistoryJson } from "@/lib/bricktime-price-history";
 
 function usableImgUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && u.trim().length > 0;
@@ -177,9 +178,11 @@ export function SetGoodPriceListRow({
   bricktimeSalesStatus,
   bricktimeWeight,
   bricktimeBuildingTime,
+  bricktimePriceHistory,
   sortKind,
   actions,
   onPartsClick,
+  onViewPriceHistory,
   isEditing,
   editForm,
 }: {
@@ -204,13 +207,16 @@ export function SetGoodPriceListRow({
   bricktimeSalesStatus?: string | null;
   bricktimeWeight?: string | null;
   bricktimeBuildingTime?: string | null;
+  bricktimePriceHistory?: string | null;
   sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
   onPartsClick?: () => void;
+  onViewPriceHistory?: () => void;
   isEditing?: boolean;
   editForm?: ReactNode;
 }) {
   const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
+  const parsedPriceHistory = parseBricktimePriceHistoryJson(bricktimePriceHistory);
   const heat = computeSetGoodPriceHeat({
     priceNewCny,
     priceUsedCny,
@@ -297,6 +303,10 @@ export function SetGoodPriceListRow({
                   gobricksPriceCny: gobricksPriceCny ?? null,
                   gobricksMatchPercent: gobricksMatchPercent ?? null,
                 }}
+                priceHistory={parsedPriceHistory}
+                onViewPriceHistory={
+                  parsedPriceHistory.length > 0 ? onViewPriceHistory : undefined
+                }
               />
 
               <SetGoodPriceBricktimeMetaLine

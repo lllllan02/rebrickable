@@ -49,6 +49,7 @@ export type SetGoodPriceListItem = {
   bricktimeSalesStatus: string | null;
   bricktimeWeight: string | null;
   bricktimeBuildingTime: string | null;
+  bricktimePriceHistory: string | null;
 };
 
 function parseKind(raw: string | undefined): SetGoodPriceSortKind | null {

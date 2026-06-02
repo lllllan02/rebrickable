@@ -15,6 +15,10 @@ import {
   type SetGoodPriceBomDialogTarget,
 } from "@/app/sets/set-good-price-bom-dialog";
 import {
+  SetGoodPricePriceHistoryDialog,
+  type SetGoodPricePriceHistoryDialogTarget,
+} from "@/app/sets/set-good-price-price-history-dialog";
+import {
   SetGoodPriceEditForm,
   type SetGoodPriceEditDraft,
 } from "@/app/sets/set-good-price-edit-form";
@@ -31,6 +35,7 @@ import type { SetGoodPriceHeatFilter } from "@/lib/set-good-price-heat";
 import { setGoodPriceHeatFilterLabel } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceListItem } from "@/lib/set-good-price-list-sort";
 import type { SetGoodPriceListSortState } from "@/lib/set-good-price-list-sort";
+import { parseBricktimePriceHistoryJson } from "@/lib/bricktime-price-history";
 
 export type GoodPriceListRowProps = SetGoodPriceListItem & {
   title: string;
@@ -50,6 +55,8 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
   const [bricktimeSetNum, setBricktimeSetNum] = useState<string | null>(null);
   const [draft, setDraft] = useState<SetGoodPriceEditDraft | null>(null);
   const [bomTarget, setBomTarget] = useState<SetGoodPriceBomDialogTarget | null>(null);
+  const [priceHistoryTarget, setPriceHistoryTarget] =
+    useState<SetGoodPricePriceHistoryDialogTarget | null>(null);
 
   const openCreate = () => {
     setDraft((prev) =>
@@ -80,9 +87,21 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
       bricktimeSalesStatus: item.bricktimeSalesStatus,
       bricktimeWeight: item.bricktimeWeight,
       bricktimeBuildingTime: item.bricktimeBuildingTime,
+      bricktimePriceHistory: parseBricktimePriceHistoryJson(item.bricktimePriceHistory),
       gobricksPriceCny: item.gobricksPriceCny,
       gobricksMatchPercent: item.gobricksMatchPercent,
       gobricksComparedAt: item.gobricksComparedAt,
+    });
+  };
+
+  const openPriceHistory = (item: GoodPriceListRowProps) => {
+    const priceHistory = parseBricktimePriceHistoryJson(item.bricktimePriceHistory);
+    if (priceHistory.length === 0) return;
+    setPriceHistoryTarget({
+      setNum: item.setNum,
+      title: item.title,
+      officialPrice: item.bricktimeOfficialPrice,
+      priceHistory,
     });
   };
 
@@ -149,6 +168,7 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
             draft={draft}
             variant="create"
             onClose={() => setDraft(null)}
+            onViewPriceHistory={(payload) => setPriceHistoryTarget(payload)}
           />
         </div>
       ) : null}
@@ -187,11 +207,17 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
               bricktimeSalesStatus={item.bricktimeSalesStatus}
               bricktimeWeight={item.bricktimeWeight}
               bricktimeBuildingTime={item.bricktimeBuildingTime}
+              bricktimePriceHistory={item.bricktimePriceHistory}
+              onViewPriceHistory={() => openPriceHistory(item)}
               sortKind={sortState.kind}
               isEditing={isEditing}
               editForm={
                 isEditing && draft ? (
-                  <SetGoodPriceEditForm draft={draft} onClose={() => setDraft(null)} />
+                  <SetGoodPriceEditForm
+                    draft={draft}
+                    onClose={() => setDraft(null)}
+                    onViewPriceHistory={(payload) => setPriceHistoryTarget(payload)}
+                  />
                 ) : undefined
               }
               onPartsClick={
@@ -252,6 +278,10 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
       )}
 
       <SetGoodPriceBomDialog target={bomTarget} onClose={() => setBomTarget(null)} />
+      <SetGoodPricePriceHistoryDialog
+        target={priceHistoryTarget}
+        onClose={() => setPriceHistoryTarget(null)}
+      />
     </>
   );
 }

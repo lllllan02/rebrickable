@@ -86,6 +86,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       bricktimeSalesStatus: r.bricktimeSalesStatus ?? null,
       bricktimeWeight: r.bricktimeWeight ?? null,
       bricktimeBuildingTime: r.bricktimeBuildingTime ?? null,
+      bricktimePriceHistory: r.bricktimePriceHistory ?? null,
     };
   });
 

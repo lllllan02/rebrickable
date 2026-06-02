@@ -360,6 +360,8 @@ export const buildSetGoodPrices = sqliteTable(
     bricktimeWeight: text("bricktime_weight"),
     /** Bricktime 拼搭时间 */
     bricktimeBuildingTime: text("bricktime_building_time"),
+    /** Bricktime 电商价格历史（JSON：[{ price, updateTime }]） */
+    bricktimePriceHistory: text("bricktime_price_history"),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [index("build_set_good_prices_updated_idx").on(t.updatedAt)]
