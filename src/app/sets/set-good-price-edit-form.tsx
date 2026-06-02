@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
   clearSetGoodPriceAction,
-  previewSetGoodPriceBricktimeAction,
   previewSetGoodPriceGobricksCompareAction,
+  previewSetGoodPriceOfficialPriceAction,
+  previewSetGoodPricePriceHistoryAction,
   previewSetGoodPriceSalesStatusAction,
   saveSetGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
@@ -22,7 +23,10 @@ import {
   goodPriceBtnPrimary,
   goodPriceBtnSecondary,
 } from "@/lib/set-good-price-buttons";
-import { parseOptionalBricktimePriceInput } from "@/lib/set-good-price-format";
+import {
+  isBricktimeRetiredSalesStatus,
+  parseOptionalBricktimePriceInput,
+} from "@/lib/set-good-price-format";
 import type { BricktimeSetMetaFields } from "@/lib/set-good-price-format";
 import type { BricktimePriceHistoryPoint } from "@/lib/bricktime-price-history";
 import type { SetGoodPricePriceHistoryDialogTarget } from "@/app/sets/set-good-price-price-history-dialog";
@@ -97,11 +101,13 @@ export function SetGoodPriceEditForm({
   const [bricktimeFetchedAt, setBricktimeFetchedAt] = useState<string | null>(null);
   const [persistedBricktimeAt, setPersistedBricktimeAt] = useState<string | null>(null);
   const [gobricksComparedAt, setGobricksComparedAt] = useState<string | null>(null);
-  const [bricktimeLoading, setBricktimeLoading] = useState(false);
+  const [officialLoading, setOfficialLoading] = useState(false);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
   const [salesStatusLoading, setSalesStatusLoading] = useState(false);
   const [gobricksLoading, setGobricksLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [priceHistory, setPriceHistory] = useState<BricktimePriceHistoryPoint[]>([]);
+  const autoOfficialSetNumRef = useRef<string | null>(null);
 
   const isEdit = draft.mode === "edit";
   const isCreate = variant === "create";
@@ -132,6 +138,7 @@ export function SetGoodPriceEditForm({
       buildingTime: draft.bricktimeBuildingTime?.trim() || null,
     });
     setPriceHistory(draft.bricktimePriceHistory ?? []);
+    autoOfficialSetNumRef.current = draft.mode === "create" ? null : draft.setNum.trim();
     setPreviewError(null);
     setError(null);
   }, [draft]);
@@ -142,11 +149,11 @@ export function SetGoodPriceEditForm({
 
   const canPreview = setNumInput.trim().length > 0 && !pending;
 
-  const fetchBricktimePreview = () => {
+  const fetchOfficialPricePreview = () => {
     setPreviewError(null);
-    setBricktimeLoading(true);
-    void previewSetGoodPriceBricktimeAction({ setNum: setNumInput }).then((res) => {
-      setBricktimeLoading(false);
+    setOfficialLoading(true);
+    void previewSetGoodPriceOfficialPriceAction({ setNum: setNumInput }).then((res) => {
+      setOfficialLoading(false);
       if (!res.ok) {
         setPreviewError(res.error);
         return;
@@ -154,16 +161,49 @@ export function SetGoodPriceEditForm({
       setReferencePreview((prev) => ({
         ...prev,
         officialPrice: res.officialPrice,
-        lowestPrice: res.lowestPrice,
-        goodPrice: res.goodPrice,
       }));
       setOfficialInput(res.officialPrice ?? "");
-      setBricktimeMeta((prev) => ({
-        launchDate: res.launchDate ?? prev.launchDate,
-        retiredDate: res.retiredDate ?? prev.retiredDate,
-        salesStatus: res.salesStatus ?? prev.salesStatus,
-        weight: res.weight ?? prev.weight,
-        buildingTime: res.buildingTime ?? prev.buildingTime,
+      setBricktimeFetchedAt(new Date().toISOString());
+    });
+  };
+
+  const fetchOfficialPriceForCreate = (rawSetNum: string) => {
+    if (!isCreate) return;
+    const setNum = rawSetNum.trim();
+    if (!setNum || officialInput.trim().length > 0 || officialLoading) return;
+    if (autoOfficialSetNumRef.current === setNum) return;
+
+    autoOfficialSetNumRef.current = setNum;
+    setPreviewError(null);
+    setOfficialLoading(true);
+    void previewSetGoodPriceOfficialPriceAction({ setNum }).then((res) => {
+      setOfficialLoading(false);
+      if (!res.ok) {
+        setPreviewError(res.error);
+        return;
+      }
+      setReferencePreview((prev) => ({
+        ...prev,
+        officialPrice: res.officialPrice,
+      }));
+      setOfficialInput(res.officialPrice ?? "");
+      setBricktimeFetchedAt(new Date().toISOString());
+    });
+  };
+
+  const fetchPriceHistoryPreview = () => {
+    setPreviewError(null);
+    setPriceHistoryLoading(true);
+    void previewSetGoodPricePriceHistoryAction({ setNum: setNumInput }).then((res) => {
+      setPriceHistoryLoading(false);
+      if (!res.ok) {
+        setPreviewError(res.error);
+        return;
+      }
+      setReferencePreview((prev) => ({
+        ...prev,
+        lowestPrice: res.lowestPrice,
+        goodPrice: res.goodPrice,
       }));
       setPriceHistory(res.priceHistory);
       setBricktimeFetchedAt(new Date().toISOString());
@@ -286,7 +326,13 @@ export function SetGoodPriceEditForm({
     officialInput.trim().length > 0 ||
     referencePreview.lowestPrice != null ||
     referencePreview.goodPrice != null ||
-    referencePreview.gobricksPriceCny != null;
+    referencePreview.gobricksPriceCny != null ||
+    bricktimeMeta.launchDate != null ||
+    bricktimeMeta.retiredDate != null ||
+    bricktimeMeta.salesStatus != null ||
+    bricktimeMeta.weight != null ||
+    bricktimeMeta.buildingTime != null;
+  const hideSalesStatusPreview = isBricktimeRetiredSalesStatus(bricktimeMeta.salesStatus);
 
   const syncOfficialInput = (value: string) => {
     setOfficialInput(value);
@@ -333,8 +379,10 @@ export function SetGoodPriceEditForm({
                 setBricktimeFetchedAt(null);
                 setPersistedBricktimeAt(null);
                 setGobricksComparedAt(null);
+                autoOfficialSetNumRef.current = null;
                 setPreviewError(null);
               }}
+              onBlur={(e) => fetchOfficialPriceForCreate(e.currentTarget.value)}
               disabled={pending}
               placeholder="例如 71821 或 71821-1"
               className={inputClass}
@@ -386,26 +434,65 @@ export function SetGoodPriceEditForm({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-[var(--text)]">参考价对比</p>
           <div className="flex flex-wrap gap-2">
+            {!isCreate ? (
+              <button
+                type="button"
+                onClick={fetchOfficialPricePreview}
+                disabled={
+                  !canPreview ||
+                  officialLoading ||
+                  priceHistoryLoading ||
+                  salesStatusLoading ||
+                  gobricksLoading
+                }
+                className={goodPriceBtnSecondary}
+                title="只调用 Bricktime /sets/{id}，读取官方原价"
+              >
+                {officialLoading ? "查询中…" : "查官方价"}
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={fetchBricktimePreview}
-              disabled={!canPreview || bricktimeLoading || salesStatusLoading || gobricksLoading}
+              onClick={fetchPriceHistoryPreview}
+              disabled={
+                !canPreview ||
+                officialLoading ||
+                priceHistoryLoading ||
+                salesStatusLoading ||
+                gobricksLoading
+              }
               className={goodPriceBtnSecondary}
+              title="只调用 Bricktime /sets/{id}/prices_history，读取价格历史"
             >
-              {bricktimeLoading ? "查询中…" : "查官方价"}
+              {priceHistoryLoading ? "查询中…" : "查价格历史"}
             </button>
-            <button
-              type="button"
-              onClick={fetchSalesStatusPreview}
-              disabled={!canPreview || bricktimeLoading || salesStatusLoading || gobricksLoading}
-              className={goodPriceBtnSecondary}
-            >
-              {salesStatusLoading ? "查询中…" : "查销售状态"}
-            </button>
+            {hideSalesStatusPreview ? null : (
+              <button
+                type="button"
+                onClick={fetchSalesStatusPreview}
+                disabled={
+                  !canPreview ||
+                  officialLoading ||
+                  priceHistoryLoading ||
+                  salesStatusLoading ||
+                  gobricksLoading
+                }
+                className={goodPriceBtnSecondary}
+                title="只调用 Bricktime /sets/{id}，读取销售状态与元数据"
+              >
+                {salesStatusLoading ? "查询中…" : "查销售状态"}
+              </button>
+            )}
             <button
               type="button"
               onClick={fetchGobricksPreview}
-              disabled={!canPreview || bricktimeLoading || salesStatusLoading || gobricksLoading}
+              disabled={
+                !canPreview ||
+                officialLoading ||
+                priceHistoryLoading ||
+                salesStatusLoading ||
+                gobricksLoading
+              }
               className={goodPriceBtnSecondary}
             >
               {gobricksLoading ? "比价中…" : "高砖比价"}
@@ -413,6 +500,9 @@ export function SetGoodPriceEditForm({
           </div>
         </div>
         {previewError ? <p className="text-xs text-red-400">{previewError}</p> : null}
+        {isCreate && officialLoading ? (
+          <p className="text-xs text-[var(--muted-2)]">正在自动查询官方价…</p>
+        ) : null}
         {hasReferenceData ? (
           <>
             <SetGoodPriceReferencePanel
@@ -438,7 +528,9 @@ export function SetGoodPriceEditForm({
           </>
         ) : (
           <p className="text-xs text-[var(--muted-2)]">
-            可手动录入官方原价，或分别查官方价/销售状态/高砖比价后再录入入手价。
+            {isCreate
+              ? "填写套装编号后会自动查一次官方价；也可按需单独查询价格历史、销售状态、高砖比价。"
+              : "可手动录入官方原价，或按需单独查询官方价、价格历史、销售状态、高砖比价。"}
           </p>
         )}
       </div>
@@ -459,7 +551,7 @@ export function SetGoodPriceEditForm({
         <button
           type="button"
           onClick={save}
-          disabled={pending || !canSave}
+          disabled={pending || !canSave || (isCreate && officialLoading)}
           className={goodPriceBtnPrimary}
         >
           {pending ? "保存中…" : "保存"}

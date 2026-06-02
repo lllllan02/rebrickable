@@ -17,7 +17,8 @@ import { loadSetOfficialInventoryBomLines } from "@/lib/set-official-inventory-b
 import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
 import {
   bricktimeSetIdFromSetNum,
-  fetchBricktimeSetData,
+  fetchBricktimeSetOfficialPrice,
+  fetchBricktimeSetPriceHistory,
   fetchBricktimeSetSalesStatus,
   mergeBricktimeSetMeta,
   type BricktimePriceHistoryPoint,
@@ -32,18 +33,19 @@ const MAX_PRICE_CNY = 999_999;
 const GOBRICKS_COMPARE_TIMEOUT_MS = 90_000;
 
 export type SaveSetGoodPriceResult = { ok: true } | { ok: false; error: string };
-export type FetchSetGoodPriceBricktimeResult =
+export type FetchSetGoodPriceOfficialPriceResult =
   | {
       ok: true;
       officialPrice: string | null;
+    }
+  | { ok: false; error: string };
+
+export type FetchSetGoodPricePriceHistoryResult =
+  | {
+      ok: true;
       goodPrice: string | null;
       lowestPrice: string | null;
       recentLowPrice: string | null;
-      launchDate: string | null;
-      retiredDate: string | null;
-      salesStatus: string | null;
-      weight: string | null;
-      buildingTime: string | null;
       priceHistory: BricktimePriceHistoryPoint[];
     }
   | { ok: false; error: string };
@@ -119,49 +121,65 @@ function parseOptionalPriceCny(raw: unknown): number | null {
   return Math.round(n * 100) / 100;
 }
 
-async function fetchBricktimePricesForSet(
+async function fetchBricktimeOfficialPriceForSet(
   canonicalSetNum: string
-): Promise<FetchSetGoodPriceBricktimeResult> {
+): Promise<FetchSetGoodPriceOfficialPriceResult> {
   const bricktimeSetId = bricktimeSetIdFromSetNum(canonicalSetNum);
   if (!bricktimeSetId) {
     return { ok: false, error: "Bricktime 仅支持数字套装编号。" };
   }
 
   try {
-    const data = await fetchBricktimeSetData(bricktimeSetId);
+    const data = await fetchBricktimeSetOfficialPrice(bricktimeSetId);
     return {
       ok: true,
       officialPrice: data.officialPrice,
+    };
+  } catch (e) {
+    const msg =
+      e instanceof Error && e.message.trim()
+        ? e.message.trim()
+        : "Bricktime 官方价抓取失败，请重试。";
+    return { ok: false, error: msg };
+  }
+}
+
+async function fetchBricktimePriceHistoryForSet(
+  canonicalSetNum: string
+): Promise<FetchSetGoodPricePriceHistoryResult> {
+  const bricktimeSetId = bricktimeSetIdFromSetNum(canonicalSetNum);
+  if (!bricktimeSetId) {
+    return { ok: false, error: "Bricktime 仅支持数字套装编号。" };
+  }
+
+  try {
+    const data = await fetchBricktimeSetPriceHistory(bricktimeSetId);
+    return {
+      ok: true,
       goodPrice: data.goodPrice,
       lowestPrice: data.lowestPrice,
       recentLowPrice: data.recentLowPrice,
-      launchDate: data.launchDate,
-      retiredDate: data.retiredDate,
-      salesStatus: data.salesStatus,
-      weight: data.weight,
-      buildingTime: data.buildingTime,
       priceHistory: data.priceHistory,
     };
   } catch (e) {
     const msg =
       e instanceof Error && e.message.trim()
         ? e.message.trim()
-        : "Bricktime 价格抓取失败，请重试。";
+        : "Bricktime 价格历史抓取失败，请重试。";
     return { ok: false, error: msg };
   }
 }
 
-async function saveBricktimePricesForSet(
+async function saveBricktimePriceHistoryForSet(
   canonicalSetNum: string
-): Promise<FetchSetGoodPriceBricktimeResult> {
-  const res = await fetchBricktimePricesForSet(canonicalSetNum);
+): Promise<FetchSetGoodPricePriceHistoryResult> {
+  const res = await fetchBricktimePriceHistoryForSet(canonicalSetNum);
   if (!res.ok) return res;
 
   const db = getUserDb();
   await db
     .update(buildSetGoodPrices)
     .set({
-      bricktimeOfficialPrice: res.officialPrice,
       bricktimeGoodPrice: res.goodPrice,
       bricktimeLowestPrice: res.lowestPrice,
       bricktimeRecentLowPrice: res.recentLowPrice,
@@ -388,12 +406,6 @@ export async function saveSetGoodPriceAction(input: {
 
     const updatedAt = new Date().toISOString();
     const db = getUserDb();
-    const existingRows = await db
-      .select({ setNum: buildSetGoodPrices.setNum })
-      .from(buildSetGoodPrices)
-      .where(eq(buildSetGoodPrices.setNum, canonicalSetNum))
-      .limit(1);
-    const isNewEntry = existingRows.length === 0;
 
     await db
       .insert(buildSetGoodPrices)
@@ -417,9 +429,6 @@ export async function saveSetGoodPriceAction(input: {
     const previewBricktime = parsePreviewBricktime(input.previewBricktime);
     if (previewBricktime) {
       await saveBricktimePreviewForSet(canonicalSetNum, previewBricktime);
-    } else if (isNewEntry) {
-      await saveBricktimePricesForSet(canonicalSetNum);
-      await saveBricktimeSalesStatusForSet(canonicalSetNum);
     }
 
     revalidateSetGoodPricePaths(canonicalSetNum);
@@ -532,10 +541,10 @@ async function fetchGobricksCompareForSet(
   };
 }
 
-/** 弹框内预览 Bricktime 参考价，不写库 */
-export async function previewSetGoodPriceBricktimeAction(input: {
+/** 弹框内预览 Bricktime 官方价，不写库；只调用 /sets/{id}。 */
+export async function previewSetGoodPriceOfficialPriceAction(input: {
   setNum: string;
-}): Promise<FetchSetGoodPriceBricktimeResult> {
+}): Promise<FetchSetGoodPriceOfficialPriceResult> {
   const setNum = input.setNum.trim();
   if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
     return { ok: false, error: "套装编号无效。" };
@@ -547,9 +556,51 @@ export async function previewSetGoodPriceBricktimeAction(input: {
     if (!resolved.ok) {
       return { ok: false, error: resolved.error };
     }
-    return fetchBricktimePricesForSet(resolved.setNum);
+    return fetchBricktimeOfficialPriceForSet(resolved.setNum);
   } catch {
-    return { ok: false, error: "Bricktime 价格查询失败，请重试。" };
+    return { ok: false, error: "Bricktime 官方价查询失败，请重试。" };
+  }
+}
+
+/** 弹框内预览 Bricktime 价格历史，不写库；只调用 /sets/{id}/prices_history。 */
+export async function previewSetGoodPricePriceHistoryAction(input: {
+  setNum: string;
+}): Promise<FetchSetGoodPricePriceHistoryResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  try {
+    const catalogDb = getCatalogDb();
+    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+    return fetchBricktimePriceHistoryForSet(resolved.setNum);
+  } catch {
+    return { ok: false, error: "Bricktime 价格历史查询失败，请重试。" };
+  }
+}
+
+/** 弹框内预览 Bricktime 销售状态，不写库；只调用 /sets/{id}。 */
+export async function previewSetGoodPriceSalesStatusAction(input: {
+  setNum: string;
+}): Promise<FetchSetGoodPriceSalesStatusResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  try {
+    const catalogDb = getCatalogDb();
+    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+    return fetchBricktimeSalesStatusForSet(resolved.setNum);
+  } catch {
+    return { ok: false, error: "Bricktime 销售状态查询失败，请重试。" };
   }
 }
 
@@ -574,10 +625,10 @@ export async function previewSetGoodPriceGobricksCompareAction(input: {
   }
 }
 
-/** 抓取 Bricktime 官方定价/行情价（不更新销售状态）。 */
-export async function fetchSetGoodPriceBricktimeAction(input: {
+/** 抓取 Bricktime 价格历史；只调用 /sets/{id}/prices_history。 */
+export async function fetchSetGoodPricePriceHistoryAction(input: {
   setNum: string;
-}): Promise<FetchSetGoodPriceBricktimeResult> {
+}): Promise<FetchSetGoodPricePriceHistoryResult> {
   const setNum = input.setNum.trim();
   if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
     return { ok: false, error: "套装编号无效。" };
@@ -590,17 +641,17 @@ export async function fetchSetGoodPriceBricktimeAction(input: {
       return { ok: false, error: resolved.error };
     }
 
-    const res = await saveBricktimePricesForSet(resolved.setNum);
+    const res = await saveBricktimePriceHistoryForSet(resolved.setNum);
     if (res.ok) {
       revalidateSetGoodPricePaths(resolved.setNum);
     }
     return res;
   } catch {
-    return { ok: false, error: "Bricktime 价格更新失败，请重试。" };
+    return { ok: false, error: "Bricktime 价格历史更新失败，请重试。" };
   }
 }
 
-/** 抓取 Bricktime 销售状态与套装元数据（免费套餐走 theme 列表）。 */
+/** 抓取 Bricktime 销售状态与套装元数据；只调用 /sets/{id}。 */
 export async function fetchSetGoodPriceSalesStatusAction(input: {
   setNum: string;
 }): Promise<FetchSetGoodPriceSalesStatusResult> {
@@ -623,27 +674,6 @@ export async function fetchSetGoodPriceSalesStatusAction(input: {
     return res;
   } catch {
     return { ok: false, error: "Bricktime 销售状态更新失败，请重试。" };
-  }
-}
-
-/** 弹框内预览 Bricktime 销售状态，不写库 */
-export async function previewSetGoodPriceSalesStatusAction(input: {
-  setNum: string;
-}): Promise<FetchSetGoodPriceSalesStatusResult> {
-  const setNum = input.setNum.trim();
-  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
-    return { ok: false, error: "套装编号无效。" };
-  }
-
-  try {
-    const catalogDb = getCatalogDb();
-    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
-    if (!resolved.ok) {
-      return { ok: false, error: resolved.error };
-    }
-    return fetchBricktimeSalesStatusForSet(resolved.setNum);
-  } catch {
-    return { ok: false, error: "Bricktime 销售状态查询失败，请重试。" };
   }
 }
 

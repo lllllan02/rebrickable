@@ -9,11 +9,15 @@ import {
 
 export type { BricktimePriceHistoryPoint } from "@/lib/bricktime-price-history";
 
-export type BricktimeSetPrices = {
+export type BricktimeSetOfficialPrice = {
   officialPrice: string | null;
+};
+
+export type BricktimeSetPriceHistoryPrices = {
   goodPrice: string | null;
   lowestPrice: string | null;
   recentLowPrice: string | null;
+  priceHistory: BricktimePriceHistoryPoint[];
 };
 
 /** Bricktime 套装元数据（优先从 /sets/{id} 读取，避免额外 theme 分页请求） */
@@ -25,10 +29,6 @@ export type BricktimeSetMeta = {
   buildingTime: string | null;
 };
 
-export type BricktimeSetData = BricktimeSetPrices & BricktimeSetMeta & {
-  priceHistory: BricktimePriceHistoryPoint[];
-};
-
 type BricktimeApiEnvelope<T = unknown> = {
   status?: number;
   message?: string;
@@ -37,7 +37,6 @@ type BricktimeApiEnvelope<T = unknown> = {
 
 type BricktimeSetSummary = {
   rrp_cn?: number | null;
-  theme?: string | null;
   retired_state_word?: string | null;
   launch_date?: string | null;
   retired_date?: string | null;
@@ -45,23 +44,10 @@ type BricktimeSetSummary = {
   building_time?: string | number | null;
 };
 
-type BricktimeThemeSetListItem = {
-  numbers?: string | number;
-  retired_state_word?: string | null;
-};
-
-type BricktimeThemeSetsPage = {
-  pages?: { total_pages?: number; total_page?: number };
-  set_list?: BricktimeThemeSetListItem[];
-};
-
 type BricktimePriceHistoryRow = {
   price?: number;
   update_time?: string;
 };
-
-const THEME_SETS_PAGE_SIZE = 50;
-const THEME_SETS_MAX_PAGES = 20;
 
 function textOrNull(v: unknown): string | null {
   if (typeof v === "number" && Number.isFinite(v)) return String(v);
@@ -136,7 +122,7 @@ export function bricktimeSetIdFromSetNum(setNum: string): string | null {
 
 export function mapBricktimePriceHistory(
   history: readonly BricktimePriceHistoryRow[]
-): Pick<BricktimeSetPrices, "goodPrice" | "lowestPrice" | "recentLowPrice"> {
+): Omit<BricktimeSetPriceHistoryPrices, "priceHistory"> {
   const prices = history
     .map((row) => row.price)
     .filter((p): p is number => typeof p === "number" && Number.isFinite(p) && p >= 0);
@@ -168,162 +154,92 @@ export function mapBricktimePriceHistory(
   };
 }
 
-export function mergeBricktimeSetPrices(input: {
-  rrpCn: unknown;
-  history: readonly BricktimePriceHistoryRow[];
-}): BricktimeSetPrices {
-  const derived = mapBricktimePriceHistory(input.history);
-  return {
-    officialPrice: priceString(input.rrpCn),
-    goodPrice: derived.goodPrice,
-    lowestPrice: derived.lowestPrice,
-    recentLowPrice: derived.recentLowPrice,
-  };
-}
-
-async function lookupSalesStatusInTheme(
-  theme: string,
+async function fetchSetSummaryWithApiKey(
   bricktimeSetId: string,
   apiKey: string
-): Promise<string | null> {
-  const themeSlug = theme.trim();
-  if (!themeSlug) return null;
-
-  for (let page = 1; page <= THEME_SETS_MAX_PAGES; page += 1) {
-    let res: BricktimeApiEnvelope<BricktimeThemeSetsPage>;
-    try {
-      res = await bricktimeSignedJson<BricktimeApiEnvelope<BricktimeThemeSetsPage>>(
-        `/themes/${encodeURIComponent(themeSlug)}/sets?page=${page}&page_size=${THEME_SETS_PAGE_SIZE}`,
-        { apiKey }
-      );
-    } catch {
-      return null;
-    }
-
-    const list = Array.isArray(res.data?.set_list) ? res.data.set_list : [];
-    for (const item of list) {
-      if (String(item.numbers ?? "").trim() === bricktimeSetId) {
-        return textOrNull(item.retired_state_word);
-      }
-    }
-
-    const totalPages =
-      res.data?.pages?.total_pages ?? res.data?.pages?.total_page ?? page;
-    if (page >= totalPages || list.length === 0) break;
-  }
-
-  return null;
-}
-
-async function resolveSalesStatus(
-  setData: BricktimeSetSummary | null | undefined,
-  bricktimeSetId: string,
-  apiKey: string
-): Promise<string | null> {
-  const fromDetail = textOrNull(setData?.retired_state_word);
-  if (fromDetail != null) return fromDetail;
-
-  const theme = textOrNull(setData?.theme);
-  if (theme == null) return null;
-  return lookupSalesStatusInTheme(theme, bricktimeSetId, apiKey);
-}
-
-async function fetchSetSalesStatusWithApiKey(
-  bricktimeSetId: string,
-  apiKey: string
-): Promise<BricktimeSetMeta> {
+): Promise<BricktimeSetSummary | null | undefined> {
   const setPath = `/sets/${encodeURIComponent(bricktimeSetId)}`;
   const setRes = await bricktimeSignedJson<BricktimeApiEnvelope<BricktimeSetSummary>>(setPath, {
     apiKey,
   });
-  const setData = setRes.data;
-  const salesStatus = await resolveSalesStatus(setData, bricktimeSetId, apiKey);
-
-  return mapBricktimeSetMetaFromSetDetail({
-    retiredStateWord: salesStatus,
-    launchDate: setData?.launch_date,
-    retiredDate: setData?.retired_date,
-    weight: setData?.weight,
-    buildingTime: setData?.building_time,
-  });
+  return setRes.data;
 }
 
-async function fetchSetDataWithApiKey(
+async function fetchPriceHistoryWithApiKey(
   bricktimeSetId: string,
   apiKey: string
-): Promise<BricktimeSetData> {
-  const setPath = `/sets/${encodeURIComponent(bricktimeSetId)}`;
+): Promise<BricktimeSetPriceHistoryPrices> {
   const historyPath = `/sets/${encodeURIComponent(bricktimeSetId)}/prices_history`;
-
-  const [setRes, historyRes] = await Promise.all([
-    bricktimeSignedJson<BricktimeApiEnvelope<BricktimeSetSummary>>(setPath, { apiKey }),
-    bricktimeSignedJson<BricktimeApiEnvelope<BricktimePriceHistoryRow[]>>(historyPath, {
-      apiKey,
-    }),
-  ]);
-
+  const historyRes = await bricktimeSignedJson<BricktimeApiEnvelope<BricktimePriceHistoryRow[]>>(
+    historyPath,
+    { apiKey }
+  );
   const history = normalizeBricktimePriceHistoryRows(
     Array.isArray(historyRes.data) ? historyRes.data : []
   );
-  const prices = mergeBricktimeSetPrices({
-    rrpCn: setRes.data?.rrp_cn ?? null,
-    history,
-  });
+  const prices = mapBricktimePriceHistory(history);
 
   if (!Object.values(prices).some((v) => v != null)) {
-    throw new Error("Bricktime 未返回可用价格字段");
+    throw new Error("Bricktime 未返回可用价格历史");
   }
 
-  const setData = setRes.data;
-  const salesStatus = await resolveSalesStatus(setData, bricktimeSetId, apiKey);
-  const meta = mapBricktimeSetMetaFromSetDetail({
-    retiredStateWord: salesStatus,
-    launchDate: setData?.launch_date,
-    retiredDate: setData?.retired_date,
-    weight: setData?.weight,
-    buildingTime: setData?.building_time,
-  });
-
-  return { ...prices, ...meta, priceHistory: history };
+  return { ...prices, priceHistory: history };
 }
 
-export async function fetchBricktimeSetPrices(
+export async function fetchBricktimeSetOfficialPrice(
   bricktimeSetId: string
-): Promise<BricktimeSetPrices> {
-  const data = await fetchBricktimeSetData(bricktimeSetId);
-  return {
-    officialPrice: data.officialPrice,
-    goodPrice: data.goodPrice,
-    lowestPrice: data.lowestPrice,
-    recentLowPrice: data.recentLowPrice,
-  };
-}
-
-export async function fetchBricktimeSetData(
-  bricktimeSetId: string
-): Promise<BricktimeSetData> {
+): Promise<BricktimeSetOfficialPrice> {
   let apiKey = await ensureBricktimeApiKey();
   try {
-    return await fetchSetDataWithApiKey(bricktimeSetId, apiKey);
+    const setData = await fetchSetSummaryWithApiKey(bricktimeSetId, apiKey);
+    return { officialPrice: priceString(setData?.rrp_cn ?? null) };
   } catch (e) {
     const msg = e instanceof Error ? e.message.trim() : "";
     if (!msg || !isAuthError(msg)) throw e;
     apiKey = await ensureBricktimeApiKey(true);
-    return await fetchSetDataWithApiKey(bricktimeSetId, apiKey);
+    const setData = await fetchSetSummaryWithApiKey(bricktimeSetId, apiKey);
+    return { officialPrice: priceString(setData?.rrp_cn ?? null) };
   }
 }
 
-/** 仅抓取销售状态与套装元数据（免费套餐走 theme 列表补全 retired_state_word） */
+export async function fetchBricktimeSetPriceHistory(
+  bricktimeSetId: string
+): Promise<BricktimeSetPriceHistoryPrices> {
+  let apiKey = await ensureBricktimeApiKey();
+  try {
+    return await fetchPriceHistoryWithApiKey(bricktimeSetId, apiKey);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.trim() : "";
+    if (!msg || !isAuthError(msg)) throw e;
+    apiKey = await ensureBricktimeApiKey(true);
+    return await fetchPriceHistoryWithApiKey(bricktimeSetId, apiKey);
+  }
+}
+
 export async function fetchBricktimeSetSalesStatus(
   bricktimeSetId: string
 ): Promise<BricktimeSetMeta> {
   let apiKey = await ensureBricktimeApiKey();
   try {
-    return await fetchSetSalesStatusWithApiKey(bricktimeSetId, apiKey);
+    const setData = await fetchSetSummaryWithApiKey(bricktimeSetId, apiKey);
+    return mapBricktimeSetMetaFromSetDetail({
+      retiredStateWord: setData?.retired_state_word,
+      launchDate: setData?.launch_date,
+      retiredDate: setData?.retired_date,
+      weight: setData?.weight,
+      buildingTime: setData?.building_time,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message.trim() : "";
     if (!msg || !isAuthError(msg)) throw e;
     apiKey = await ensureBricktimeApiKey(true);
-    return await fetchSetSalesStatusWithApiKey(bricktimeSetId, apiKey);
+    const setData = await fetchSetSummaryWithApiKey(bricktimeSetId, apiKey);
+    return mapBricktimeSetMetaFromSetDetail({
+      retiredStateWord: setData?.retired_state_word,
+      launchDate: setData?.launch_date,
+      retiredDate: setData?.retired_date,
+      weight: setData?.weight,
+      buildingTime: setData?.building_time,
+    });
   }
 }

@@ -6,8 +6,8 @@ import { useState, useTransition } from "react";
 import { GoodPriceListSortControl } from "@/app/sets/good-price-list-sort-control";
 import {
   clearSetGoodPriceAction,
-  fetchSetGoodPriceBricktimeAction,
   fetchSetGoodPriceGobricksCompareAction,
+  fetchSetGoodPricePriceHistoryAction,
   fetchSetGoodPriceSalesStatusAction,
   markSetOwnedFromGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
@@ -26,7 +26,6 @@ import {
 import { SetGoodPriceListRow } from "@/app/sets/set-good-price-list-row";
 import {
   goodPriceBtnDanger,
-  goodPriceBtnBricktime,
   goodPriceBtnGobricks,
   goodPriceBtnOwned,
   goodPriceBtnPrimary,
@@ -38,6 +37,7 @@ import { setGoodPriceHeatFilterLabel } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceListItem } from "@/lib/set-good-price-list-sort";
 import type { SetGoodPriceListSortState } from "@/lib/set-good-price-list-sort";
 import { parseBricktimePriceHistoryJson } from "@/lib/bricktime-price-history";
+import { isBricktimeRetiredSalesStatus } from "@/lib/set-good-price-format";
 
 export type GoodPriceListRowProps = SetGoodPriceListItem & {
   title: string;
@@ -54,7 +54,7 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [gobricksSetNum, setGobricksSetNum] = useState<string | null>(null);
-  const [bricktimeSetNum, setBricktimeSetNum] = useState<string | null>(null);
+  const [priceHistorySetNum, setPriceHistorySetNum] = useState<string | null>(null);
   const [salesStatusSetNum, setSalesStatusSetNum] = useState<string | null>(null);
   const [draft, setDraft] = useState<SetGoodPriceEditDraft | null>(null);
   const [bomTarget, setBomTarget] = useState<SetGoodPriceBomDialogTarget | null>(null);
@@ -143,11 +143,11 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
     });
   };
 
-  const refreshBricktime = (item: GoodPriceListRowProps) => {
-    setBricktimeSetNum(item.setNum);
+  const refreshPriceHistory = (item: GoodPriceListRowProps) => {
+    setPriceHistorySetNum(item.setNum);
     startTransition(async () => {
-      const res = await fetchSetGoodPriceBricktimeAction({ setNum: item.setNum });
-      setBricktimeSetNum(null);
+      const res = await fetchSetGoodPricePriceHistoryAction({ setNum: item.setNum });
+      setPriceHistorySetNum(null);
       if (!res.ok) {
         alert(res.error);
         return;
@@ -199,6 +199,9 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
         <ul className="flex flex-col gap-2">
           {items.map((item) => {
             const isEditing = draft?.mode === "edit" && draft.setNum === item.setNum;
+            const hideSalesStatusRefresh = isBricktimeRetiredSalesStatus(
+              item.bricktimeSalesStatus
+            );
             return (
             <SetGoodPriceListRow
               key={item.setNum}
@@ -245,22 +248,24 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
                 <>
                   <button
                     type="button"
-                    onClick={() => refreshBricktime(item)}
+                    onClick={() => refreshPriceHistory(item)}
                     disabled={pending}
-                    className={goodPriceBtnBricktime}
-                    title="抓取 Bricktime 官方定价、超值入手价、史低价与价格曲线"
+                    className={goodPriceBtnSecondary}
+                    title="只调用 Bricktime /sets/{id}/prices_history，更新价格历史与史低"
                   >
-                    {bricktimeSetNum === item.setNum ? "更新中…" : "官方价"}
+                    {priceHistorySetNum === item.setNum ? "更新中…" : "价格历史"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => refreshSalesStatus(item)}
-                    disabled={pending}
-                    className={goodPriceBtnSalesStatus}
-                    title="抓取 Bricktime 在售/绝版状态，及上下市、重量、拼搭等元数据"
-                  >
-                    {salesStatusSetNum === item.setNum ? "更新中…" : "销售状态"}
-                  </button>
+                  {hideSalesStatusRefresh ? null : (
+                    <button
+                      type="button"
+                      onClick={() => refreshSalesStatus(item)}
+                      disabled={pending}
+                      className={goodPriceBtnSalesStatus}
+                      title="只调用 Bricktime /sets/{id}，更新销售状态与元数据"
+                    >
+                      {salesStatusSetNum === item.setNum ? "更新中…" : "销售状态"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => compareGobricks(item)}
