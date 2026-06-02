@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -110,7 +110,6 @@ export function SetGoodPriceEditForm({
   const [gobricksLoading, setGobricksLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [priceHistory, setPriceHistory] = useState<BricktimePriceHistoryPoint[]>([]);
-  const autoOfficialSetNumRef = useRef<string | null>(null);
 
   const isEdit = draft.mode === "edit";
   const isCreate = variant === "create";
@@ -141,7 +140,6 @@ export function SetGoodPriceEditForm({
       buildingTime: draft.bricktimeBuildingTime?.trim() || null,
     });
     setPriceHistory(draft.bricktimePriceHistory ?? []);
-    autoOfficialSetNumRef.current = draft.mode === "create" ? null : draft.setNum.trim();
     setPreviewError(null);
     setError(null);
   }, [draft]);
@@ -156,30 +154,6 @@ export function SetGoodPriceEditForm({
     setPreviewError(null);
     setOfficialLoading(true);
     void previewSetGoodPriceOfficialPriceAction({ setNum: setNumInput }).then((res) => {
-      setOfficialLoading(false);
-      if (!res.ok) {
-        setPreviewError(res.error);
-        return;
-      }
-      setReferencePreview((prev) => ({
-        ...prev,
-        officialPrice: res.officialPrice,
-      }));
-      setOfficialInput(res.officialPrice ?? "");
-      setBricktimeFetchedAt(new Date().toISOString());
-    });
-  };
-
-  const fetchOfficialPriceForCreate = (rawSetNum: string) => {
-    if (!isCreate) return;
-    const setNum = rawSetNum.trim();
-    if (!setNum || officialInput.trim().length > 0 || officialLoading) return;
-    if (autoOfficialSetNumRef.current === setNum) return;
-
-    autoOfficialSetNumRef.current = setNum;
-    setPreviewError(null);
-    setOfficialLoading(true);
-    void previewSetGoodPriceOfficialPriceAction({ setNum }).then((res) => {
       setOfficialLoading(false);
       if (!res.ok) {
         setPreviewError(res.error);
@@ -336,6 +310,7 @@ export function SetGoodPriceEditForm({
     bricktimeMeta.weight != null ||
     bricktimeMeta.buildingTime != null;
   const hideSalesStatusPreview = isBricktimeRetiredSalesStatus(bricktimeMeta.salesStatus);
+  const hideOfficialPreview = parseOptionalBricktimePriceInput(officialInput) != null;
   const hidePriceHistoryPreview = hasBricktimePriceHistoryForCurrentMonth(priceHistory);
   const hideGobricksPreview =
     typeof referencePreview.gobricksPriceCny === "number" &&
@@ -386,10 +361,8 @@ export function SetGoodPriceEditForm({
                 setBricktimeFetchedAt(null);
                 setPersistedBricktimeAt(null);
                 setGobricksComparedAt(null);
-                autoOfficialSetNumRef.current = null;
                 setPreviewError(null);
               }}
-              onBlur={(e) => fetchOfficialPriceForCreate(e.currentTarget.value)}
               disabled={pending}
               placeholder="例如 71821 或 71821-1"
               className={inputClass}
@@ -441,7 +414,7 @@ export function SetGoodPriceEditForm({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-[var(--text)]">参考价对比</p>
           <div className="flex flex-wrap gap-2">
-            {!isCreate ? (
+            {hideOfficialPreview ? null : (
               <button
                 type="button"
                 onClick={fetchOfficialPricePreview}
@@ -457,7 +430,7 @@ export function SetGoodPriceEditForm({
               >
                 {officialLoading ? "查询中…" : "查官方价"}
               </button>
-            ) : null}
+            )}
             {hidePriceHistoryPreview ? null : (
               <button
                 type="button"
@@ -511,9 +484,6 @@ export function SetGoodPriceEditForm({
           </div>
         </div>
         {previewError ? <p className="text-xs text-red-400">{previewError}</p> : null}
-        {isCreate && officialLoading ? (
-          <p className="text-xs text-[var(--muted-2)]">正在自动查询官方价…</p>
-        ) : null}
         {hasReferenceData ? (
           <>
             <SetGoodPriceReferencePanel
@@ -540,8 +510,12 @@ export function SetGoodPriceEditForm({
         ) : (
           <p className="text-xs text-[var(--muted-2)]">
             {isCreate
-              ? "填写套装编号后会自动查一次官方价；也可按需单独查询价格历史、销售状态、高砖比价。"
-              : "可手动录入官方原价，或按需单独查询官方价、价格历史、销售状态、高砖比价。"}
+              ? hideOfficialPreview
+                ? "已获取官方原价，可继续录入入手价或按需查询价格历史、销售状态、高砖比价。"
+                : "填写套装编号后，点击「查官方价」获取参考价；也可按需查询价格历史、销售状态、高砖比价。"
+              : hideOfficialPreview
+                ? "可修改官方原价，或按需查询价格历史、销售状态、高砖比价。"
+                : "可手动录入官方原价，或按需单独查询官方价、价格历史、销售状态、高砖比价。"}
           </p>
         )}
       </div>
