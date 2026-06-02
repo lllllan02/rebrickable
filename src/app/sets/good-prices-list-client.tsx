@@ -10,6 +10,7 @@ import {
   fetchSetGoodPricePriceHistoryAction,
   fetchSetGoodPriceSalesStatusAction,
   markSetOwnedFromGoodPriceAction,
+  markSetWantedFromGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
 import {
   SetGoodPriceBomDialog,
@@ -36,6 +37,7 @@ import type { SetGoodPriceHeatFilter } from "@/lib/set-good-price-heat";
 import { setGoodPriceHeatFilterLabel } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceListItem } from "@/lib/set-good-price-list-sort";
 import type { SetGoodPriceListSortState } from "@/lib/set-good-price-list-sort";
+import type { SetListMarkFilter } from "@/lib/build-list-mark-filter";
 import {
   hasBricktimePriceHistoryForCurrentMonth,
   parseBricktimePriceHistoryJson,
@@ -51,9 +53,10 @@ type Props = {
   items: GoodPriceListRowProps[];
   sortState: SetGoodPriceListSortState;
   heatFilter: SetGoodPriceHeatFilter;
+  markFilter: SetListMarkFilter;
 };
 
-export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
+export function GoodPricesListClient({ items, sortState, heatFilter, markFilter }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [gobricksSetNum, setGobricksSetNum] = useState<string | null>(null);
@@ -122,6 +125,17 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
     });
   };
 
+  const markWanted = (item: GoodPriceListRowProps) => {
+    startTransition(async () => {
+      const res = await markSetWantedFromGoodPriceAction({ setNum: item.setNum });
+      if (!res.ok) {
+        alert(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
   const remove = (item: GoodPriceListRowProps) => {
     startTransition(async () => {
       const res = await clearSetGoodPriceAction({ setNum: item.setNum });
@@ -175,7 +189,11 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
   return (
     <>
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] px-1 pb-3">
-        <GoodPriceListSortControl sortState={sortState} heatFilter={heatFilter} />
+        <GoodPriceListSortControl
+          sortState={sortState}
+          heatFilter={heatFilter}
+          markFilter={markFilter}
+        />
         <button type="button" onClick={openCreate} className={goodPriceBtnPrimary}>
           {draft?.mode === "create" ? "取消添加" : "添加好价"}
         </button>
@@ -194,7 +212,9 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
 
       {items.length === 0 ? (
         <div className="px-4 py-10 text-center text-sm text-[var(--muted)]">
-          {heatFilter.kind === "exact"
+          {markFilter === "replicate"
+            ? "暂无心动好价。可以在全部好价中点击封面上的心动按钮。"
+            : heatFilter.kind === "exact"
             ? `无${setGoodPriceHeatFilterLabel(heatFilter)}的套装。再点当前圆点可取消筛选。`
             : "尚无记录。点击右上角「添加好价」录入套装编号与价格。"}
         </div>
@@ -236,6 +256,9 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
               bricktimeWeight={item.bricktimeWeight}
               bricktimeBuildingTime={item.bricktimeBuildingTime}
               bricktimePriceHistory={item.bricktimePriceHistory}
+              workflowStage={item.workflowStage}
+              onMarkWanted={() => markWanted(item)}
+              markWantedDisabled={pending}
               onViewPriceHistory={() => openPriceHistory(item)}
               sortKind={sortState.kind}
               isEditing={isEditing}

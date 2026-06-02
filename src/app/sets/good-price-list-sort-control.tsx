@@ -16,6 +16,7 @@ import {
   setGoodPriceMetricTriggerLabel,
   setGoodPriceSortKindLabel,
 } from "@/lib/set-good-price-list-sort";
+import type { SetListMarkFilter } from "@/lib/build-list-mark-filter";
 
 function SortGlyph({ className, arrowDown }: { className?: string; arrowDown: boolean }) {
   const arrowPath = arrowDown
@@ -60,9 +61,10 @@ const selectClass =
 type Props = {
   sortState: SetGoodPriceListSortState;
   heatFilter: SetGoodPriceHeatFilter;
+  markFilter: SetListMarkFilter;
 };
 
-export function GoodPriceListSortControl({ sortState, heatFilter }: Props) {
+export function GoodPriceListSortControl({ sortState, heatFilter, markFilter }: Props) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const { kind, metric, dir } = sortState;
   const triggerLabel = setGoodPriceMetricTriggerLabel(sortState);
@@ -73,6 +75,7 @@ export function GoodPriceListSortControl({ sortState, heatFilter }: Props) {
     setGoodPriceListHref({
       sortState: nextSetGoodPriceMetricClick(pick, sortState),
       heatFilter,
+      markFilter,
     });
 
   const hrefForHeatLevel = (level: 1 | 2 | 3) =>
@@ -82,12 +85,21 @@ export function GoodPriceListSortControl({ sortState, heatFilter }: Props) {
         heatFilter.kind === "exact" && heatFilter.level === level
           ? { kind: "all" }
           : { kind: "exact", level },
+      markFilter,
     });
+
+  const hrefForMarkToggle = setGoodPriceListHref({
+    sortState,
+    heatFilter,
+    markFilter: markFilter === "replicate" ? "all" : "replicate",
+  });
 
   const heatHidden =
     heatFilter.kind === "exact" ? (
       <input type="hidden" name="heat" value={heatFilterToQueryValue(heatFilter)!} />
     ) : null;
+  const markHidden =
+    markFilter !== "all" ? <input type="hidden" name="mark" value={markFilter} /> : null;
 
   const closeMenu = () => {
     const el = detailsRef.current;
@@ -111,6 +123,7 @@ export function GoodPriceListSortControl({ sortState, heatFilter }: Props) {
         <input type="hidden" name="metric" value={metric} />
         <input type="hidden" name="dir" value={dir} />
         {heatHidden}
+        {markHidden}
         <label className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
           <span className="hidden sm:inline" aria-hidden>
             成色
@@ -172,6 +185,18 @@ export function GoodPriceListSortControl({ sortState, heatFilter }: Props) {
         <span className="hidden text-xs text-[var(--muted)] sm:inline">热度</span>
         <SetGoodPriceHeatFilterDots heatFilter={heatFilter} hrefForHeatLevel={hrefForHeatLevel} />
       </div>
+
+      <Link
+        href={hrefForMarkToggle}
+        aria-pressed={markFilter === "replicate"}
+        className={`inline-flex shrink-0 items-center rounded-md border px-2.5 py-2 text-sm shadow-sm transition-colors ${
+          markFilter === "replicate"
+            ? "border-red-500/55 bg-red-500/15 font-medium text-[var(--text)]"
+            : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--surface)]"
+        }`}
+      >
+        仅心动
+      </Link>
     </div>
   );
 }

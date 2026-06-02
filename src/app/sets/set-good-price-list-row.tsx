@@ -17,6 +17,7 @@ import {
 } from "@/lib/set-good-price-format";
 import { computeSetGoodPriceHeat } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceSortKind } from "@/lib/set-good-price-list-sort";
+import type { BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { parseBricktimePriceHistoryJson } from "@/lib/bricktime-price-history";
 
 function usableImgUrl(u: string | null | undefined): u is string {
@@ -27,6 +28,14 @@ function MetaDot() {
   return <span className="text-[var(--muted-2)]" aria-hidden>
     ·
   </span>;
+}
+
+function HeartIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="currentColor">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+    </svg>
+  );
 }
 
 /** 标题下方：编号、年份、片数、销售状态 */
@@ -179,10 +188,13 @@ export function SetGoodPriceListRow({
   bricktimeWeight,
   bricktimeBuildingTime,
   bricktimePriceHistory,
+  workflowStage,
+  markWantedDisabled,
   sortKind,
   actions,
   onPartsClick,
   onViewPriceHistory,
+  onMarkWanted,
   isEditing,
   editForm,
 }: {
@@ -208,14 +220,19 @@ export function SetGoodPriceListRow({
   bricktimeWeight?: string | null;
   bricktimeBuildingTime?: string | null;
   bricktimePriceHistory?: string | null;
+  workflowStage?: BuildWorkflowStage | null;
+  markWantedDisabled?: boolean;
   sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
   onPartsClick?: () => void;
   onViewPriceHistory?: () => void;
+  onMarkWanted?: () => void;
   isEditing?: boolean;
   editForm?: ReactNode;
 }) {
   const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
+  const isWanted = workflowStage === "replicate";
+  const isOwned = workflowStage === "complete" || workflowStage === "purchase";
   const parsedPriceHistory = parseBricktimePriceHistoryJson(bricktimePriceHistory);
   const heat = computeSetGoodPriceHeat({
     priceNewCny,
@@ -230,26 +247,46 @@ export function SetGoodPriceListRow({
       className={`result-card overflow-hidden p-0 ${isEditing ? "ring-1 ring-[var(--accent)]/35" : ""}`}
     >
       <div className="grid w-full grid-cols-[5.5rem_minmax(0,1fr)] items-stretch gap-3 p-3 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-4 sm:p-3.5 lg:grid-cols-[8.5rem_minmax(0,1fr)]">
-        <Link
-          href={detailHref}
-          className="media-box relative block min-h-[4.75rem] w-full self-stretch overflow-hidden rounded-lg"
-          aria-label={`${title} 封面`}
-        >
-          {usableImgUrl(coverUrl) ? (
-            <RemoteCoverImage
-              src={coverUrl.trim()}
-              fill
-              className="object-contain p-1.5 sm:p-2"
-              sizes="(max-width: 640px) 104px, 152px"
-              alt=""
-              fallbackLabel="无"
-            />
-          ) : (
-            <span className="flex min-h-[4.75rem] w-full items-center justify-center text-xs text-[var(--muted)]">
-              无图
-            </span>
-          )}
-        </Link>
+        <div className="media-box relative min-h-[4.75rem] w-full self-stretch overflow-hidden rounded-lg">
+          <Link
+            href={detailHref}
+            className="block min-h-[4.75rem] w-full"
+            aria-label={`${title} 封面`}
+          >
+            {usableImgUrl(coverUrl) ? (
+              <RemoteCoverImage
+                src={coverUrl.trim()}
+                fill
+                className="object-contain p-1.5 sm:p-2"
+                sizes="(max-width: 640px) 104px, 152px"
+                alt=""
+                fallbackLabel="无"
+              />
+            ) : (
+              <span className="flex min-h-[4.75rem] w-full items-center justify-center text-xs text-[var(--muted)]">
+                无图
+              </span>
+            )}
+          </Link>
+          {onMarkWanted ? (
+            <button
+              type="button"
+              onClick={onMarkWanted}
+              disabled={markWantedDisabled || isWanted || isOwned}
+              className={`absolute right-1.5 top-1.5 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.45)] ring-1 ring-black/15 transition-colors ${
+                isWanted
+                  ? "bg-red-500 text-white"
+                  : isOwned
+                    ? "bg-[var(--accent)] text-[#141414]"
+                    : "bg-black/55 text-white hover:bg-red-500"
+              } disabled:cursor-default disabled:opacity-95`}
+              title={isOwned ? "已拥有" : isWanted ? "已心动" : "标记心动"}
+              aria-label={isOwned ? `${title} 已拥有` : isWanted ? `${title} 已心动` : `${title} 标记心动`}
+            >
+              <HeartIcon className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
 
         <div className="flex min-w-0 flex-col gap-2 sm:gap-2.5">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-2 gap-y-1.5 sm:gap-3">

@@ -1,4 +1,5 @@
 import { discountFoldVsOfficialPrice } from "@/lib/set-good-price-format";
+import type { BuildWorkflowStage } from "@/lib/build-workflow-stage";
 
 export type SetGoodPriceSortKind = "new" | "used";
 export type SetGoodPriceSortMetric = "price" | "per_piece" | "discount";
@@ -50,6 +51,7 @@ export type SetGoodPriceListItem = {
   bricktimeWeight: string | null;
   bricktimeBuildingTime: string | null;
   bricktimePriceHistory: string | null;
+  workflowStage: BuildWorkflowStage | null;
 };
 
 function parseKind(raw: string | undefined): SetGoodPriceSortKind | null {
