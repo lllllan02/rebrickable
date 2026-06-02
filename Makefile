@@ -11,8 +11,9 @@ pull:
 install:
 	$(PNPM) install
 
+# 从 assets/*.csv.gz 全量重建目录库（不覆盖 data/rebrickable-user.db）；请先停 dev 并更新 assets
 db:
-	$(PNPM) exec tsx scripts/ensure-local-db.ts
+	$(PNPM) db:import
 
 # 单条顺序链，避免 `make -j` 时 pull 与 install 并行竞态
 dev:
