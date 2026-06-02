@@ -3,18 +3,15 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 
-import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { SetGoodPriceHeatFilterDots } from "@/app/sets/set-good-price-heat-dots";
 import { setGoodPriceListHref } from "@/lib/set-good-price-list-href";
 import type { SetGoodPriceHeatFilter } from "@/lib/set-good-price-heat";
-import { heatFilterToQueryValue } from "@/lib/set-good-price-heat";
 import {
   type SetGoodPriceSortMetric,
   type SetGoodPriceListSortState,
   nextSetGoodPriceMetricClick,
   setGoodPriceMetricTriggerAriaLabel,
   setGoodPriceMetricTriggerLabel,
-  setGoodPriceSortKindLabel,
 } from "@/lib/set-good-price-list-sort";
 import type { SetListMarkFilter } from "@/lib/build-list-mark-filter";
 
@@ -55,9 +52,6 @@ const METRIC_ROWS: readonly { key: SetGoodPriceSortMetric; label: string }[] = [
   { key: "discount", label: "折扣力度" },
 ];
 
-const selectClass =
-  "field min-w-[5.5rem] shrink-0 py-2 text-sm sm:min-w-[6rem]";
-
 type Props = {
   sortState: SetGoodPriceListSortState;
   heatFilter: SetGoodPriceHeatFilter;
@@ -66,7 +60,7 @@ type Props = {
 
 export function GoodPriceListSortControl({ sortState, heatFilter, markFilter }: Props) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  const { kind, metric, dir } = sortState;
+  const { dir } = sortState;
   const triggerLabel = setGoodPriceMetricTriggerLabel(sortState);
   const ariaLabel = setGoodPriceMetricTriggerAriaLabel(sortState);
   const glyphArrowDown = sortState.neutral || dir === "desc";
@@ -94,13 +88,6 @@ export function GoodPriceListSortControl({ sortState, heatFilter, markFilter }: 
     markFilter: markFilter === "replicate" ? "all" : "replicate",
   });
 
-  const heatHidden =
-    heatFilter.kind === "exact" ? (
-      <input type="hidden" name="heat" value={heatFilterToQueryValue(heatFilter)!} />
-    ) : null;
-  const markHidden =
-    markFilter !== "all" ? <input type="hidden" name="mark" value={markFilter} /> : null;
-
   const closeMenu = () => {
     const el = detailsRef.current;
     if (el) el.open = false;
@@ -119,27 +106,6 @@ export function GoodPriceListSortControl({ sortState, heatFilter, markFilter }: 
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <form method="get" action="/sets/prices" className="flex items-center gap-1.5">
-        <input type="hidden" name="metric" value={metric} />
-        <input type="hidden" name="dir" value={dir} />
-        {heatHidden}
-        {markHidden}
-        <label className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-          <span className="hidden sm:inline" aria-hidden>
-            成色
-          </span>
-          <AutoSubmitSelect
-            name="kind"
-            value={kind}
-            className={selectClass}
-            aria-label={`排序成色：${setGoodPriceSortKindLabel(kind)}`}
-          >
-            <option value="new">全新</option>
-            <option value="used">二手</option>
-          </AutoSubmitSelect>
-        </label>
-      </form>
-
       <details ref={detailsRef} className="group relative w-[10.5rem] shrink-0">
         <summary
           className="flex w-full cursor-pointer list-none items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-2 text-sm text-[var(--text)] shadow-sm outline-none ring-[var(--accent)]/20 transition-colors hover:border-[var(--border)] hover:bg-[var(--surface)] focus-visible:ring-2 [&::-webkit-details-marker]:hidden"

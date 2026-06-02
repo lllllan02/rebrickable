@@ -39,7 +39,6 @@ export type SetGoodPriceEditDraft = {
   setNum: string;
   catalogName?: string | null;
   priceNewCny: number | null;
-  priceUsedCny: number | null;
   bricktimeOfficialPrice?: string | null;
   bricktimeGoodPrice?: string | null;
   bricktimeLowestPrice?: string | null;
@@ -94,7 +93,6 @@ export function SetGoodPriceEditForm({
 
   const [setNumInput, setSetNumInput] = useState("");
   const [newInput, setNewInput] = useState("");
-  const [usedInput, setUsedInput] = useState("");
   const [officialInput, setOfficialInput] = useState("");
 
   const [referencePreview, setReferencePreview] = useState<SetGoodPriceReferencePreview>(
@@ -113,12 +111,11 @@ export function SetGoodPriceEditForm({
 
   const isEdit = draft.mode === "edit";
   const isCreate = variant === "create";
-  const hasSaved = hasAnySetGoodPrice(draft.priceNewCny, draft.priceUsedCny);
+  const hasSaved = hasAnySetGoodPrice(draft.priceNewCny);
 
   useEffect(() => {
     setSetNumInput(draft.setNum);
     setNewInput(priceToInput(draft.priceNewCny));
-    setUsedInput(priceToInput(draft.priceUsedCny));
     const official = draft.bricktimeOfficialPrice?.trim() ?? "";
     setOfficialInput(official);
     setReferencePreview({
@@ -144,9 +141,7 @@ export function SetGoodPriceEditForm({
     setError(null);
   }, [draft]);
 
-  const canSave =
-    setNumInput.trim().length > 0 &&
-    (newInput.trim().length > 0 || usedInput.trim().length > 0);
+  const canSave = setNumInput.trim().length > 0 && newInput.trim().length > 0;
 
   const canPreview = setNumInput.trim().length > 0 && !pending;
 
@@ -248,7 +243,6 @@ export function SetGoodPriceEditForm({
       const res = await saveSetGoodPriceAction({
         setNum: setNumInput,
         priceNewCny: newInput,
-        priceUsedCny: usedInput,
         previewGobricks:
           referencePreview.gobricksPriceCny != null
             ? {
@@ -337,7 +331,7 @@ export function SetGoodPriceEditForm({
           <div>
             <h3 className="text-base font-semibold">添加好价</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              套装编号可只填数字部分；至少填写全新或二手价格之一。
+              套装编号可只填数字部分；请填写当前价格。
             </p>
           </div>
           <button type="button" className={goodPriceBtnSecondary} onClick={onClose}>
@@ -384,26 +378,13 @@ export function SetGoodPriceEditForm({
         </label>
 
         <label className={labelClass}>
-          <span className="text-[var(--muted)]">全新价格（元）</span>
+          <span className="text-[var(--muted)]">当前价格（元）</span>
           <input
             type="text"
             inputMode="decimal"
             value={newInput}
             onChange={(e) => setNewInput(e.target.value)}
-            placeholder="选填"
-            disabled={pending}
-            className={inputClass}
-          />
-        </label>
-
-        <label className={labelClass}>
-          <span className="text-[var(--muted)]">二手价格（元）</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={usedInput}
-            onChange={(e) => setUsedInput(e.target.value)}
-            placeholder="选填"
+            placeholder="必填"
             disabled={pending}
             className={inputClass}
           />

@@ -14,7 +14,6 @@ export function setGoodPriceListHref(params: {
   markFilter?: SetListMarkFilter;
 }): string {
   const sp = new URLSearchParams();
-  sp.set("kind", params.sortState.kind);
   const sortQ = setGoodPriceSortStateToQueryEntries(params.sortState);
   if (sortQ.metric != null) sp.set("metric", sortQ.metric);
   if (sortQ.dir != null) sp.set("dir", sortQ.dir);

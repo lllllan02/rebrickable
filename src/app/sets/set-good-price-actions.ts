@@ -370,7 +370,6 @@ async function saveGobricksPreviewForSet(
 export async function saveSetGoodPriceAction(input: {
   setNum: string;
   priceNewCny?: unknown;
-  priceUsedCny?: unknown;
   /** 弹框内已预览的高砖比价，保存时一并写入 */
   previewGobricks?: unknown;
   /** 弹框内已预览的 Bricktime 参考价，保存时一并写入（避免重复请求） */
@@ -385,15 +384,11 @@ export async function saveSetGoodPriceAction(input: {
   }
 
   const priceNewCny = parseOptionalPriceCny(input.priceNewCny);
-  const priceUsedCny = parseOptionalPriceCny(input.priceUsedCny);
-  if (priceNewCny == null && priceUsedCny == null) {
-    return { ok: false, error: "请至少填写全新或二手价格之一。" };
-  }
-  if (
-    (String(input.priceNewCny ?? "").trim().length > 0 && priceNewCny == null) ||
-    (String(input.priceUsedCny ?? "").trim().length > 0 && priceUsedCny == null)
-  ) {
+  if (String(input.priceNewCny ?? "").trim().length > 0 && priceNewCny == null) {
     return { ok: false, error: "请输入有效的价格（0–999999 元）。" };
+  }
+  if (priceNewCny == null) {
+    return { ok: false, error: "请填写当前价格。" };
   }
 
   try {
@@ -412,13 +407,13 @@ export async function saveSetGoodPriceAction(input: {
       .values({
         setNum: canonicalSetNum,
         priceNewCny,
-        priceUsedCny,
+        priceUsedCny: null,
         channelNew: null,
         updatedAt,
       })
       .onConflictDoUpdate({
         target: buildSetGoodPrices.setNum,
-        set: { priceNewCny, priceUsedCny, channelNew: null, updatedAt },
+        set: { priceNewCny, priceUsedCny: null, channelNew: null, updatedAt },
       });
 
     const previewGobricks = parsePreviewGobricks(input.previewGobricks);

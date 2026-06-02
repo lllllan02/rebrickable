@@ -47,9 +47,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
 
   const userDb = getUserDb();
   const allPriceRows = await userDb.select().from(buildSetGoodPrices);
-  const priceRows = allPriceRows.filter((r) =>
-    hasAnySetGoodPrice(r.priceNewCny, r.priceUsedCny)
-  );
+  const priceRows = allPriceRows.filter((r) => hasAnySetGoodPrice(r.priceNewCny));
 
   const setNums = priceRows.map((r) => r.setNum);
   const catalogDb = getCatalogDb();
@@ -97,7 +95,6 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
     return {
       setNum: r.setNum,
       priceNewCny: r.priceNewCny,
-      priceUsedCny: r.priceUsedCny,
       updatedAt: r.updatedAt,
       catalogName: cat?.name ?? null,
       year: cat?.year ?? null,
@@ -147,7 +144,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
           {items.length > 0 ? (
             <>
               共 <span className="tabular-nums text-[var(--text)]">{items.length}</span>{" "}
-              套已记录入手价；成色、热度与心动可筛选，总价/单价/折扣力度重复点击切换升序与降序。默认：全新总价升序。
+              套已记录入手价；热度与心动可筛选，总价/单价/折扣力度重复点击切换升序与降序。默认：总价升序。
             </>
           ) : (
             <>在此添加、编辑或删除各套装的入手好价；操作按钮在列表右上方。</>

@@ -14,23 +14,13 @@ function isValidPriceCny(price: number | null | undefined): price is number {
   return typeof price === "number" && Number.isFinite(price) && price >= 0;
 }
 
-/** 取全新/二手录入价中的最低价作为对比基准 */
-function bestUserPriceCny(priceNewCny: number | null, priceUsedCny: number | null): number | null {
-  const prices: number[] = [];
-  if (isValidPriceCny(priceNewCny)) prices.push(priceNewCny);
-  if (isValidPriceCny(priceUsedCny)) prices.push(priceUsedCny);
-  if (prices.length === 0) return null;
-  return Math.min(...prices);
-}
-
 export function computeSetGoodPriceHeat(input: {
   priceNewCny: number | null;
-  priceUsedCny: number | null;
   bricktimeLowestPrice: string | null | undefined;
   bricktimeGoodPrice: string | null | undefined;
   gobricksPriceCny: number | null | undefined;
 }): SetGoodPriceHeatBreakdown {
-  const comparePriceCny = bestUserPriceCny(input.priceNewCny, input.priceUsedCny);
+  const comparePriceCny = isValidPriceCny(input.priceNewCny) ? input.priceNewCny : null;
   const empty: SetGoodPriceHeatBreakdown = {
     level: 0,
     comparePriceCny,
@@ -105,7 +95,6 @@ export function setGoodPriceHeatFilterLabel(filter: SetGoodPriceHeatFilter): str
 export function itemMatchesSetGoodPriceHeatFilter(
   item: {
     priceNewCny: number | null;
-    priceUsedCny: number | null;
     bricktimeLowestPrice: string | null;
     bricktimeGoodPrice: string | null;
     gobricksPriceCny: number | null;

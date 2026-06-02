@@ -75,7 +75,6 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
             mode: "create",
             setNum: "",
             priceNewCny: null,
-            priceUsedCny: null,
           }
     );
   };
@@ -86,7 +85,6 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
       setNum: item.setNum,
       catalogName: item.catalogName,
       priceNewCny: item.priceNewCny,
-      priceUsedCny: item.priceUsedCny,
       bricktimeOfficialPrice: item.bricktimeOfficialPrice,
       bricktimeGoodPrice: item.bricktimeGoodPrice,
       bricktimeLowestPrice: item.bricktimeLowestPrice,
@@ -238,7 +236,6 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
               title={item.title}
               coverUrl={item.coverUrl}
               priceNewCny={item.priceNewCny}
-              priceUsedCny={item.priceUsedCny}
               updatedAtIso={item.updatedAt}
               numParts={item.numParts}
               year={item.year}
@@ -260,7 +257,6 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
               onMarkWanted={() => markWanted(item)}
               markWantedDisabled={pending}
               onViewPriceHistory={() => openPriceHistory(item)}
-              sortKind={sortState.kind}
               isEditing={isEditing}
               editForm={
                 isEditing && draft ? (

@@ -16,7 +16,6 @@ import {
   formatSetGoodPricePerPiece,
 } from "@/lib/set-good-price-format";
 import { computeSetGoodPriceHeat } from "@/lib/set-good-price-heat";
-import type { SetGoodPriceSortKind } from "@/lib/set-good-price-list-sort";
 import type { BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { parseBricktimePriceHistoryJson } from "@/lib/bricktime-price-history";
 
@@ -38,17 +37,19 @@ function HeartIcon({ className }: { className?: string }) {
   );
 }
 
-/** 标题下方：编号、年份、片数、销售状态 */
+/** 标题下方：编号、年份、片数、单价、销售状态 */
 function SetCatalogMetaLine({
   setNum,
   year,
   numParts,
+  perPieceLabel,
   salesStatus,
   onPartsClick,
 }: {
   setNum: string;
   year: number | null;
   numParts: number | null;
+  perPieceLabel?: string | null;
   salesStatus?: string | null;
   onPartsClick?: () => void;
 }) {
@@ -86,6 +87,14 @@ function SetCatalogMetaLine({
     );
   }
 
+  if (perPieceLabel) {
+    items.push(
+      <span key="per-piece" className="font-mono tabular-nums text-[var(--muted-2)]">
+        {perPieceLabel}
+      </span>
+    );
+  }
+
   const salesBrief = formatBricktimeSalesStatusBrief(salesStatus);
   if (salesBrief) {
     const retired = salesBrief === "绝版";
@@ -112,65 +121,11 @@ function SetCatalogMetaLine({
   );
 }
 
-function PriceColumn({
-  label,
-  priceCny,
-  officialPrice,
-  numParts,
-  highlighted,
-}: {
-  label: string;
-  priceCny: number | null;
-  officialPrice?: string | null;
-  numParts: number | null;
-  highlighted?: boolean;
-}) {
-  const priceLabel = formatSetGoodPriceCny(priceCny);
-  const discountLabel =
-    priceCny != null ? formatDiscountVsOfficialPrice(priceCny, officialPrice) : null;
-  const perPieceLabel =
-    priceCny != null ? formatSetGoodPricePerPiece(priceCny, numParts) : null;
-
-  return (
-    <div
-      className={`flex h-full min-w-0 flex-col rounded-md border px-2.5 py-2 sm:px-3 ${
-        highlighted
-          ? "border-[var(--accent)]/35 bg-[var(--accent-soft)]/40"
-          : "border-[var(--border-soft)] bg-[var(--surface-2)]/40"
-      }`}
-    >
-      <p className="text-[11px] font-medium text-[var(--muted)]">{label}</p>
-      {priceLabel ? (
-        <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-          <span className="font-mono text-sm font-semibold tabular-nums text-amber-200/95 sm:text-base">
-            {priceLabel}
-          </span>
-          {discountLabel ? (
-            <span className="shrink-0 font-mono text-[11px] font-medium tabular-nums text-emerald-400/90">
-              {discountLabel}
-            </span>
-          ) : null}
-        </p>
-      ) : (
-        <p className="mt-1 font-mono text-sm text-[var(--muted-2)]">—</p>
-      )}
-      {perPieceLabel ? (
-        <p className="mt-1.5 font-mono text-[11px] tabular-nums text-[var(--muted)]">
-          {perPieceLabel}
-        </p>
-      ) : priceLabel ? (
-        <p className="mt-1.5 text-[11px] text-[var(--muted-2)]">无片数</p>
-      ) : null}
-    </div>
-  );
-}
-
 export function SetGoodPriceListRow({
   setNum,
   title,
   coverUrl,
   priceNewCny,
-  priceUsedCny,
   updatedAtIso,
   numParts,
   year,
@@ -190,7 +145,6 @@ export function SetGoodPriceListRow({
   bricktimePriceHistory,
   workflowStage,
   markWantedDisabled,
-  sortKind,
   actions,
   onPartsClick,
   onViewPriceHistory,
@@ -202,7 +156,6 @@ export function SetGoodPriceListRow({
   title: string;
   coverUrl: string | null;
   priceNewCny: number | null;
-  priceUsedCny: number | null;
   updatedAtIso: string;
   numParts: number | null;
   year: number | null;
@@ -222,7 +175,6 @@ export function SetGoodPriceListRow({
   bricktimePriceHistory?: string | null;
   workflowStage?: BuildWorkflowStage | null;
   markWantedDisabled?: boolean;
-  sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
   onPartsClick?: () => void;
   onViewPriceHistory?: () => void;
@@ -236,11 +188,17 @@ export function SetGoodPriceListRow({
   const parsedPriceHistory = parseBricktimePriceHistoryJson(bricktimePriceHistory);
   const heat = computeSetGoodPriceHeat({
     priceNewCny,
-    priceUsedCny,
     bricktimeLowestPrice,
     bricktimeGoodPrice,
     gobricksPriceCny,
   });
+  const priceLabel = formatSetGoodPriceCny(priceNewCny);
+  const discountLabel =
+    priceNewCny != null
+      ? formatDiscountVsOfficialPrice(priceNewCny, bricktimeOfficialPrice)
+      : null;
+  const perPieceLabel =
+    priceNewCny != null ? formatSetGoodPricePerPiece(priceNewCny, numParts) : null;
 
   return (
     <li
@@ -291,19 +249,32 @@ export function SetGoodPriceListRow({
         <div className="flex min-w-0 flex-col gap-2 sm:gap-2.5">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-2 gap-y-1.5 sm:gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                 <Link
                   href={detailHref}
                   className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline sm:text-base"
                 >
                   {title}
                 </Link>
+                {priceLabel ? (
+                  <span className="inline-flex shrink-0 flex-wrap items-baseline gap-x-1.5">
+                    <span className="font-mono text-sm font-semibold tabular-nums text-amber-200/95 sm:text-base">
+                      {priceLabel}
+                    </span>
+                    {discountLabel ? (
+                      <span className="font-mono text-[11px] font-medium tabular-nums text-emerald-400/90">
+                        {discountLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
                 {heat.level > 0 ? <SetGoodPriceHeatBadge breakdown={heat} /> : null}
               </div>
               <SetCatalogMetaLine
                 setNum={setNum}
                 year={year}
                 numParts={numParts}
+                perPieceLabel={perPieceLabel}
                 salesStatus={bricktimeSalesStatus}
                 onPartsClick={onPartsClick}
               />
@@ -315,23 +286,6 @@ export function SetGoodPriceListRow({
             editForm
           ) : (
             <>
-              <div className="grid w-full grid-cols-2 gap-2 sm:gap-3">
-                <PriceColumn
-                  label="全新"
-                  priceCny={priceNewCny}
-                  officialPrice={bricktimeOfficialPrice}
-                  numParts={numParts}
-                  highlighted={sortKind === "new"}
-                />
-                <PriceColumn
-                  label="二手"
-                  priceCny={priceUsedCny}
-                  officialPrice={bricktimeOfficialPrice}
-                  numParts={numParts}
-                  highlighted={sortKind === "used"}
-                />
-              </div>
-
               <SetGoodPriceReferencePanel
                 preview={{
                   officialPrice: bricktimeOfficialPrice ?? null,
