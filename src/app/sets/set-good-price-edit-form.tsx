@@ -24,7 +24,7 @@ import {
   goodPriceBtnSecondary,
 } from "@/lib/set-good-price-buttons";
 import {
-  isBricktimeRetiredSalesStatus,
+  shouldHideBricktimeSalesStatusRefresh,
   parseOptionalBricktimePriceInput,
 } from "@/lib/set-good-price-format";
 import type { BricktimeSetMetaFields } from "@/lib/set-good-price-format";
@@ -46,6 +46,7 @@ export type SetGoodPriceEditDraft = {
   bricktimeLaunchDate?: string | null;
   bricktimeRetiredDate?: string | null;
   bricktimeSalesStatus?: string | null;
+  bricktimeSalesStatusFetchedAt?: string | null;
   bricktimeWeight?: string | null;
   bricktimeBuildingTime?: string | null;
   bricktimePriceHistory?: BricktimePriceHistoryPoint[] | null;
@@ -62,6 +63,7 @@ const emptyBricktimeMeta = (): BricktimeSetMetaFields => ({
   launchDate: null,
   retiredDate: null,
   salesStatus: null,
+  salesStatusFetchedAt: null,
   weight: null,
   buildingTime: null,
 });
@@ -133,6 +135,7 @@ export function SetGoodPriceEditForm({
       launchDate: draft.bricktimeLaunchDate?.trim() || null,
       retiredDate: draft.bricktimeRetiredDate?.trim() || null,
       salesStatus: draft.bricktimeSalesStatus?.trim() || null,
+      salesStatusFetchedAt: draft.bricktimeSalesStatusFetchedAt?.trim() || null,
       weight: draft.bricktimeWeight?.trim() || null,
       buildingTime: draft.bricktimeBuildingTime?.trim() || null,
     });
@@ -195,6 +198,7 @@ export function SetGoodPriceEditForm({
         launchDate: res.launchDate ?? prev.launchDate,
         retiredDate: res.retiredDate ?? prev.retiredDate,
         salesStatus: res.salesStatus ?? prev.salesStatus,
+        salesStatusFetchedAt: res.salesStatusFetchedAt ?? new Date().toISOString(),
         weight: res.weight ?? prev.weight,
         buildingTime: res.buildingTime ?? prev.buildingTime,
       }));
@@ -260,6 +264,7 @@ export function SetGoodPriceEditForm({
               launchDate: bricktimeMeta.launchDate,
               retiredDate: bricktimeMeta.retiredDate,
               salesStatus: bricktimeMeta.salesStatus,
+              salesStatusFetchedAt: bricktimeMeta.salesStatusFetchedAt ?? undefined,
               weight: bricktimeMeta.weight,
               buildingTime: bricktimeMeta.buildingTime,
               priceHistory,
@@ -303,7 +308,10 @@ export function SetGoodPriceEditForm({
     bricktimeMeta.salesStatus != null ||
     bricktimeMeta.weight != null ||
     bricktimeMeta.buildingTime != null;
-  const hideSalesStatusPreview = isBricktimeRetiredSalesStatus(bricktimeMeta.salesStatus);
+  const hideSalesStatusPreview = shouldHideBricktimeSalesStatusRefresh(
+    bricktimeMeta.salesStatus,
+    bricktimeMeta.salesStatusFetchedAt
+  );
   const hideOfficialPreview = parseOptionalBricktimePriceInput(officialInput) != null;
   const hidePriceHistoryPreview = hasBricktimePriceHistoryForCurrentMonth(priceHistory);
   const hideGobricksPreview =

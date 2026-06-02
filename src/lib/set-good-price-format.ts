@@ -62,6 +62,7 @@ export type BricktimeSetMetaFields = {
   launchDate?: string | null;
   retiredDate?: string | null;
   salesStatus?: string | null;
+  salesStatusFetchedAt?: string | null;
   weight?: string | null;
   buildingTime?: string | null;
 };
@@ -81,6 +82,50 @@ export function formatBricktimeSalesStatusBrief(
   const s = status?.trim();
   if (!s) return null;
   return isBricktimeRetiredSalesStatus(s) ? "绝版" : "在售";
+}
+
+export function isBricktimeOnSaleSalesStatus(status: string | null | undefined): boolean {
+  return formatBricktimeSalesStatusBrief(status) === "在售";
+}
+
+function isoTimestampMonthKey(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** ISO 时间戳是否落在当前自然月 */
+export function isIsoTimestampInCurrentMonth(
+  iso: string | null | undefined,
+  now = new Date()
+): boolean {
+  const s = iso?.trim();
+  if (!s) return false;
+  const tsMonth = isoTimestampMonthKey(s);
+  if (!tsMonth) return false;
+  const nowMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return tsMonth === nowMonth;
+}
+
+/** 绝版永久隐藏；在售且当月已查则暂时隐藏销售状态刷新入口 */
+export function shouldHideBricktimeSalesStatusRefresh(
+  salesStatus: string | null | undefined,
+  fetchedAt: string | null | undefined,
+  now = new Date()
+): boolean {
+  if (isBricktimeRetiredSalesStatus(salesStatus)) return true;
+  return (
+    isBricktimeOnSaleSalesStatus(salesStatus) && isIsoTimestampInCurrentMonth(fetchedAt, now)
+  );
+}
+
+/** 在售状态旁展示的最近查询日期（YYYY-MM-DD） */
+export function formatBricktimeSalesStatusFetchedLabel(
+  fetchedAt: string | null | undefined
+): string | null {
+  const s = fetchedAt?.trim();
+  if (!s || Number.isNaN(Date.parse(s))) return null;
+  return s.slice(0, 10);
 }
 
 /** ISO 日期 YYYY-MM-DD → 2025-10-01 或原样 */
@@ -114,6 +159,18 @@ export function buildBricktimeMetaDisplayItems(
 ): BricktimeMetaDisplayItem[] {
   if (!meta) return [];
   const items: BricktimeMetaDisplayItem[] = [];
+  const salesBrief = formatBricktimeSalesStatusBrief(meta.salesStatus);
+  if (salesBrief) {
+    const queryLabel =
+      salesBrief === "在售"
+        ? formatBricktimeSalesStatusFetchedLabel(meta.salesStatusFetchedAt)
+        : null;
+    const statusText = meta.salesStatus?.trim() || salesBrief;
+    items.push({
+      label: "销售状态",
+      value: queryLabel ? `${statusText}（${queryLabel} 查）` : statusText,
+    });
+  }
   const launch = formatBricktimeDateLabel(meta.launchDate);
   const retired = formatBricktimeDateLabel(meta.retiredDate);
   if (launch && retired) {

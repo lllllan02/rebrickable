@@ -110,6 +110,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       bricktimeLaunchDate: r.bricktimeLaunchDate ?? null,
       bricktimeRetiredDate: r.bricktimeRetiredDate ?? null,
       bricktimeSalesStatus: r.bricktimeSalesStatus ?? null,
+      bricktimeSalesStatusFetchedAt: r.bricktimeSalesStatusFetchedAt ?? null,
       bricktimeWeight: r.bricktimeWeight ?? null,
       bricktimeBuildingTime: r.bricktimeBuildingTime ?? null,
       bricktimePriceHistory: r.bricktimePriceHistory ?? null,

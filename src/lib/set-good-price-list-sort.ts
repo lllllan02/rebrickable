@@ -43,6 +43,7 @@ export type SetGoodPriceListItem = {
   bricktimeLaunchDate: string | null;
   bricktimeRetiredDate: string | null;
   bricktimeSalesStatus: string | null;
+  bricktimeSalesStatusFetchedAt: string | null;
   bricktimeWeight: string | null;
   bricktimeBuildingTime: string | null;
   bricktimePriceHistory: string | null;

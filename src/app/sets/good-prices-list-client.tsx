@@ -42,7 +42,7 @@ import {
   hasBricktimePriceHistoryForCurrentMonth,
   parseBricktimePriceHistoryJson,
 } from "@/lib/bricktime-price-history";
-import { isBricktimeRetiredSalesStatus } from "@/lib/set-good-price-format";
+import { shouldHideBricktimeSalesStatusRefresh } from "@/lib/set-good-price-format";
 
 export type GoodPriceListRowProps = SetGoodPriceListItem & {
   title: string;
@@ -92,6 +92,7 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
       bricktimeLaunchDate: item.bricktimeLaunchDate,
       bricktimeRetiredDate: item.bricktimeRetiredDate,
       bricktimeSalesStatus: item.bricktimeSalesStatus,
+      bricktimeSalesStatusFetchedAt: item.bricktimeSalesStatusFetchedAt,
       bricktimeWeight: item.bricktimeWeight,
       bricktimeBuildingTime: item.bricktimeBuildingTime,
       bricktimePriceHistory: parseBricktimePriceHistoryJson(item.bricktimePriceHistory),
@@ -224,8 +225,9 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
             const hidePriceHistoryRefresh = hasBricktimePriceHistoryForCurrentMonth(
               parsedPriceHistory
             );
-            const hideSalesStatusRefresh = isBricktimeRetiredSalesStatus(
-              item.bricktimeSalesStatus
+            const hideSalesStatusRefresh = shouldHideBricktimeSalesStatusRefresh(
+              item.bricktimeSalesStatus,
+              item.bricktimeSalesStatusFetchedAt
             );
             const hideGobricksCompare =
               typeof item.gobricksPriceCny === "number" && Number.isFinite(item.gobricksPriceCny);
@@ -250,6 +252,7 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
               bricktimeLaunchDate={item.bricktimeLaunchDate}
               bricktimeRetiredDate={item.bricktimeRetiredDate}
               bricktimeSalesStatus={item.bricktimeSalesStatus}
+              bricktimeSalesStatusFetchedAt={item.bricktimeSalesStatusFetchedAt}
               bricktimeWeight={item.bricktimeWeight}
               bricktimeBuildingTime={item.bricktimeBuildingTime}
               bricktimePriceHistory={item.bricktimePriceHistory}

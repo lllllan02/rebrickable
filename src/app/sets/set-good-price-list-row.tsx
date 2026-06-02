@@ -12,6 +12,7 @@ import { goodPriceRowActionsClass } from "@/lib/set-good-price-buttons";
 import {
   formatDiscountVsOfficialPrice,
   formatBricktimeSalesStatusBrief,
+  formatBricktimeSalesStatusFetchedLabel,
   formatSetGoodPriceCny,
   formatSetGoodPricePerPiece,
 } from "@/lib/set-good-price-format";
@@ -44,6 +45,7 @@ function SetCatalogMetaLine({
   numParts,
   perPieceLabel,
   salesStatus,
+  salesStatusFetchedAt,
   onPartsClick,
 }: {
   setNum: string;
@@ -51,6 +53,7 @@ function SetCatalogMetaLine({
   numParts: number | null;
   perPieceLabel?: string | null;
   salesStatus?: string | null;
+  salesStatusFetchedAt?: string | null;
   onPartsClick?: () => void;
 }) {
   const items: ReactNode[] = [
@@ -98,13 +101,23 @@ function SetCatalogMetaLine({
   const salesBrief = formatBricktimeSalesStatusBrief(salesStatus);
   if (salesBrief) {
     const retired = salesBrief === "绝版";
+    const queryLabel =
+      !retired ? formatBricktimeSalesStatusFetchedLabel(salesStatusFetchedAt) : null;
+    const statusTitle = [salesStatus?.trim(), queryLabel ? `查询于 ${queryLabel}` : null]
+      .filter(Boolean)
+      .join(" · ");
     items.push(
       <span
         key="sales"
-        title={salesStatus?.trim() || undefined}
+        title={statusTitle || undefined}
         className={retired ? "font-medium text-red-400/95" : "text-[var(--muted-2)]"}
       >
         {salesBrief}
+        {queryLabel ? (
+          <span className="ml-0.5 font-mono tabular-nums text-[var(--muted-2)]/80">
+            ·{queryLabel}
+          </span>
+        ) : null}
       </span>
     );
   }
@@ -140,6 +153,7 @@ export function SetGoodPriceListRow({
   bricktimeLaunchDate,
   bricktimeRetiredDate,
   bricktimeSalesStatus,
+  bricktimeSalesStatusFetchedAt,
   bricktimeWeight,
   bricktimeBuildingTime,
   bricktimePriceHistory,
@@ -170,6 +184,7 @@ export function SetGoodPriceListRow({
   bricktimeLaunchDate?: string | null;
   bricktimeRetiredDate?: string | null;
   bricktimeSalesStatus?: string | null;
+  bricktimeSalesStatusFetchedAt?: string | null;
   bricktimeWeight?: string | null;
   bricktimeBuildingTime?: string | null;
   bricktimePriceHistory?: string | null;
@@ -276,6 +291,7 @@ export function SetGoodPriceListRow({
                 numParts={numParts}
                 perPieceLabel={perPieceLabel}
                 salesStatus={bricktimeSalesStatus}
+                salesStatusFetchedAt={bricktimeSalesStatusFetchedAt}
                 onPartsClick={onPartsClick}
               />
             </div>

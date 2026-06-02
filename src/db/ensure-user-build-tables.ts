@@ -132,6 +132,7 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       bricktime_launch_date TEXT,
       bricktime_retired_date TEXT,
       bricktime_sales_status TEXT,
+      bricktime_sales_status_fetched_at TEXT,
       bricktime_weight TEXT,
       bricktime_building_time TEXT,
       updated_at TEXT NOT NULL
@@ -231,6 +232,11 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     }
     if (!gpCols.has("bricktime_sales_status")) {
       sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_sales_status TEXT`);
+    }
+    if (!gpCols.has("bricktime_sales_status_fetched_at")) {
+      sqlite.exec(
+        `ALTER TABLE build_set_good_prices ADD COLUMN bricktime_sales_status_fetched_at TEXT`
+      );
     }
     if (!gpCols.has("bricktime_weight")) {
       sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_weight TEXT`);

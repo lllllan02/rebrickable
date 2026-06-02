@@ -56,6 +56,7 @@ export type FetchSetGoodPriceSalesStatusResult =
       launchDate: string | null;
       retiredDate: string | null;
       salesStatus: string | null;
+      salesStatusFetchedAt?: string;
       weight: string | null;
       buildingTime: string | null;
     }
@@ -225,11 +226,15 @@ async function saveBricktimeSalesStatusForSet(
     weight: res.weight,
     buildingTime: res.buildingTime,
   });
+  const salesStatusFetchedAt = new Date().toISOString();
 
   const db = getUserDb();
   await db
     .update(buildSetGoodPrices)
-    .set(bricktimeDbMetaPatch(mergedMeta))
+    .set({
+      ...bricktimeDbMetaPatch(mergedMeta),
+      bricktimeSalesStatusFetchedAt: salesStatusFetchedAt,
+    })
     .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
 
   return {
@@ -237,6 +242,7 @@ async function saveBricktimeSalesStatusForSet(
     launchDate: mergedMeta.launchDate,
     retiredDate: mergedMeta.retiredDate,
     salesStatus: mergedMeta.salesStatus,
+    salesStatusFetchedAt,
     weight: mergedMeta.weight,
     buildingTime: mergedMeta.buildingTime,
   };
@@ -275,6 +281,7 @@ function parsePreviewBricktime(raw: unknown):
       launchDate: string | null;
       retiredDate: string | null;
       salesStatus: string | null;
+      salesStatusFetchedAt?: string | null;
       weight: string | null;
       buildingTime: string | null;
       priceHistory: BricktimePriceHistoryPoint[];
@@ -285,6 +292,12 @@ function parsePreviewBricktime(raw: unknown):
   const fetchedAtRaw = typeof o.bricktimeFetchedAt === "string" ? o.bricktimeFetchedAt.trim() : "";
   if (!fetchedAtRaw.length || Number.isNaN(Date.parse(fetchedAtRaw))) return null;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const salesStatusFetchedAtRaw =
+    typeof o.salesStatusFetchedAt === "string" ? o.salesStatusFetchedAt.trim() : "";
+  const salesStatusFetchedAt =
+    salesStatusFetchedAtRaw.length > 0 && !Number.isNaN(Date.parse(salesStatusFetchedAtRaw))
+      ? salesStatusFetchedAtRaw
+      : null;
   const priceHistory = Array.isArray(o.priceHistory)
     ? normalizeBricktimePriceHistoryRows(o.priceHistory as Record<string, unknown>[])
     : [];
@@ -297,6 +310,7 @@ function parsePreviewBricktime(raw: unknown):
     launchDate: str(o.launchDate),
     retiredDate: str(o.retiredDate),
     salesStatus: str(o.salesStatus),
+    salesStatusFetchedAt,
     weight: str(o.weight),
     buildingTime: str(o.buildingTime),
     priceHistory,
@@ -315,6 +329,7 @@ async function saveBricktimePreviewForSet(
       bricktimeLowestPrice: buildSetGoodPrices.bricktimeLowestPrice,
       bricktimeRecentLowPrice: buildSetGoodPrices.bricktimeRecentLowPrice,
       bricktimeFetchedAt: buildSetGoodPrices.bricktimeFetchedAt,
+      bricktimeSalesStatusFetchedAt: buildSetGoodPrices.bricktimeSalesStatusFetchedAt,
     })
     .from(buildSetGoodPrices)
     .where(eq(buildSetGoodPrices.setNum, canonicalSetNum))
@@ -344,6 +359,14 @@ async function saveBricktimePreviewForSet(
         preview.recentLowPrice != null
         ? preview.bricktimeFetchedAt
         : existing?.bricktimeFetchedAt ?? preview.bricktimeFetchedAt,
+      ...(preview.salesStatus != null
+        ? {
+            bricktimeSalesStatusFetchedAt:
+              preview.salesStatusFetchedAt ??
+              existing?.bricktimeSalesStatusFetchedAt ??
+              new Date().toISOString(),
+          }
+        : {}),
       ...bricktimeDbMetaPatch(mergedMeta),
       ...(preview.priceHistory.length > 0
         ? bricktimeDbHistoryPatch(preview.priceHistory)

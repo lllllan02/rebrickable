@@ -356,6 +356,8 @@ export const buildSetGoodPrices = sqliteTable(
     bricktimeRetiredDate: text("bricktime_retired_date"),
     /** Bricktime 销售状态（如「新品」「绝版」） */
     bricktimeSalesStatus: text("bricktime_sales_status"),
+    /** 最近一次 Bricktime 销售状态抓取完成时间（ISO） */
+    bricktimeSalesStatusFetchedAt: text("bricktime_sales_status_fetched_at"),
     /** Bricktime 重量 */
     bricktimeWeight: text("bricktime_weight"),
     /** Bricktime 拼搭时间 */
