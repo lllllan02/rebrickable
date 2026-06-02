@@ -7,6 +7,7 @@ import {
   clearSetGoodPriceAction,
   previewSetGoodPriceBricktimeAction,
   previewSetGoodPriceGobricksCompareAction,
+  previewSetGoodPriceSalesStatusAction,
   saveSetGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
 import {
@@ -97,6 +98,7 @@ export function SetGoodPriceEditForm({
   const [persistedBricktimeAt, setPersistedBricktimeAt] = useState<string | null>(null);
   const [gobricksComparedAt, setGobricksComparedAt] = useState<string | null>(null);
   const [bricktimeLoading, setBricktimeLoading] = useState(false);
+  const [salesStatusLoading, setSalesStatusLoading] = useState(false);
   const [gobricksLoading, setGobricksLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [priceHistory, setPriceHistory] = useState<BricktimePriceHistoryPoint[]>([]);
@@ -156,15 +158,34 @@ export function SetGoodPriceEditForm({
         goodPrice: res.goodPrice,
       }));
       setOfficialInput(res.officialPrice ?? "");
-      setBricktimeMeta({
-        launchDate: res.launchDate,
-        retiredDate: res.retiredDate,
-        salesStatus: res.salesStatus,
-        weight: res.weight,
-        buildingTime: res.buildingTime,
-      });
+      setBricktimeMeta((prev) => ({
+        launchDate: res.launchDate ?? prev.launchDate,
+        retiredDate: res.retiredDate ?? prev.retiredDate,
+        salesStatus: res.salesStatus ?? prev.salesStatus,
+        weight: res.weight ?? prev.weight,
+        buildingTime: res.buildingTime ?? prev.buildingTime,
+      }));
       setPriceHistory(res.priceHistory);
       setBricktimeFetchedAt(new Date().toISOString());
+    });
+  };
+
+  const fetchSalesStatusPreview = () => {
+    setPreviewError(null);
+    setSalesStatusLoading(true);
+    void previewSetGoodPriceSalesStatusAction({ setNum: setNumInput }).then((res) => {
+      setSalesStatusLoading(false);
+      if (!res.ok) {
+        setPreviewError(res.error);
+        return;
+      }
+      setBricktimeMeta((prev) => ({
+        launchDate: res.launchDate ?? prev.launchDate,
+        retiredDate: res.retiredDate ?? prev.retiredDate,
+        salesStatus: res.salesStatus ?? prev.salesStatus,
+        weight: res.weight ?? prev.weight,
+        buildingTime: res.buildingTime ?? prev.buildingTime,
+      }));
     });
   };
 
@@ -368,15 +389,23 @@ export function SetGoodPriceEditForm({
             <button
               type="button"
               onClick={fetchBricktimePreview}
-              disabled={!canPreview || bricktimeLoading || gobricksLoading}
+              disabled={!canPreview || bricktimeLoading || salesStatusLoading || gobricksLoading}
               className={goodPriceBtnSecondary}
             >
               {bricktimeLoading ? "查询中…" : "查官方价"}
             </button>
             <button
               type="button"
+              onClick={fetchSalesStatusPreview}
+              disabled={!canPreview || bricktimeLoading || salesStatusLoading || gobricksLoading}
+              className={goodPriceBtnSecondary}
+            >
+              {salesStatusLoading ? "查询中…" : "查销售状态"}
+            </button>
+            <button
+              type="button"
               onClick={fetchGobricksPreview}
-              disabled={!canPreview || bricktimeLoading || gobricksLoading}
+              disabled={!canPreview || bricktimeLoading || salesStatusLoading || gobricksLoading}
               className={goodPriceBtnSecondary}
             >
               {gobricksLoading ? "比价中…" : "高砖比价"}
@@ -409,7 +438,7 @@ export function SetGoodPriceEditForm({
           </>
         ) : (
           <p className="text-xs text-[var(--muted-2)]">
-            可手动录入官方原价，或查官方价/高砖比价后再录入入手价。
+            可手动录入官方原价，或分别查官方价/销售状态/高砖比价后再录入入手价。
           </p>
         )}
       </div>
