@@ -91,15 +91,22 @@ function PriceHistoryChart({
     [history, officialPrice]
   );
 
-  const { minPrice, maxPrice } = useMemo(() => {
-    if (history.length === 0) return { minPrice: null, maxPrice: null };
+  const { minPrice, minPriceIndex, maxPrice } = useMemo(() => {
+    if (history.length === 0) {
+      return { minPrice: null, minPriceIndex: null, maxPrice: null };
+    }
     let min = history[0]!.price;
+    let minIndex = 0;
     let max = history[0]!.price;
-    for (const row of history) {
-      min = Math.min(min, row.price);
+    for (let index = 0; index < history.length; index++) {
+      const row = history[index]!;
+      if (row.price <= min) {
+        min = row.price;
+        minIndex = index;
+      }
       max = Math.max(max, row.price);
     }
-    return { minPrice: min, maxPrice: max };
+    return { minPrice: min, minPriceIndex: minIndex, maxPrice: max };
   }, [history]);
 
   if (!chart) return null;
@@ -206,7 +213,7 @@ function PriceHistoryChart({
 
         {points.map((point, index) => {
           const active = activeIndex === index;
-          const isMin = minPrice != null && point.price === minPrice;
+          const isMin = minPrice != null && index === minPriceIndex;
           const isMax = maxPrice != null && point.price === maxPrice;
           const isExtreme = isMin || isMax;
           const dotRadius = active ? 5.5 : isExtreme ? 5 : 3.5;
