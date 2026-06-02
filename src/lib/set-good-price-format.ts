@@ -56,11 +56,20 @@ export function formatStudVolumeCoverageRatio(ratio: number | null | undefined):
   return `${(ratio * 100).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}%`;
 }
 
+const BRICKTIME_PRICE_INPUT_RE = /^[\d.,]+(?:\s*[~～-]\s*[\d.,]+)?$/;
+
 /** Bricktime 价格字符串（纯数字或区间）前加 ¥ */
 export function formatBricktimePriceValue(value: string | null | undefined): string | null {
   const s = value?.trim();
   if (!s) return null;
-  return /^[\d.,]+(?:\s*[~～-]\s*[\d.,]+)?$/.test(s) ? `¥${s}` : s;
+  return BRICKTIME_PRICE_INPUT_RE.test(s) ? `¥${s}` : s;
+}
+
+/** 校验并规范官方原价输入；空为 null，无效为 undefined */
+export function parseOptionalBricktimePriceInput(raw: unknown): string | null | undefined {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  return BRICKTIME_PRICE_INPUT_RE.test(s) ? s : undefined;
 }
 
 function parseBricktimePriceAmount(raw: string): number | null {

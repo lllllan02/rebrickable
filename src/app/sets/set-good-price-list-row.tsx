@@ -157,6 +157,8 @@ export function SetGoodPriceListRow({
   sortKind,
   actions,
   onPartsClick,
+  isEditing,
+  editForm,
 }: {
   setNum: string;
   title: string;
@@ -177,6 +179,8 @@ export function SetGoodPriceListRow({
   sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
   onPartsClick?: () => void;
+  isEditing?: boolean;
+  editForm?: ReactNode;
 }) {
   const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
   const heat = computeSetGoodPriceHeat({
@@ -188,7 +192,9 @@ export function SetGoodPriceListRow({
   });
 
   return (
-    <li className="result-card overflow-hidden p-0">
+    <li
+      className={`result-card overflow-hidden p-0 ${isEditing ? "ring-1 ring-[var(--accent)]/35" : ""}`}
+    >
       <div className="grid w-full grid-cols-[5.5rem_minmax(0,1fr)] items-stretch gap-3 p-3 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:gap-4 sm:p-3.5 lg:grid-cols-[8.5rem_minmax(0,1fr)]">
         <Link
           href={detailHref}
@@ -233,38 +239,44 @@ export function SetGoodPriceListRow({
             {actions ? <div className={goodPriceRowActionsClass}>{actions}</div> : null}
           </div>
 
-          <div className="grid w-full grid-cols-2 gap-2 sm:gap-3">
-            <PriceColumn
-              label="全新"
-              priceCny={priceNewCny}
-              officialPrice={bricktimeOfficialPrice}
-              numParts={numParts}
-              highlighted={sortKind === "new"}
-            />
-            <PriceColumn
-              label="二手"
-              priceCny={priceUsedCny}
-              officialPrice={bricktimeOfficialPrice}
-              numParts={numParts}
-              highlighted={sortKind === "used"}
-            />
-          </div>
+          {isEditing && editForm ? (
+            editForm
+          ) : (
+            <>
+              <div className="grid w-full grid-cols-2 gap-2 sm:gap-3">
+                <PriceColumn
+                  label="全新"
+                  priceCny={priceNewCny}
+                  officialPrice={bricktimeOfficialPrice}
+                  numParts={numParts}
+                  highlighted={sortKind === "new"}
+                />
+                <PriceColumn
+                  label="二手"
+                  priceCny={priceUsedCny}
+                  officialPrice={bricktimeOfficialPrice}
+                  numParts={numParts}
+                  highlighted={sortKind === "used"}
+                />
+              </div>
 
-          <SetGoodPriceReferencePanel
-            preview={{
-              officialPrice: bricktimeOfficialPrice ?? null,
-              lowestPrice: bricktimeLowestPrice ?? null,
-              goodPrice: bricktimeGoodPrice ?? null,
-              gobricksPriceCny: gobricksPriceCny ?? null,
-              gobricksMatchPercent: gobricksMatchPercent ?? null,
-            }}
-          />
+              <SetGoodPriceReferencePanel
+                preview={{
+                  officialPrice: bricktimeOfficialPrice ?? null,
+                  lowestPrice: bricktimeLowestPrice ?? null,
+                  goodPrice: bricktimeGoodPrice ?? null,
+                  gobricksPriceCny: gobricksPriceCny ?? null,
+                  gobricksMatchPercent: gobricksMatchPercent ?? null,
+                }}
+              />
 
-          <SetGoodPriceTimestampsLine
-            priceUpdatedAt={updatedAtIso}
-            bricktimeFetchedAt={bricktimeFetchedAt}
-            gobricksComparedAt={gobricksComparedAt}
-          />
+              <SetGoodPriceTimestampsLine
+                priceUpdatedAt={updatedAtIso}
+                bricktimeFetchedAt={bricktimeFetchedAt}
+                gobricksComparedAt={gobricksComparedAt}
+              />
+            </>
+          )}
         </div>
       </div>
     </li>

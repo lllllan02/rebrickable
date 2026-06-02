@@ -15,9 +15,9 @@ import {
   type SetGoodPriceBomDialogTarget,
 } from "@/app/sets/set-good-price-bom-dialog";
 import {
-  SetGoodPriceEditDialog,
+  SetGoodPriceEditForm,
   type SetGoodPriceEditDraft,
-} from "@/app/sets/set-good-price-edit-dialog";
+} from "@/app/sets/set-good-price-edit-form";
 import { SetGoodPriceListRow } from "@/app/sets/set-good-price-list-row";
 import {
   goodPriceBtnDanger,
@@ -52,12 +52,16 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
   const [bomTarget, setBomTarget] = useState<SetGoodPriceBomDialogTarget | null>(null);
 
   const openCreate = () => {
-    setDraft({
-      mode: "create",
-      setNum: "",
-      priceNewCny: null,
-      priceUsedCny: null,
-    });
+    setDraft((prev) =>
+      prev?.mode === "create"
+        ? null
+        : {
+            mode: "create",
+            setNum: "",
+            priceNewCny: null,
+            priceUsedCny: null,
+          }
+    );
   };
 
   const openEdit = (item: GoodPriceListRowProps) => {
@@ -67,6 +71,13 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
       catalogName: item.catalogName,
       priceNewCny: item.priceNewCny,
       priceUsedCny: item.priceUsedCny,
+      bricktimeOfficialPrice: item.bricktimeOfficialPrice,
+      bricktimeGoodPrice: item.bricktimeGoodPrice,
+      bricktimeLowestPrice: item.bricktimeLowestPrice,
+      bricktimeFetchedAt: item.bricktimeFetchedAt,
+      gobricksPriceCny: item.gobricksPriceCny,
+      gobricksMatchPercent: item.gobricksMatchPercent,
+      gobricksComparedAt: item.gobricksComparedAt,
     });
   };
 
@@ -123,9 +134,19 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] px-1 pb-3">
         <GoodPriceListSortControl sortState={sortState} heatFilter={heatFilter} />
         <button type="button" onClick={openCreate} className={goodPriceBtnPrimary}>
-          添加好价
+          {draft?.mode === "create" ? "取消添加" : "添加好价"}
         </button>
       </div>
+
+      {draft?.mode === "create" ? (
+        <div className="mb-3">
+          <SetGoodPriceEditForm
+            draft={draft}
+            variant="create"
+            onClose={() => setDraft(null)}
+          />
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <div className="px-4 py-10 text-center text-sm text-[var(--muted)]">
@@ -135,7 +156,9 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {items.map((item) => (
+          {items.map((item) => {
+            const isEditing = draft?.mode === "edit" && draft.setNum === item.setNum;
+            return (
             <SetGoodPriceListRow
               key={item.setNum}
               setNum={item.setNum}
@@ -155,6 +178,12 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
               bricktimeRecentLowPrice={item.bricktimeRecentLowPrice}
               bricktimeFetchedAt={item.bricktimeFetchedAt}
               sortKind={sortState.kind}
+              isEditing={isEditing}
+              editForm={
+                isEditing && draft ? (
+                  <SetGoodPriceEditForm draft={draft} onClose={() => setDraft(null)} />
+                ) : undefined
+              }
               onPartsClick={
                 typeof item.numParts === "number" && item.numParts > 0
                   ? () => setBomTarget({ setNum: item.setNum, title: item.title })
@@ -182,11 +211,11 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => openEdit(item)}
+                    onClick={() => (isEditing ? setDraft(null) : openEdit(item))}
                     disabled={pending}
                     className={goodPriceBtnSecondary}
                   >
-                    编辑
+                    {isEditing ? "取消" : "编辑"}
                   </button>
                   <button
                     type="button"
@@ -207,11 +236,11 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
                 </>
               }
             />
-          ))}
+            );
+          })}
         </ul>
       )}
 
-      <SetGoodPriceEditDialog draft={draft} onClose={() => setDraft(null)} />
       <SetGoodPriceBomDialog target={bomTarget} onClose={() => setBomTarget(null)} />
     </>
   );

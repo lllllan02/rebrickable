@@ -199,6 +199,13 @@ export async function saveSetGoodPriceAction(input: {
 
     const updatedAt = new Date().toISOString();
     const db = getUserDb();
+    const existingRows = await db
+      .select({ setNum: buildSetGoodPrices.setNum })
+      .from(buildSetGoodPrices)
+      .where(eq(buildSetGoodPrices.setNum, canonicalSetNum))
+      .limit(1);
+    const isNewEntry = existingRows.length === 0;
+
     await db
       .insert(buildSetGoodPrices)
       .values({
@@ -221,7 +228,7 @@ export async function saveSetGoodPriceAction(input: {
     const previewBricktime = parsePreviewBricktime(input.previewBricktime);
     if (previewBricktime) {
       await saveBricktimePreviewForSet(canonicalSetNum, previewBricktime);
-    } else {
+    } else if (isNewEntry) {
       await saveBricktimePricesForSet(canonicalSetNum);
     }
 
