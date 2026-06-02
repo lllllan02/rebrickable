@@ -42,7 +42,7 @@ function parseOptionalPriceCny(raw: unknown): number | null {
   return Math.round(n * 100) / 100;
 }
 
-async function saveBricktimePricesForSet(
+async function fetchBricktimePricesForSet(
   canonicalSetNum: string
 ): Promise<FetchSetGoodPriceBricktimeResult> {
   const bricktimeSetId = bricktimeSetIdFromSetNum(canonicalSetNum);
@@ -52,17 +52,6 @@ async function saveBricktimePricesForSet(
 
   try {
     const prices = await fetchBricktimeSetPrices(bricktimeSetId);
-    const db = getUserDb();
-    await db
-      .update(buildSetGoodPrices)
-      .set({
-        bricktimeOfficialPrice: prices.officialPrice,
-        bricktimeGoodPrice: prices.goodPrice,
-        bricktimeLowestPrice: prices.lowestPrice,
-        bricktimeRecentLowPrice: prices.recentLowPrice,
-        bricktimeFetchedAt: new Date().toISOString(),
-      })
-      .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
     return { ok: true, ...prices };
   } catch (e) {
     const msg =
@@ -73,10 +62,112 @@ async function saveBricktimePricesForSet(
   }
 }
 
+async function saveBricktimePricesForSet(
+  canonicalSetNum: string
+): Promise<FetchSetGoodPriceBricktimeResult> {
+  const res = await fetchBricktimePricesForSet(canonicalSetNum);
+  if (!res.ok) return res;
+
+  const db = getUserDb();
+  await db
+    .update(buildSetGoodPrices)
+    .set({
+      bricktimeOfficialPrice: res.officialPrice,
+      bricktimeGoodPrice: res.goodPrice,
+      bricktimeLowestPrice: res.lowestPrice,
+      bricktimeRecentLowPrice: res.recentLowPrice,
+      bricktimeFetchedAt: new Date().toISOString(),
+    })
+    .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
+  return res;
+}
+
+function parseGobricksMatchPercent(raw: unknown): number | null {
+  if (raw == null || String(raw).trim() === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return Math.round(n * 10) / 10;
+}
+
+function parsePreviewGobricks(raw: unknown):
+  | { gobricksPriceCny: number; gobricksMatchPercent: number | null; gobricksComparedAt: string }
+  | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const gobricksPriceCny = parseOptionalPriceCny(o.gobricksPriceCny);
+  if (gobricksPriceCny == null) return null;
+  const gobricksMatchPercent = parseGobricksMatchPercent(o.gobricksMatchPercent);
+  const comparedAtRaw = typeof o.gobricksComparedAt === "string" ? o.gobricksComparedAt.trim() : "";
+  const gobricksComparedAt =
+    comparedAtRaw.length > 0 && !Number.isNaN(Date.parse(comparedAtRaw))
+      ? comparedAtRaw
+      : new Date().toISOString();
+  return { gobricksPriceCny, gobricksMatchPercent, gobricksComparedAt };
+}
+
+function parsePreviewBricktime(raw: unknown):
+  | {
+      officialPrice: string | null;
+      goodPrice: string | null;
+      lowestPrice: string | null;
+      recentLowPrice: string | null;
+      bricktimeFetchedAt: string;
+    }
+  | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const fetchedAtRaw = typeof o.bricktimeFetchedAt === "string" ? o.bricktimeFetchedAt.trim() : "";
+  if (!fetchedAtRaw.length || Number.isNaN(Date.parse(fetchedAtRaw))) return null;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  return {
+    officialPrice: str(o.officialPrice),
+    goodPrice: str(o.goodPrice),
+    lowestPrice: str(o.lowestPrice),
+    recentLowPrice: str(o.recentLowPrice),
+    bricktimeFetchedAt: fetchedAtRaw,
+  };
+}
+
+async function saveBricktimePreviewForSet(
+  canonicalSetNum: string,
+  preview: NonNullable<ReturnType<typeof parsePreviewBricktime>>
+): Promise<void> {
+  const db = getUserDb();
+  await db
+    .update(buildSetGoodPrices)
+    .set({
+      bricktimeOfficialPrice: preview.officialPrice,
+      bricktimeGoodPrice: preview.goodPrice,
+      bricktimeLowestPrice: preview.lowestPrice,
+      bricktimeRecentLowPrice: preview.recentLowPrice,
+      bricktimeFetchedAt: preview.bricktimeFetchedAt,
+    })
+    .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
+}
+
+async function saveGobricksPreviewForSet(
+  canonicalSetNum: string,
+  preview: NonNullable<ReturnType<typeof parsePreviewGobricks>>
+): Promise<void> {
+  const db = getUserDb();
+  await db
+    .update(buildSetGoodPrices)
+    .set({
+      gobricksPriceCny: preview.gobricksPriceCny,
+      gobricksMatchPercent: preview.gobricksMatchPercent,
+      gobricksComparedAt: preview.gobricksComparedAt,
+    })
+    .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
+}
+
 export async function saveSetGoodPriceAction(input: {
   setNum: string;
   priceNewCny?: unknown;
   priceUsedCny?: unknown;
+  /** 弹框内已预览的高砖比价，保存时一并写入 */
+  previewGobricks?: unknown;
+  /** 弹框内已预览的 Bricktime 参考价，保存时一并写入（避免重复请求） */
+  previewBricktime?: unknown;
 }): Promise<SaveSetGoodPriceResult> {
   const setNum = input.setNum.trim();
   if (!setNum || setNum.length > BUILD_UPLOAD_MAX_ID_LEN) {
@@ -122,7 +213,18 @@ export async function saveSetGoodPriceAction(input: {
         set: { priceNewCny, priceUsedCny, channelNew: null, updatedAt },
       });
 
-    await saveBricktimePricesForSet(canonicalSetNum);
+    const previewGobricks = parsePreviewGobricks(input.previewGobricks);
+    if (previewGobricks) {
+      await saveGobricksPreviewForSet(canonicalSetNum, previewGobricks);
+    }
+
+    const previewBricktime = parsePreviewBricktime(input.previewBricktime);
+    if (previewBricktime) {
+      await saveBricktimePreviewForSet(canonicalSetNum, previewBricktime);
+    } else {
+      await saveBricktimePricesForSet(canonicalSetNum);
+    }
+
     revalidateSetGoodPricePaths(canonicalSetNum);
     return { ok: true };
   } catch {
@@ -176,49 +278,100 @@ export async function fetchSetGoodPriceGobricksCompareAction(input: {
     }
     const canonicalSetNum = resolved.setNum;
 
-    const bom = await loadSetOfficialInventoryBomLines(canonicalSetNum);
-    if (bom.length === 0) {
-      return { ok: false, error: "本地无该套装官方库存，无法对照高砖。" };
-    }
+    const compareRes = await fetchGobricksCompareForSet(canonicalSetNum);
+    if (!compareRes.ok) return compareRes;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), GOBRICKS_COMPARE_TIMEOUT_MS);
-    let merged: unknown;
-    try {
-      merged = await fetchGobricksLego2MergedPayload(bomToGobricksTestList(bom), {
-        signal: controller.signal,
-      });
-    } catch (e) {
-      const msg = controller.signal.aborted
-        ? "请求高砖超时，请稍后重试。"
-        : e instanceof Error && e.message.trim()
-          ? e.message.trim()
-          : "请求高砖失败，请稍后重试。";
-      return { ok: false, error: msg };
-    } finally {
-      clearTimeout(timer);
-    }
-
-    const stats = computeGobricksSetBomCompareStats(bom, merged);
     const gobricksComparedAt = new Date().toISOString();
     const db = getUserDb();
     await db
       .update(buildSetGoodPrices)
       .set({
-        gobricksPriceCny: stats.totalPriceCny,
-        gobricksMatchPercent: stats.matchPercent,
+        gobricksPriceCny: compareRes.gobricksPriceCny,
+        gobricksMatchPercent: compareRes.gobricksMatchPercent,
         gobricksComparedAt,
       })
       .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
 
     revalidateSetGoodPricePaths(canonicalSetNum);
-    return {
-      ok: true,
-      gobricksPriceCny: stats.totalPriceCny,
-      gobricksMatchPercent: stats.matchPercent,
-      bomPieceQty: stats.bomPieceQty,
-      partMissPieceQty: stats.partMissPieceQty,
-    };
+    return compareRes;
+  } catch {
+    return { ok: false, error: "高砖比价失败，请重试。" };
+  }
+}
+
+async function fetchGobricksCompareForSet(
+  canonicalSetNum: string
+): Promise<FetchSetGoodPriceGobricksCompareResult> {
+  const bom = await loadSetOfficialInventoryBomLines(canonicalSetNum);
+  if (bom.length === 0) {
+    return { ok: false, error: "本地无该套装官方库存，无法对照高砖。" };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GOBRICKS_COMPARE_TIMEOUT_MS);
+  let merged: unknown;
+  try {
+    merged = await fetchGobricksLego2MergedPayload(bomToGobricksTestList(bom), {
+      signal: controller.signal,
+    });
+  } catch (e) {
+    const msg = controller.signal.aborted
+      ? "请求高砖超时，请稍后重试。"
+      : e instanceof Error && e.message.trim()
+        ? e.message.trim()
+        : "请求高砖失败，请稍后重试。";
+    return { ok: false, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const stats = computeGobricksSetBomCompareStats(bom, merged);
+  return {
+    ok: true,
+    gobricksPriceCny: stats.totalPriceCny,
+    gobricksMatchPercent: stats.matchPercent,
+    bomPieceQty: stats.bomPieceQty,
+    partMissPieceQty: stats.partMissPieceQty,
+  };
+}
+
+/** 弹框内预览 Bricktime 参考价，不写库 */
+export async function previewSetGoodPriceBricktimeAction(input: {
+  setNum: string;
+}): Promise<FetchSetGoodPriceBricktimeResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  try {
+    const catalogDb = getCatalogDb();
+    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+    return fetchBricktimePricesForSet(resolved.setNum);
+  } catch {
+    return { ok: false, error: "Bricktime 价格查询失败，请重试。" };
+  }
+}
+
+/** 弹框内预览高砖比价，不写库 */
+export async function previewSetGoodPriceGobricksCompareAction(input: {
+  setNum: string;
+}): Promise<FetchSetGoodPriceGobricksCompareResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  try {
+    const catalogDb = getCatalogDb();
+    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+    return fetchGobricksCompareForSet(resolved.setNum);
   } catch {
     return { ok: false, error: "高砖比价失败，请重试。" };
   }

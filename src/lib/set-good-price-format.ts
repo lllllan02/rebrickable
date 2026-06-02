@@ -56,6 +56,13 @@ export function formatStudVolumeCoverageRatio(ratio: number | null | undefined):
   return `${(ratio * 100).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}%`;
 }
 
+/** Bricktime 价格字符串（纯数字或区间）前加 ¥ */
+export function formatBricktimePriceValue(value: string | null | undefined): string | null {
+  const s = value?.trim();
+  if (!s) return null;
+  return /^[\d.,]+(?:\s*[~～-]\s*[\d.,]+)?$/.test(s) ? `¥${s}` : s;
+}
+
 /** 高砖零件匹配占比（0–100） */
 export function formatGobricksMatchPercent(percent: number | null | undefined): string | null {
   if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100) {
