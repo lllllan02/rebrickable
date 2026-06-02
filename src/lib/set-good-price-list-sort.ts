@@ -1,7 +1,7 @@
 import { discountFoldVsOfficialPrice } from "@/lib/set-good-price-format";
 
 export type SetGoodPriceSortKind = "new" | "used";
-export type SetGoodPriceSortMetric = "price" | "discount";
+export type SetGoodPriceSortMetric = "price" | "per_piece" | "discount";
 export type SetGoodPriceSortDir = "asc" | "desc";
 
 export const SET_GOOD_PRICE_DEFAULT_KIND: SetGoodPriceSortKind = "new";
@@ -52,15 +52,16 @@ function parseKind(raw: string | undefined): SetGoodPriceSortKind | null {
 }
 
 function parseMetric(raw: string | undefined): SetGoodPriceSortMetric | null {
-  if (raw === "price" || raw === "discount") return raw;
+  if (raw === "price" || raw === "per_piece" || raw === "discount") return raw;
   return null;
 }
 
 /** 兼容旧版 ?sort=price|per_piece|per_stud_unit|discount */
 function metricFromLegacySort(sortRaw: string | undefined): SetGoodPriceSortMetric | null {
   if (sortRaw === "price") return "price";
+  if (sortRaw === "per_piece") return "per_piece";
   if (sortRaw === "discount") return "discount";
-  if (sortRaw === "per_piece" || sortRaw === "per_stud_unit") return "price";
+  if (sortRaw === "per_stud_unit") return "price";
   return null;
 }
 
@@ -117,6 +118,13 @@ function sortMetricValue(
     return discountFoldVsOfficialPrice(price, item.bricktimeOfficialPrice);
   }
   if (price == null) return null;
+  if (metric === "per_piece") {
+    const { numParts } = item;
+    if (typeof numParts !== "number" || !Number.isFinite(numParts) || numParts <= 0) {
+      return null;
+    }
+    return price / numParts;
+  }
   return price;
 }
 
@@ -145,6 +153,7 @@ export function setGoodPriceSortKindLabel(kind: SetGoodPriceSortKind): string {
 }
 
 export function setGoodPriceSortMetricLabel(metric: SetGoodPriceSortMetric): string {
+  if (metric === "per_piece") return "单价/片";
   if (metric === "discount") return "折扣力度";
   return "总价";
 }

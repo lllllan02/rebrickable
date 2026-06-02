@@ -27,6 +27,8 @@ import {
   goodPriceBtnPrimary,
   goodPriceBtnSecondary,
 } from "@/lib/set-good-price-buttons";
+import type { SetGoodPriceHeatFilter } from "@/lib/set-good-price-heat";
+import { setGoodPriceHeatFilterLabel } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceListItem } from "@/lib/set-good-price-list-sort";
 import type { SetGoodPriceListSortState } from "@/lib/set-good-price-list-sort";
 
@@ -38,9 +40,10 @@ export type GoodPriceListRowProps = SetGoodPriceListItem & {
 type Props = {
   items: GoodPriceListRowProps[];
   sortState: SetGoodPriceListSortState;
+  heatFilter: SetGoodPriceHeatFilter;
 };
 
-export function GoodPricesListClient({ items, sortState }: Props) {
+export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [gobricksSetNum, setGobricksSetNum] = useState<string | null>(null);
@@ -118,7 +121,7 @@ export function GoodPricesListClient({ items, sortState }: Props) {
   return (
     <>
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] px-1 pb-3">
-        <GoodPriceListSortControl sortState={sortState} />
+        <GoodPriceListSortControl sortState={sortState} heatFilter={heatFilter} />
         <button type="button" onClick={openCreate} className={goodPriceBtnPrimary}>
           添加好价
         </button>
@@ -126,7 +129,9 @@ export function GoodPricesListClient({ items, sortState }: Props) {
 
       {items.length === 0 ? (
         <div className="px-4 py-10 text-center text-sm text-[var(--muted)]">
-          尚无记录。点击右上角「添加好价」录入套装编号与价格。
+          {heatFilter.kind === "exact"
+            ? `无${setGoodPriceHeatFilterLabel(heatFilter)}的套装。再点当前圆点可取消筛选。`
+            : "尚无记录。点击右上角「添加好价」录入套装编号与价格。"}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">

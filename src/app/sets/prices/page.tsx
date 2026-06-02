@@ -13,6 +13,10 @@ import {
   sortSetGoodPriceListItems,
   type SetGoodPriceListItem,
 } from "@/lib/set-good-price-list-sort";
+import {
+  itemMatchesSetGoodPriceHeatFilter,
+  parseSetGoodPriceHeatFilter,
+} from "@/lib/set-good-price-heat";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +26,15 @@ type Props = {
     metric?: string;
     dir?: string;
     sort?: string;
+    heat?: string;
+    heatMin?: string;
   }>;
 };
 
 export default async function SetGoodPricesPage({ searchParams }: Props) {
   const sp = await searchParams;
   const sortState = parseSetGoodPriceListSort(sp);
+  const heatFilter = parseSetGoodPriceHeatFilter(sp);
   const bricktimeConfig = await loadBricktimeConfigPublic();
 
   const userDb = getUserDb();
@@ -77,7 +84,12 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
     };
   });
 
-  const items = sortSetGoodPriceListItems(merged, sortState).map((item) => ({
+  const sorted = sortSetGoodPriceListItems(merged, sortState);
+  const filtered =
+    heatFilter.kind === "exact"
+      ? sorted.filter((item) => itemMatchesSetGoodPriceHeatFilter(item, heatFilter))
+      : sorted;
+  const items = filtered.map((item) => ({
     ...item,
     title: item.catalogName?.trim() || item.setNum,
     coverUrl: heroUrls.get(item.setNum) ?? null,
@@ -92,7 +104,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
           {items.length > 0 ? (
             <>
               共 <span className="tabular-nums text-[var(--text)]">{items.length}</span>{" "}
-              套已记录入手价；成色下拉选择，总价/折扣力度重复点击切换升序与降序（折扣升序时折扣越大越靠前）。默认：全新总价升序。
+              套已记录入手价；成色与热度可筛选，总价/单价/折扣力度重复点击切换升序与降序。默认：全新总价升序。
             </>
           ) : (
             <>在此添加、编辑或删除各套装的入手好价；操作按钮在列表右上方。</>
@@ -102,7 +114,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
 
       <div className="table-shell p-2 sm:p-3">
         <BricktimeConfigPanel initialConfig={bricktimeConfig} />
-        <GoodPricesListClient items={items} sortState={sortState} />
+        <GoodPricesListClient items={items} sortState={sortState} heatFilter={heatFilter} />
       </div>
 
       <p className="text-center text-sm text-[var(--muted)]">

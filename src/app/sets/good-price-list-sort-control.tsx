@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
+import { SetGoodPriceHeatFilterDots } from "@/app/sets/set-good-price-heat-dots";
 import { setGoodPriceListHref } from "@/lib/set-good-price-list-href";
+import type { SetGoodPriceHeatFilter } from "@/lib/set-good-price-heat";
+import { heatFilterToQueryValue } from "@/lib/set-good-price-heat";
 import {
   type SetGoodPriceSortMetric,
   type SetGoodPriceListSortState,
@@ -47,6 +50,7 @@ function SortGlyph({ className, arrowDown }: { className?: string; arrowDown: bo
 
 const METRIC_ROWS: readonly { key: SetGoodPriceSortMetric; label: string }[] = [
   { key: "price", label: "总价" },
+  { key: "per_piece", label: "单价/片" },
   { key: "discount", label: "折扣力度" },
 ];
 
@@ -55,9 +59,10 @@ const selectClass =
 
 type Props = {
   sortState: SetGoodPriceListSortState;
+  heatFilter: SetGoodPriceHeatFilter;
 };
 
-export function GoodPriceListSortControl({ sortState }: Props) {
+export function GoodPriceListSortControl({ sortState, heatFilter }: Props) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const { kind, metric, dir } = sortState;
   const triggerLabel = setGoodPriceMetricTriggerLabel(sortState);
@@ -66,8 +71,23 @@ export function GoodPriceListSortControl({ sortState }: Props) {
 
   const hrefForMetric = (pick: SetGoodPriceSortMetric) =>
     setGoodPriceListHref({
-      sort: nextSetGoodPriceMetricClick(pick, sortState),
+      sortState: nextSetGoodPriceMetricClick(pick, sortState),
+      heatFilter,
     });
+
+  const hrefForHeatLevel = (level: 1 | 2 | 3) =>
+    setGoodPriceListHref({
+      sortState,
+      heatFilter:
+        heatFilter.kind === "exact" && heatFilter.level === level
+          ? { kind: "all" }
+          : { kind: "exact", level },
+    });
+
+  const heatHidden =
+    heatFilter.kind === "exact" ? (
+      <input type="hidden" name="heat" value={heatFilterToQueryValue(heatFilter)!} />
+    ) : null;
 
   const closeMenu = () => {
     const el = detailsRef.current;
@@ -90,6 +110,7 @@ export function GoodPriceListSortControl({ sortState }: Props) {
       <form method="get" action="/sets/prices" className="flex items-center gap-1.5">
         <input type="hidden" name="metric" value={metric} />
         <input type="hidden" name="dir" value={dir} />
+        {heatHidden}
         <label className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
           <span className="hidden sm:inline" aria-hidden>
             成色
@@ -146,6 +167,11 @@ export function GoodPriceListSortControl({ sortState }: Props) {
           })}
         </div>
       </details>
+
+      <div className="flex items-center gap-1.5" role="group" aria-label="热度筛选">
+        <span className="hidden text-xs text-[var(--muted)] sm:inline">热度</span>
+        <SetGoodPriceHeatFilterDots heatFilter={heatFilter} hrefForHeatLevel={hrefForHeatLevel} />
+      </div>
     </div>
   );
 }

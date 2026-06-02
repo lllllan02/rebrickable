@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { SetGoodPriceHeatBadge } from "@/app/sets/set-good-price-heat-badge";
 import { SetGoodPriceReferencePanel } from "@/app/sets/set-good-price-reference-panel";
 import { SetGoodPriceTimestampsLine } from "@/app/sets/set-good-price-timestamps-line";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
@@ -10,7 +11,9 @@ import { goodPriceRowActionsClass } from "@/lib/set-good-price-buttons";
 import {
   formatDiscountVsOfficialPrice,
   formatSetGoodPriceCny,
+  formatSetGoodPricePerPiece,
 } from "@/lib/set-good-price-format";
+import { computeSetGoodPriceHeat } from "@/lib/set-good-price-heat";
 import type { SetGoodPriceSortKind } from "@/lib/set-good-price-list-sort";
 
 function usableImgUrl(u: string | null | undefined): u is string {
@@ -85,16 +88,20 @@ function PriceColumn({
   label,
   priceCny,
   officialPrice,
+  numParts,
   highlighted,
 }: {
   label: string;
   priceCny: number | null;
   officialPrice?: string | null;
+  numParts: number | null;
   highlighted?: boolean;
 }) {
   const priceLabel = formatSetGoodPriceCny(priceCny);
   const discountLabel =
     priceCny != null ? formatDiscountVsOfficialPrice(priceCny, officialPrice) : null;
+  const perPieceLabel =
+    priceCny != null ? formatSetGoodPricePerPiece(priceCny, numParts) : null;
 
   return (
     <div
@@ -119,6 +126,13 @@ function PriceColumn({
       ) : (
         <p className="mt-1 font-mono text-sm text-[var(--muted-2)]">—</p>
       )}
+      {perPieceLabel ? (
+        <p className="mt-1.5 font-mono text-[11px] tabular-nums text-[var(--muted)]">
+          {perPieceLabel}
+        </p>
+      ) : priceLabel ? (
+        <p className="mt-1.5 text-[11px] text-[var(--muted-2)]">无片数</p>
+      ) : null}
     </div>
   );
 }
@@ -165,6 +179,13 @@ export function SetGoodPriceListRow({
   onPartsClick?: () => void;
 }) {
   const detailHref = buildSubjectDetailPath(BUILD_SUBJECT_SET, setNum);
+  const heat = computeSetGoodPriceHeat({
+    priceNewCny,
+    priceUsedCny,
+    bricktimeLowestPrice,
+    bricktimeGoodPrice,
+    gobricksPriceCny,
+  });
 
   return (
     <li className="result-card overflow-hidden p-0">
@@ -193,12 +214,15 @@ export function SetGoodPriceListRow({
         <div className="flex min-w-0 flex-col gap-2 sm:gap-2.5">
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-2 gap-y-1.5 sm:gap-3">
             <div className="min-w-0 flex-1">
-              <Link
-                href={detailHref}
-                className="line-clamp-2 text-sm font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline sm:text-base"
-              >
-                {title}
-              </Link>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                <Link
+                  href={detailHref}
+                  className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline sm:text-base"
+                >
+                  {title}
+                </Link>
+                {heat.level > 0 ? <SetGoodPriceHeatBadge breakdown={heat} /> : null}
+              </div>
               <SetCatalogMetaLine
                 setNum={setNum}
                 year={year}
@@ -214,12 +238,14 @@ export function SetGoodPriceListRow({
               label="全新"
               priceCny={priceNewCny}
               officialPrice={bricktimeOfficialPrice}
+              numParts={numParts}
               highlighted={sortKind === "new"}
             />
             <PriceColumn
               label="二手"
               priceCny={priceUsedCny}
               officialPrice={bricktimeOfficialPrice}
+              numParts={numParts}
               highlighted={sortKind === "used"}
             />
           </div>
