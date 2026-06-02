@@ -58,6 +58,78 @@ export function formatStudVolumeCoverageRatio(ratio: number | null | undefined):
 
 const BRICKTIME_PRICE_INPUT_RE = /^[\d.,]+(?:\s*[~～-]\s*[\d.,]+)?$/;
 
+export type BricktimeSetMetaFields = {
+  launchDate?: string | null;
+  retiredDate?: string | null;
+  salesStatus?: string | null;
+  weight?: string | null;
+  buildingTime?: string | null;
+};
+
+/** Bricktime 销售状态是否表示已绝版（排除「未绝版」） */
+export function isBricktimeRetiredSalesStatus(status: string | null | undefined): boolean {
+  const s = status?.trim();
+  if (!s) return false;
+  if (s.includes("未绝版")) return false;
+  return s.includes("绝版");
+}
+
+/** 销售状态简写：在售 / 绝版 */
+export function formatBricktimeSalesStatusBrief(
+  status: string | null | undefined
+): "在售" | "绝版" | null {
+  const s = status?.trim();
+  if (!s) return null;
+  return isBricktimeRetiredSalesStatus(s) ? "绝版" : "在售";
+}
+
+/** ISO 日期 YYYY-MM-DD → 2025-10-01 或原样 */
+export function formatBricktimeDateLabel(value: string | null | undefined): string | null {
+  const s = value?.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return s;
+  return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
+/** 重量：纯数字按克/千克格式化，否则原样 */
+export function formatBricktimeWeightLabel(value: string | null | undefined): string | null {
+  const s = value?.trim();
+  if (!s) return null;
+  const n = Number(s.replace(/,/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return s;
+  if (n >= 1000) {
+    const kg = n / 1000;
+    const rounded = Math.round(kg * 100) / 100;
+    return `${rounded} kg`;
+  }
+  return `${n} g`;
+}
+
+export type BricktimeMetaDisplayItem = { label: string; value: string };
+
+/** 组装好价榜展示的 Bricktime 元数据条目 */
+export function buildBricktimeMetaDisplayItems(
+  meta: Partial<BricktimeSetMetaFields> | null | undefined
+): BricktimeMetaDisplayItem[] {
+  if (!meta) return [];
+  const items: BricktimeMetaDisplayItem[] = [];
+  const launch = formatBricktimeDateLabel(meta.launchDate);
+  const retired = formatBricktimeDateLabel(meta.retiredDate);
+  if (launch && retired) {
+    items.push({ label: "上下市", value: `${launch} ~ ${retired}` });
+  } else if (launch) {
+    items.push({ label: "上市", value: launch });
+  } else if (retired) {
+    items.push({ label: "绝版", value: retired });
+  }
+  const weight = formatBricktimeWeightLabel(meta.weight);
+  if (weight) items.push({ label: "重量", value: weight });
+  const buildingTime = meta.buildingTime?.trim();
+  if (buildingTime) items.push({ label: "拼搭", value: buildingTime });
+  return items;
+}
+
 /** Bricktime 价格字符串（纯数字或区间）前加 ¥ */
 export function formatBricktimePriceValue(value: string | null | undefined): string | null {
   const s = value?.trim();

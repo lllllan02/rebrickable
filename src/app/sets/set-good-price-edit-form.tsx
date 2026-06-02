@@ -14,6 +14,7 @@ import {
   type SetGoodPriceReferencePreview,
 } from "@/app/sets/set-good-price-reference-panel";
 import { SetGoodPriceTimestampsLine } from "@/app/sets/set-good-price-timestamps-line";
+import { SetGoodPriceBricktimeMetaLine } from "@/app/sets/set-good-price-bricktime-meta-line";
 import { hasAnySetGoodPrice } from "@/lib/set-good-price-channel";
 import {
   goodPriceBtnDanger,
@@ -21,6 +22,7 @@ import {
   goodPriceBtnSecondary,
 } from "@/lib/set-good-price-buttons";
 import { parseOptionalBricktimePriceInput } from "@/lib/set-good-price-format";
+import type { BricktimeSetMetaFields } from "@/lib/set-good-price-format";
 
 export type SetGoodPriceEditDraft = {
   mode: "create" | "edit";
@@ -32,6 +34,11 @@ export type SetGoodPriceEditDraft = {
   bricktimeGoodPrice?: string | null;
   bricktimeLowestPrice?: string | null;
   bricktimeFetchedAt?: string | null;
+  bricktimeLaunchDate?: string | null;
+  bricktimeRetiredDate?: string | null;
+  bricktimeSalesStatus?: string | null;
+  bricktimeWeight?: string | null;
+  bricktimeBuildingTime?: string | null;
   gobricksPriceCny?: number | null;
   gobricksMatchPercent?: number | null;
   gobricksComparedAt?: string | null;
@@ -40,6 +47,14 @@ export type SetGoodPriceEditDraft = {
 function priceToInput(v: number | null): string {
   return v != null ? String(v) : "";
 }
+
+const emptyBricktimeMeta = (): BricktimeSetMetaFields => ({
+  launchDate: null,
+  retiredDate: null,
+  salesStatus: null,
+  weight: null,
+  buildingTime: null,
+});
 
 const emptyReferencePreview = (): SetGoodPriceReferencePreview => ({
   officialPrice: null,
@@ -68,6 +83,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
   const [referencePreview, setReferencePreview] = useState<SetGoodPriceReferencePreview>(
     emptyReferencePreview
   );
+  const [bricktimeMeta, setBricktimeMeta] = useState<BricktimeSetMetaFields>(emptyBricktimeMeta);
   const [bricktimeFetchedAt, setBricktimeFetchedAt] = useState<string | null>(null);
   const [persistedBricktimeAt, setPersistedBricktimeAt] = useState<string | null>(null);
   const [gobricksComparedAt, setGobricksComparedAt] = useState<string | null>(null);
@@ -96,6 +112,13 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
     setBricktimeFetchedAt(savedBricktimeAt);
     setPersistedBricktimeAt(savedBricktimeAt);
     setGobricksComparedAt(draft.gobricksComparedAt?.trim() || null);
+    setBricktimeMeta({
+      launchDate: draft.bricktimeLaunchDate?.trim() || null,
+      retiredDate: draft.bricktimeRetiredDate?.trim() || null,
+      salesStatus: draft.bricktimeSalesStatus?.trim() || null,
+      weight: draft.bricktimeWeight?.trim() || null,
+      buildingTime: draft.bricktimeBuildingTime?.trim() || null,
+    });
     setPreviewError(null);
     setError(null);
   }, [draft]);
@@ -122,6 +145,13 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
         goodPrice: res.goodPrice,
       }));
       setOfficialInput(res.officialPrice ?? "");
+      setBricktimeMeta({
+        launchDate: res.launchDate,
+        retiredDate: res.retiredDate,
+        salesStatus: res.salesStatus,
+        weight: res.weight,
+        buildingTime: res.buildingTime,
+      });
       setBricktimeFetchedAt(new Date().toISOString());
     });
   };
@@ -157,7 +187,12 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
       bricktimeAt != null ||
       officialParsed != null ||
       referencePreview.lowestPrice != null ||
-      referencePreview.goodPrice != null;
+      referencePreview.goodPrice != null ||
+      bricktimeMeta.launchDate != null ||
+      bricktimeMeta.retiredDate != null ||
+      bricktimeMeta.salesStatus != null ||
+      bricktimeMeta.weight != null ||
+      bricktimeMeta.buildingTime != null;
 
     startTransition(async () => {
       const res = await saveSetGoodPriceAction({
@@ -178,6 +213,11 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
               goodPrice: referencePreview.goodPrice,
               lowestPrice: referencePreview.lowestPrice,
               bricktimeFetchedAt: bricktimeAt ?? new Date().toISOString(),
+              launchDate: bricktimeMeta.launchDate,
+              retiredDate: bricktimeMeta.retiredDate,
+              salesStatus: bricktimeMeta.salesStatus,
+              weight: bricktimeMeta.weight,
+              buildingTime: bricktimeMeta.buildingTime,
             }
           : undefined,
       });
@@ -255,6 +295,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
                 setSetNumInput(e.target.value);
                 syncOfficialInput("");
                 setReferencePreview(emptyReferencePreview());
+                setBricktimeMeta(emptyBricktimeMeta());
                 setBricktimeFetchedAt(null);
                 setPersistedBricktimeAt(null);
                 setGobricksComparedAt(null);
@@ -333,6 +374,7 @@ export function SetGoodPriceEditForm({ draft, onClose, variant = "inline" }: Pro
         {hasReferenceData ? (
           <>
             <SetGoodPriceReferencePanel preview={referencePreview} />
+            <SetGoodPriceBricktimeMetaLine meta={bricktimeMeta} />
             <SetGoodPriceTimestampsLine
               bricktimeFetchedAt={bricktimeFetchedAt}
               gobricksComparedAt={gobricksComparedAt}

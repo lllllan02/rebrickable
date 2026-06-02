@@ -44,6 +44,11 @@ export type SetGoodPriceListItem = {
   bricktimeLowestPrice: string | null;
   bricktimeRecentLowPrice: string | null;
   bricktimeFetchedAt: string | null;
+  bricktimeLaunchDate: string | null;
+  bricktimeRetiredDate: string | null;
+  bricktimeSalesStatus: string | null;
+  bricktimeWeight: string | null;
+  bricktimeBuildingTime: string | null;
 };
 
 function parseKind(raw: string | undefined): SetGoodPriceSortKind | null {

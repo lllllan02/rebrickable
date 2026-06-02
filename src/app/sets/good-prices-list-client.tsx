@@ -75,6 +75,11 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
       bricktimeGoodPrice: item.bricktimeGoodPrice,
       bricktimeLowestPrice: item.bricktimeLowestPrice,
       bricktimeFetchedAt: item.bricktimeFetchedAt,
+      bricktimeLaunchDate: item.bricktimeLaunchDate,
+      bricktimeRetiredDate: item.bricktimeRetiredDate,
+      bricktimeSalesStatus: item.bricktimeSalesStatus,
+      bricktimeWeight: item.bricktimeWeight,
+      bricktimeBuildingTime: item.bricktimeBuildingTime,
       gobricksPriceCny: item.gobricksPriceCny,
       gobricksMatchPercent: item.gobricksMatchPercent,
       gobricksComparedAt: item.gobricksComparedAt,
@@ -177,6 +182,11 @@ export function GoodPricesListClient({ items, sortState, heatFilter }: Props) {
               bricktimeLowestPrice={item.bricktimeLowestPrice}
               bricktimeRecentLowPrice={item.bricktimeRecentLowPrice}
               bricktimeFetchedAt={item.bricktimeFetchedAt}
+              bricktimeLaunchDate={item.bricktimeLaunchDate}
+              bricktimeRetiredDate={item.bricktimeRetiredDate}
+              bricktimeSalesStatus={item.bricktimeSalesStatus}
+              bricktimeWeight={item.bricktimeWeight}
+              bricktimeBuildingTime={item.bricktimeBuildingTime}
               sortKind={sortState.kind}
               isEditing={isEditing}
               editForm={

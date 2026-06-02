@@ -350,6 +350,16 @@ export const buildSetGoodPrices = sqliteTable(
     bricktimeRecentLowPrice: text("bricktime_recent_low_price"),
     /** 最近一次 Bricktime 价格抓取完成时间（ISO） */
     bricktimeFetchedAt: text("bricktime_fetched_at"),
+    /** Bricktime 上市日期 */
+    bricktimeLaunchDate: text("bricktime_launch_date"),
+    /** Bricktime 绝版日期 */
+    bricktimeRetiredDate: text("bricktime_retired_date"),
+    /** Bricktime 销售状态（如「新品」「绝版」） */
+    bricktimeSalesStatus: text("bricktime_sales_status"),
+    /** Bricktime 重量 */
+    bricktimeWeight: text("bricktime_weight"),
+    /** Bricktime 拼搭时间 */
+    bricktimeBuildingTime: text("bricktime_building_time"),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [index("build_set_good_prices_updated_idx").on(t.updatedAt)]

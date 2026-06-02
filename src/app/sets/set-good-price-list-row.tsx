@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { SetGoodPriceHeatBadge } from "@/app/sets/set-good-price-heat-badge";
+import { SetGoodPriceBricktimeMetaLine } from "@/app/sets/set-good-price-bricktime-meta-line";
 import { SetGoodPriceReferencePanel } from "@/app/sets/set-good-price-reference-panel";
 import { SetGoodPriceTimestampsLine } from "@/app/sets/set-good-price-timestamps-line";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
@@ -10,6 +11,7 @@ import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { goodPriceRowActionsClass } from "@/lib/set-good-price-buttons";
 import {
   formatDiscountVsOfficialPrice,
+  formatBricktimeSalesStatusBrief,
   formatSetGoodPriceCny,
   formatSetGoodPricePerPiece,
 } from "@/lib/set-good-price-format";
@@ -26,16 +28,18 @@ function MetaDot() {
   </span>;
 }
 
-/** 标题下方：编号、年份、片数 */
+/** 标题下方：编号、年份、片数、销售状态 */
 function SetCatalogMetaLine({
   setNum,
   year,
   numParts,
+  salesStatus,
   onPartsClick,
 }: {
   setNum: string;
   year: number | null;
   numParts: number | null;
+  salesStatus?: string | null;
   onPartsClick?: () => void;
 }) {
   const items: ReactNode[] = [
@@ -69,6 +73,20 @@ function SetCatalogMetaLine({
           {partsLabel}
         </span>
       )
+    );
+  }
+
+  const salesBrief = formatBricktimeSalesStatusBrief(salesStatus);
+  if (salesBrief) {
+    const retired = salesBrief === "绝版";
+    items.push(
+      <span
+        key="sales"
+        title={salesStatus?.trim() || undefined}
+        className={retired ? "font-medium text-red-400/95" : "text-[var(--muted-2)]"}
+      >
+        {salesBrief}
+      </span>
     );
   }
 
@@ -154,6 +172,11 @@ export function SetGoodPriceListRow({
   bricktimeLowestPrice,
   bricktimeRecentLowPrice,
   bricktimeFetchedAt,
+  bricktimeLaunchDate,
+  bricktimeRetiredDate,
+  bricktimeSalesStatus,
+  bricktimeWeight,
+  bricktimeBuildingTime,
   sortKind,
   actions,
   onPartsClick,
@@ -176,6 +199,11 @@ export function SetGoodPriceListRow({
   bricktimeLowestPrice?: string | null;
   bricktimeRecentLowPrice?: string | null;
   bricktimeFetchedAt?: string | null;
+  bricktimeLaunchDate?: string | null;
+  bricktimeRetiredDate?: string | null;
+  bricktimeSalesStatus?: string | null;
+  bricktimeWeight?: string | null;
+  bricktimeBuildingTime?: string | null;
   sortKind?: SetGoodPriceSortKind;
   actions?: ReactNode;
   onPartsClick?: () => void;
@@ -233,6 +261,7 @@ export function SetGoodPriceListRow({
                 setNum={setNum}
                 year={year}
                 numParts={numParts}
+                salesStatus={bricktimeSalesStatus}
                 onPartsClick={onPartsClick}
               />
             </div>
@@ -267,6 +296,15 @@ export function SetGoodPriceListRow({
                   goodPrice: bricktimeGoodPrice ?? null,
                   gobricksPriceCny: gobricksPriceCny ?? null,
                   gobricksMatchPercent: gobricksMatchPercent ?? null,
+                }}
+              />
+
+              <SetGoodPriceBricktimeMetaLine
+                meta={{
+                  launchDate: bricktimeLaunchDate,
+                  retiredDate: bricktimeRetiredDate,
+                  weight: bricktimeWeight,
+                  buildingTime: bricktimeBuildingTime,
                 }}
               />
 

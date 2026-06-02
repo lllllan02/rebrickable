@@ -129,6 +129,11 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       bricktime_lowest_price TEXT,
       bricktime_recent_low_price TEXT,
       bricktime_fetched_at TEXT,
+      bricktime_launch_date TEXT,
+      bricktime_retired_date TEXT,
+      bricktime_sales_status TEXT,
+      bricktime_weight TEXT,
+      bricktime_building_time TEXT,
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS build_set_good_prices_updated_idx ON build_set_good_prices(updated_at);
@@ -217,6 +222,21 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     }
     if (!gpCols.has("bricktime_fetched_at")) {
       sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_fetched_at TEXT`);
+    }
+    if (!gpCols.has("bricktime_launch_date")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_launch_date TEXT`);
+    }
+    if (!gpCols.has("bricktime_retired_date")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_retired_date TEXT`);
+    }
+    if (!gpCols.has("bricktime_sales_status")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_sales_status TEXT`);
+    }
+    if (!gpCols.has("bricktime_weight")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_weight TEXT`);
+    }
+    if (!gpCols.has("bricktime_building_time")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_building_time TEXT`);
     }
     if (gpCols.has("price_cny")) {
       sqlite.exec(`

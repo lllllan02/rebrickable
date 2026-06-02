@@ -81,6 +81,11 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       bricktimeLowestPrice: r.bricktimeLowestPrice ?? null,
       bricktimeRecentLowPrice: r.bricktimeRecentLowPrice ?? null,
       bricktimeFetchedAt: r.bricktimeFetchedAt ?? null,
+      bricktimeLaunchDate: r.bricktimeLaunchDate ?? null,
+      bricktimeRetiredDate: r.bricktimeRetiredDate ?? null,
+      bricktimeSalesStatus: r.bricktimeSalesStatus ?? null,
+      bricktimeWeight: r.bricktimeWeight ?? null,
+      bricktimeBuildingTime: r.bricktimeBuildingTime ?? null,
     };
   });
 
