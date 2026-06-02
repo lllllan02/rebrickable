@@ -1,5 +1,5 @@
 # 默认：拉取远程 → 安装依赖 → 解压本地库 → 启动 Next 开发服务
-.PHONY: default pull install db dev start pack
+.PHONY: default pull install db dev start pack pack-all
 
 PNPM ?= pnpm
 
@@ -24,10 +24,17 @@ dev:
 
 start: dev
 
-# 压缩 db → 若有变更则自动提交（带时间戳）→ push
-# 仅打包/提交用户库与上传文件（体积小）；全量目录库压缩见 pnpm db:pack-catalog
+# 压缩用户库与上传 → 若有变更则提交（带时间戳）→ push（不含目录库）
 pack:
 	$(PNPM) db:pack
 	git add data/rebrickable-user.db.gz data/build-uploads/
+	git diff --cached --quiet || git commit -m "chore(db): $$(date +%Y-%m-%dT%H%M%S)"
+	git push
+
+# 目录库 + 用户库 + 上传一并打包提交；请先停 dev，目录库需已存在（如 make db 后）
+pack-all:
+	$(PNPM) db:pack-catalog
+	$(PNPM) db:pack
+	git add data/rebrickable.db.gz data/rebrickable-user.db.gz data/build-uploads/
 	git diff --cached --quiet || git commit -m "chore(db): $$(date +%Y-%m-%dT%H%M%S)"
 	git push
