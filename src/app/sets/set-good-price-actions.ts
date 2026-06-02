@@ -15,11 +15,24 @@ import { revalidateSetGoodPricePaths } from "@/lib/set-good-price-revalidate";
 import { resolveCatalogSetNum } from "@/lib/resolve-catalog-set-num";
 import { loadSetOfficialInventoryBomLines } from "@/lib/set-official-inventory-bom";
 import { BUILD_UPLOAD_MAX_ID_LEN } from "@/lib/build-upload-storage";
+import {
+  bricktimeSetIdFromSetNum,
+  fetchBricktimeSetPrices,
+} from "@/lib/bricktime-set-prices";
 
 const MAX_PRICE_CNY = 999_999;
 const GOBRICKS_COMPARE_TIMEOUT_MS = 90_000;
 
 export type SaveSetGoodPriceResult = { ok: true } | { ok: false; error: string };
+export type FetchSetGoodPriceBricktimeResult =
+  | {
+      ok: true;
+      officialPrice: string | null;
+      goodPrice: string | null;
+      lowestPrice: string | null;
+      recentLowPrice: string | null;
+    }
+  | { ok: false; error: string };
 
 function parseOptionalPriceCny(raw: unknown): number | null {
   const s = String(raw ?? "").trim();
@@ -27,6 +40,37 @@ function parseOptionalPriceCny(raw: unknown): number | null {
   const n = Number(s.replace(/,/g, ""));
   if (!Number.isFinite(n) || n < 0 || n > MAX_PRICE_CNY) return null;
   return Math.round(n * 100) / 100;
+}
+
+async function saveBricktimePricesForSet(
+  canonicalSetNum: string
+): Promise<FetchSetGoodPriceBricktimeResult> {
+  const bricktimeSetId = bricktimeSetIdFromSetNum(canonicalSetNum);
+  if (!bricktimeSetId) {
+    return { ok: false, error: "Bricktime 仅支持数字套装编号。" };
+  }
+
+  try {
+    const prices = await fetchBricktimeSetPrices(bricktimeSetId);
+    const db = getUserDb();
+    await db
+      .update(buildSetGoodPrices)
+      .set({
+        bricktimeOfficialPrice: prices.officialPrice,
+        bricktimeGoodPrice: prices.goodPrice,
+        bricktimeLowestPrice: prices.lowestPrice,
+        bricktimeRecentLowPrice: prices.recentLowPrice,
+        bricktimeFetchedAt: new Date().toISOString(),
+      })
+      .where(eq(buildSetGoodPrices.setNum, canonicalSetNum));
+    return { ok: true, ...prices };
+  } catch (e) {
+    const msg =
+      e instanceof Error && e.message.trim()
+        ? e.message.trim()
+        : "Bricktime 价格抓取失败，请重试。";
+    return { ok: false, error: msg };
+  }
 }
 
 export async function saveSetGoodPriceAction(input: {
@@ -78,6 +122,7 @@ export async function saveSetGoodPriceAction(input: {
         set: { priceNewCny, priceUsedCny, channelNew: null, updatedAt },
       });
 
+    await saveBricktimePricesForSet(canonicalSetNum);
     revalidateSetGoodPricePaths(canonicalSetNum);
     return { ok: true };
   } catch {
@@ -176,6 +221,32 @@ export async function fetchSetGoodPriceGobricksCompareAction(input: {
     };
   } catch {
     return { ok: false, error: "高砖比价失败，请重试。" };
+  }
+}
+
+/** 抓取 Bricktime 页面并写入官方定价/行情价。 */
+export async function fetchSetGoodPriceBricktimeAction(input: {
+  setNum: string;
+}): Promise<FetchSetGoodPriceBricktimeResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  try {
+    const catalogDb = getCatalogDb();
+    const resolved = await resolveCatalogSetNum(catalogDb, setNum);
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error };
+    }
+
+    const res = await saveBricktimePricesForSet(resolved.setNum);
+    if (res.ok) {
+      revalidateSetGoodPricePaths(resolved.setNum);
+    }
+    return res;
+  } catch {
+    return { ok: false, error: "Bricktime 价格更新失败，请重试。" };
   }
 }
 

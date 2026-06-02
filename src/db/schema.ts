@@ -340,7 +340,26 @@ export const buildSetGoodPrices = sqliteTable(
     gobricksMatchPercent: real("gobricks_match_percent"),
     /** 最近一次高砖比价完成时间（ISO） */
     gobricksComparedAt: text("gobricks_compared_at"),
+    /** Bricktime 官方定价 */
+    bricktimeOfficialPrice: text("bricktime_official_price"),
+    /** Bricktime 超值入手价 */
+    bricktimeGoodPrice: text("bricktime_good_price"),
+    /** Bricktime 史低价 */
+    bricktimeLowestPrice: text("bricktime_lowest_price"),
+    /** Bricktime 近 3 个月电商低价 */
+    bricktimeRecentLowPrice: text("bricktime_recent_low_price"),
+    /** 最近一次 Bricktime 价格抓取完成时间（ISO） */
+    bricktimeFetchedAt: text("bricktime_fetched_at"),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [index("build_set_good_prices_updated_idx").on(t.updatedAt)]
 );
+
+/** Bricktime 开放 API 配置（单行 id=1） */
+export const buildBricktimeConfig = sqliteTable("build_bricktime_config", {
+  id: integer("id").primaryKey(),
+  userUuid: text("user_uuid"),
+  apiKey: text("api_key"),
+  apiKeyExpiresAt: text("api_key_expires_at"),
+  updatedAt: text("updated_at").notNull(),
+});

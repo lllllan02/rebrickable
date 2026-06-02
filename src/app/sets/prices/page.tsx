@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { inArray } from "drizzle-orm";
 
+import { BricktimeConfigPanel } from "@/app/sets/bricktime-config-panel";
 import { GoodPricesListClient } from "@/app/sets/good-prices-list-client";
 import { getCatalogDb, getUserDb } from "@/db/client";
 import { buildSetGoodPrices, legoSets } from "@/db/schema";
+import { loadBricktimeConfigPublic } from "@/lib/bricktime-config";
 import { hasAnySetGoodPrice } from "@/lib/set-good-price-channel";
 import { batchSetCatalogHeroUrls } from "@/lib/set-catalog-hero-url";
 import { batchSetStudVolumeStats } from "@/lib/set-catalog-stud-volume";
@@ -27,6 +29,7 @@ type Props = {
 export default async function SetGoodPricesPage({ searchParams }: Props) {
   const sp = await searchParams;
   const sortState = parseSetGoodPriceListSort(sp);
+  const bricktimeConfig = await loadBricktimeConfigPublic();
 
   const userDb = getUserDb();
   const allPriceRows = await userDb.select().from(buildSetGoodPrices);
@@ -73,6 +76,11 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       gobricksPriceCny: r.gobricksPriceCny ?? null,
       gobricksMatchPercent: r.gobricksMatchPercent ?? null,
       gobricksComparedAt: r.gobricksComparedAt ?? null,
+      bricktimeOfficialPrice: r.bricktimeOfficialPrice ?? null,
+      bricktimeGoodPrice: r.bricktimeGoodPrice ?? null,
+      bricktimeLowestPrice: r.bricktimeLowestPrice ?? null,
+      bricktimeRecentLowPrice: r.bricktimeRecentLowPrice ?? null,
+      bricktimeFetchedAt: r.bricktimeFetchedAt ?? null,
     };
   });
 
@@ -101,6 +109,7 @@ export default async function SetGoodPricesPage({ searchParams }: Props) {
       </header>
 
       <div className="table-shell p-2 sm:p-3">
+        <BricktimeConfigPanel initialConfig={bricktimeConfig} />
         <GoodPricesListClient items={items} sortState={sortState} />
       </div>
 

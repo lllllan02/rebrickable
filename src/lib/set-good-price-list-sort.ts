@@ -41,6 +41,11 @@ export type SetGoodPriceListItem = {
   /** 零件匹配占比（0–100） */
   gobricksMatchPercent: number | null;
   gobricksComparedAt: string | null;
+  bricktimeOfficialPrice: string | null;
+  bricktimeGoodPrice: string | null;
+  bricktimeLowestPrice: string | null;
+  bricktimeRecentLowPrice: string | null;
+  bricktimeFetchedAt: string | null;
 };
 
 function parseKind(raw: string | undefined): SetGoodPriceSortKind | null {

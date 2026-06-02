@@ -124,9 +124,22 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       gobricks_price_cny REAL,
       gobricks_match_percent REAL,
       gobricks_compared_at TEXT,
+      bricktime_official_price TEXT,
+      bricktime_good_price TEXT,
+      bricktime_lowest_price TEXT,
+      bricktime_recent_low_price TEXT,
+      bricktime_fetched_at TEXT,
       updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS build_set_good_prices_updated_idx ON build_set_good_prices(updated_at);
+
+    CREATE TABLE IF NOT EXISTS build_bricktime_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      user_uuid TEXT,
+      api_key TEXT,
+      api_key_expires_at TEXT,
+      updated_at TEXT NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS build_io_step_batches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -190,6 +203,21 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     if (!gpCols.has("gobricks_compared_at")) {
       sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN gobricks_compared_at TEXT`);
     }
+    if (!gpCols.has("bricktime_official_price")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_official_price TEXT`);
+    }
+    if (!gpCols.has("bricktime_good_price")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_good_price TEXT`);
+    }
+    if (!gpCols.has("bricktime_lowest_price")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_lowest_price TEXT`);
+    }
+    if (!gpCols.has("bricktime_recent_low_price")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_recent_low_price TEXT`);
+    }
+    if (!gpCols.has("bricktime_fetched_at")) {
+      sqlite.exec(`ALTER TABLE build_set_good_prices ADD COLUMN bricktime_fetched_at TEXT`);
+    }
     if (gpCols.has("price_cny")) {
       sqlite.exec(`
         UPDATE build_set_good_prices
@@ -217,10 +245,30 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
           price_new_cny REAL,
           price_used_cny REAL,
           channel_new TEXT,
+          gobricks_price_cny REAL,
+          gobricks_match_percent REAL,
+          gobricks_compared_at TEXT,
+          bricktime_official_price TEXT,
+          bricktime_good_price TEXT,
+          bricktime_lowest_price TEXT,
+          bricktime_recent_low_price TEXT,
+          bricktime_fetched_at TEXT,
           updated_at TEXT NOT NULL
         );
         INSERT INTO build_set_good_prices__migrate (
-          set_num, price_new_cny, price_used_cny, channel_new, updated_at
+          set_num,
+          price_new_cny,
+          price_used_cny,
+          channel_new,
+          gobricks_price_cny,
+          gobricks_match_percent,
+          gobricks_compared_at,
+          bricktime_official_price,
+          bricktime_good_price,
+          bricktime_lowest_price,
+          bricktime_recent_low_price,
+          bricktime_fetched_at,
+          updated_at
         )
         SELECT
           set_num,
@@ -230,6 +278,14 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
             channel_new,
             CASE WHEN channel IN ('拼多多', '淘宝') THEN channel ELSE NULL END
           ),
+          gobricks_price_cny,
+          gobricks_match_percent,
+          gobricks_compared_at,
+          bricktime_official_price,
+          bricktime_good_price,
+          bricktime_lowest_price,
+          bricktime_recent_low_price,
+          bricktime_fetched_at,
           updated_at
         FROM build_set_good_prices;
         DROP TABLE build_set_good_prices;

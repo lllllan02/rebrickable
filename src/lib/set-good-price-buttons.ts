@@ -14,5 +14,8 @@ export const goodPriceBtnDanger =
 export const goodPriceBtnGobricks =
   "shrink-0 rounded-md border border-sky-500/35 bg-[var(--surface-2)] px-3 py-1.5 text-sm text-sky-200/95 transition-colors hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-50";
 
+export const goodPriceBtnBricktime =
+  "shrink-0 rounded-md border border-amber-500/35 bg-[var(--surface-2)] px-3 py-1.5 text-sm text-amber-200/95 transition-colors hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-50";
+
 export const goodPriceRowActionsClass =
   "flex shrink-0 flex-row flex-wrap items-center justify-end gap-1.5 self-center";

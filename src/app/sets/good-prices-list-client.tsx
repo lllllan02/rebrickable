@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { GoodPriceListSortControl } from "@/app/sets/good-price-list-sort-control";
 import {
   clearSetGoodPriceAction,
+  fetchSetGoodPriceBricktimeAction,
   fetchSetGoodPriceGobricksCompareAction,
   markSetOwnedFromGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
@@ -20,6 +21,7 @@ import {
 import { SetGoodPriceListRow } from "@/app/sets/set-good-price-list-row";
 import {
   goodPriceBtnDanger,
+  goodPriceBtnBricktime,
   goodPriceBtnGobricks,
   goodPriceBtnOwned,
   goodPriceBtnPrimary,
@@ -42,6 +44,7 @@ export function GoodPricesListClient({ items, sortState }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [gobricksSetNum, setGobricksSetNum] = useState<string | null>(null);
+  const [bricktimeSetNum, setBricktimeSetNum] = useState<string | null>(null);
   const [draft, setDraft] = useState<SetGoodPriceEditDraft | null>(null);
   const [bomTarget, setBomTarget] = useState<SetGoodPriceBomDialogTarget | null>(null);
 
@@ -99,6 +102,19 @@ export function GoodPricesListClient({ items, sortState }: Props) {
     });
   };
 
+  const refreshBricktime = (item: GoodPriceListRowProps) => {
+    setBricktimeSetNum(item.setNum);
+    startTransition(async () => {
+      const res = await fetchSetGoodPriceBricktimeAction({ setNum: item.setNum });
+      setBricktimeSetNum(null);
+      if (!res.ok) {
+        alert(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
   return (
     <>
       <div className="mb-3 flex w-full flex-wrap items-center justify-between gap-2 border-b border-[var(--border-soft)] px-1 pb-3">
@@ -130,6 +146,11 @@ export function GoodPricesListClient({ items, sortState }: Props) {
               gobricksPriceCny={item.gobricksPriceCny}
               gobricksMatchPercent={item.gobricksMatchPercent}
               gobricksComparedAt={item.gobricksComparedAt}
+              bricktimeOfficialPrice={item.bricktimeOfficialPrice}
+              bricktimeGoodPrice={item.bricktimeGoodPrice}
+              bricktimeLowestPrice={item.bricktimeLowestPrice}
+              bricktimeRecentLowPrice={item.bricktimeRecentLowPrice}
+              bricktimeFetchedAt={item.bricktimeFetchedAt}
               sortKind={sortState.kind}
               onPartsClick={
                 typeof item.numParts === "number" && item.numParts > 0
@@ -138,6 +159,15 @@ export function GoodPricesListClient({ items, sortState }: Props) {
               }
               actions={
                 <>
+                  <button
+                    type="button"
+                    onClick={() => refreshBricktime(item)}
+                    disabled={pending}
+                    className={goodPriceBtnBricktime}
+                    title="从 Bricktime 页面抓取官方定价、超值入手价、史低价与近 3 个月电商低价"
+                  >
+                    {bricktimeSetNum === item.setNum ? "更新中…" : "官方价"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => compareGobricks(item)}
