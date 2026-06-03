@@ -67,6 +67,10 @@ type Props = {
   galleryKind?: "default" | "set";
 };
 
+function slideAltText(slide: CarouselSlide, noun: string): string {
+  return slide.kind === "catalog" ? slide.alt : (slide.originalName ?? `${noun} 参考图`);
+}
+
 export function MocImageCarousel({
   subjectKind = BUILD_SUBJECT_MOC,
   subjectId,
@@ -86,7 +90,7 @@ export function MocImageCarousel({
   const [userStoppedAutoplay, setUserStoppedAutoplay] = useState(false);
   /** 仅定时自动切图时短暂为 true，用于主图区入场动效（手动切图不加） */
   const [autoplayEnterFx, setAutoplayEnterFx] = useState(false);
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -200,6 +204,7 @@ export function MocImageCarousel({
     const el = wrapRef.current;
     if (!el) return;
     const onKey = (e: KeyboardEvent) => {
+      if (lightboxOpen) return;
       if (isEditablePasteTarget(e.target)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -213,7 +218,7 @@ export function MocImageCarousel({
     };
     el.addEventListener("keydown", onKey);
     return () => el.removeEventListener("keydown", onKey);
-  }, [go, stopAutoplay]);
+  }, [go, lightboxOpen, stopAutoplay]);
 
   useEffect(() => {
     const root = wrapRef.current;
@@ -254,14 +259,32 @@ export function MocImageCarousel({
     return () => window.clearInterval(id);
   }, [go, slideCount, userStoppedAutoplay]);
 
+  const openLightbox = useCallback(() => {
+    stopAutoplay();
+    setLightboxOpen(true);
+  }, [stopAutoplay]);
+
   useEffect(() => {
-    if (!lightbox) return;
+    if (!lightboxOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightbox(null);
+      if (isEditablePasteTarget(e.target)) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setLightboxOpen(false);
+        return;
+      }
+      if (slideCount <= 1) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        go(-1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        go(1);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [lightbox]);
+  }, [go, lightboxOpen, slideCount]);
 
   const onDeleteCurrent = useCallback(() => {
     const cur = slides[idx];
@@ -294,8 +317,8 @@ export function MocImageCarousel({
       >
         <p id={regionId} className="sr-only">
           {galleryKind === "set"
-            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图）；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；点击主图打开放大预览；手动切换请用缩略图、两侧箭头或左右方向键，切换后将停止自动轮播；右下角亦有放大按钮；左右方向键在区域聚焦时可用于换图。`
-            : `${ui.noun} 参考图轮播；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；点击主图打开放大预览；手动切换请用缩略图、两侧箭头或左右方向键，切换后将停止自动轮播；右下角亦有放大按钮；左右方向键在区域聚焦时可用于换图。`}
+            ? `${ui.noun}图片轮播（首张为封面，含官方目录图与上传参考图）；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；点击主图打开放大预览，放大后可用左右方向键或两侧箭头切换；手动切换请用缩略图、两侧箭头或左右方向键，切换后将停止自动轮播；右下角亦有放大按钮。`
+            : `${ui.noun} 参考图轮播；多图时每约 5.5 秒自动切换，鼠标移入区域可暂停；点击主图打开放大预览，放大后可用左右方向键或两侧箭头切换；手动切换请用缩略图、两侧箭头或左右方向键，切换后将停止自动轮播；右下角亦有放大按钮。`}
         </p>
 
         {slideCount === 0 ? (
@@ -333,12 +356,7 @@ export function MocImageCarousel({
               className={`moc-image-carousel-main relative z-0 isolate aspect-[4/3] w-full max-h-[min(70vh,32rem)] min-h-[14rem] select-none ${current ? "cursor-zoom-in" : "cursor-default"} ${autoplayEnterFx ? "moc-carousel-autoplay-enter" : ""}`}
               onClick={() => {
                 if (!current) return;
-                stopAutoplay();
-                const alt =
-                  current.kind === "catalog"
-                    ? current.alt
-                    : (current.originalName ?? `${ui.noun} 参考图`);
-                setLightbox({ src: current.url, alt });
+                openLightbox();
               }}
             >
               {current ? (
@@ -352,11 +370,7 @@ export function MocImageCarousel({
                   fill
                   className="pointer-events-none object-contain p-1.5"
                   sizes="(max-width: 1024px) 100vw, 66vw"
-                  alt={
-                    current.kind === "catalog"
-                      ? current.alt
-                      : (current.originalName ?? `${ui.noun} 参考图`)
-                  }
+                  alt={slideAltText(current, ui.noun)}
                   priority={idx === 0}
                   unoptimized={current.kind === "upload"}
                   fallbackLabel={galleryKind === "set" ? "暂无官方图" : "无图"}
@@ -371,12 +385,7 @@ export function MocImageCarousel({
                   title="放大查看"
                   onClick={(e) => {
                     e.stopPropagation();
-                    stopAutoplay();
-                    const alt =
-                      current.kind === "catalog"
-                        ? current.alt
-                        : (current.originalName ?? `${ui.noun} 参考图`);
-                    setLightbox({ src: current.url, alt });
+                    openLightbox();
                   }}
                 >
                   放大
@@ -508,13 +517,17 @@ export function MocImageCarousel({
         </p>
       ) : null}
 
-      {lightbox ? (
+      {lightboxOpen && current ? (
         <div
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/82 p-4 backdrop-blur-[2px]"
           role="dialog"
           aria-modal="true"
-          aria-label="大图预览"
-          onClick={() => setLightbox(null)}
+          aria-label={
+            slideCount > 1
+              ? `大图预览，第 ${idx + 1} 张，共 ${slideCount} 张`
+              : "大图预览"
+          }
+          onClick={() => setLightboxOpen(false)}
         >
           <button
             type="button"
@@ -522,20 +535,59 @@ export function MocImageCarousel({
             aria-label="关闭大图预览"
             onClick={(e) => {
               e.stopPropagation();
-              setLightbox(null);
+              setLightboxOpen(false);
             }}
           >
             关闭
           </button>
-          <div className="max-h-[min(92vh,100%)] max-w-full overflow-auto" onClick={(e) => e.stopPropagation()}>
+          {slideCount > 1 ? (
+            <>
+              <button
+                type="button"
+                aria-label="上一张"
+                className="absolute left-3 top-1/2 z-[101] -translate-y-1/2 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-2xl leading-none text-white shadow backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:left-5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  go(-1);
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="下一张"
+                className="absolute right-3 top-1/2 z-[101] -translate-y-1/2 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-2xl leading-none text-white shadow backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:right-5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  go(1);
+                }}
+              >
+                ›
+              </button>
+            </>
+          ) : null}
+          <div
+            className="relative flex max-h-[min(92vh,100%)] max-w-full flex-col items-center overflow-auto px-10 sm:px-14"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element -- 灯箱需原生 img 以支持任意外链与本地上传 URL */}
             <img
-              src={lightbox.src}
-              alt={lightbox.alt}
+              key={current.kind === "catalog" ? `lb-cat-${current.url}` : `lb-up-${current.id}`}
+              src={current.url}
+              alt={slideAltText(current, ui.noun)}
               className="max-h-[88vh] w-auto max-w-full object-contain shadow-2xl"
             />
+            {slideCount > 1 ? (
+              <p className="mt-3 text-center text-xs tabular-nums text-white/80">
+                {idx + 1} / {slideCount}
+              </p>
+            ) : null}
           </div>
-          <p className="mt-3 max-w-prose text-center text-xs text-white/75">点击背景或「关闭」退出；按 Esc 亦可关闭。</p>
+          <p className="mt-2 max-w-prose text-center text-xs text-white/75">
+            {slideCount > 1
+              ? "左右方向键或两侧箭头切换图片；点击背景或「关闭」退出，按 Esc 亦可关闭。"
+              : "点击背景或「关闭」退出；按 Esc 亦可关闭。"}
+          </p>
         </div>
       ) : null}
     </div>
