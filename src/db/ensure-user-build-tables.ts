@@ -175,6 +175,26 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     );
     CREATE INDEX IF NOT EXISTS build_io_batches_subject_idx ON build_io_step_batches(subject_kind, subject_id);
     CREATE INDEX IF NOT EXISTS build_io_batches_attachment_idx ON build_io_step_batches(attachment_id);
+
+    CREATE TABLE IF NOT EXISTS build_replicate_phases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_kind TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      note TEXT,
+      sort_order INTEGER NOT NULL,
+      render_stored_file TEXT NOT NULL UNIQUE,
+      render_mime_type TEXT NOT NULL,
+      render_byte_size INTEGER NOT NULL,
+      render_original_name TEXT,
+      io_stored_file TEXT NOT NULL UNIQUE,
+      io_mime_type TEXT NOT NULL,
+      io_byte_size INTEGER NOT NULL,
+      io_original_name TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_replicate_phases_subject_idx ON build_replicate_phases(subject_kind, subject_id);
   `);
 
   if (tableExists(sqlite, "build_io_step_batches")) {

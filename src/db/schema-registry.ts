@@ -22,6 +22,7 @@ export const userSchema = {
   buildProfiles: schema.buildProfiles,
   buildImages: schema.buildImages,
   buildAttachments: schema.buildAttachments,
+  buildReplicatePhases: schema.buildReplicatePhases,
   buildOwnedSubjects: schema.buildOwnedSubjects,
   buildFavoriteSubjects: schema.buildFavoriteSubjects,
   buildSetGoodPrices: schema.buildSetGoodPrices,

@@ -274,6 +274,30 @@ export const buildIoStepBatches = sqliteTable(
   ]
 );
 
+/** 复刻阶段：成对保存 Studio 渲染图与 .io 快照（仅 MOC） */
+export const buildReplicatePhases = sqliteTable(
+  "build_replicate_phases",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    label: text("label").notNull(),
+    note: text("note"),
+    sortOrder: integer("sort_order").notNull(),
+    renderStoredFile: text("render_stored_file").notNull().unique(),
+    renderMimeType: text("render_mime_type").notNull(),
+    renderByteSize: integer("render_byte_size").notNull(),
+    renderOriginalName: text("render_original_name"),
+    ioStoredFile: text("io_stored_file").notNull().unique(),
+    ioMimeType: text("io_mime_type").notNull(),
+    ioByteSize: integer("io_byte_size").notNull(),
+    ioOriginalName: text("io_original_name"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_replicate_phases_subject_idx").on(t.subjectKind, t.subjectId)]
+);
+
 /** 说明书 PDF、Studio .io 等 */
 export const buildAttachments = sqliteTable(
   "build_attachments",

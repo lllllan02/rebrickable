@@ -16,6 +16,10 @@ import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export"
 import { MocPartsSheetBrowser } from "@/app/mocs/moc-parts-sheet-browser";
 import { PartsSheetImport } from "@/app/mocs/moc-parts-sheet-import";
 import { MocPartsList } from "@/app/mocs/moc-parts-list";
+import {
+  MocReplicatePhasesPanel,
+  type ReplicatePhaseRow,
+} from "@/app/mocs/moc-replicate-phases-panel";
 import { buildSubjectListPath } from "@/lib/build-subject-paths";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { buildSubjectUi } from "@/lib/build-ui";
@@ -27,11 +31,21 @@ import {
   parseMocPartsScrollQuery,
   type MocPartsListTab,
 } from "@/lib/moc-parts-tab-navigation";
+import {
+  MOC_DETAIL_PANEL_HASH,
+  replaceUrlHashForMocDetailPanel,
+  resolveMocDetailPanelFromHash,
+  type MocDetailPanel,
+} from "@/lib/moc-detail-panel-navigation";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 type ListTab = MocPartsListTab;
 
 const MOC_PARTS_TAB_STORAGE_PREFIX = "rb:mocPartsTab:v1:";
+const MOC_DETAIL_PANEL_STORAGE_PREFIX = "rb:mocDetailPanel:v1:";
+
+const WORKSPACE_PANEL_TAB_CLASS =
+  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors";
 
 function mocTabHasData(
   tab: ListTab,
@@ -74,6 +88,24 @@ function writeStoredMocListTab(subjectId: string, tab: ListTab) {
   }
 }
 
+function readStoredMocDetailPanel(subjectId: string): MocDetailPanel | null {
+  try {
+    const raw = sessionStorage.getItem(`${MOC_DETAIL_PANEL_STORAGE_PREFIX}${subjectId}`);
+    if (raw === "parts" || raw === "phases") return raw;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeStoredMocDetailPanel(subjectId: string, panel: MocDetailPanel) {
+  try {
+    sessionStorage.setItem(`${MOC_DETAIL_PANEL_STORAGE_PREFIX}${subjectId}`, panel);
+  } catch {
+    /* ignore */
+  }
+}
+
 function replaceUrlHashForMocTab(tab: ListTab) {
   if (typeof window === "undefined") return;
   const next = `#${MOC_PARTS_TAB_HASH[tab]}`;
@@ -110,6 +142,7 @@ type Props = {
   exportDisplayName: string;
   ioBatchId?: number;
   ioSplitPlans?: IoSplitPlanGroup[];
+  replicatePhases?: ReplicatePhaseRow[];
 };
 
 type IoBatchListTab = "full" | "fulfillment" | "shortage";
@@ -303,6 +336,7 @@ export function MocDetailPartsSection({
   exportDisplayName,
   ioBatchId,
   ioSplitPlans = [],
+  replicatePhases = [],
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -310,7 +344,12 @@ export function MocDetailPartsSection({
   const ui = buildSubjectUi(subjectKind);
   const listHref = buildSubjectListPath(subjectKind);
   const isSetSubject = subjectKind === BUILD_SUBJECT_SET;
+  const showPhasesPanel = !isSetSubject;
   const hasOfficial = Boolean(officialInventory && officialInventory.items.length > 0);
+
+  const [workspacePanel, setWorkspacePanel] = useState<MocDetailPanel>(() =>
+    showPhasesPanel ? "parts" : "parts"
+  );
 
   const [listTab, setListTab] = useState<ListTab>(() => {
     if (isSetSubject) return "official";
@@ -402,6 +441,35 @@ export function MocDetailPartsSection({
     [subjectId],
   );
 
+  const selectWorkspacePanel = useCallback(
+    (panel: MocDetailPanel) => {
+      setWorkspacePanel(panel);
+      writeStoredMocDetailPanel(subjectId, panel);
+      replaceUrlHashForMocDetailPanel(panel);
+    },
+    [subjectId],
+  );
+
+  useLayoutEffect(() => {
+    if (!showPhasesPanel || typeof window === "undefined") return;
+    const fromHash = resolveMocDetailPanelFromHash(window.location.hash);
+    const fromStore = readStoredMocDetailPanel(subjectId);
+    const chosen = fromHash ?? fromStore;
+    if (chosen) setWorkspacePanel(chosen);
+  }, [showPhasesPanel, subjectId]);
+
+  useEffect(() => {
+    if (!showPhasesPanel) return;
+    const onHashChange = () => {
+      const fromHash = resolveMocDetailPanelFromHash(window.location.hash);
+      if (!fromHash) return;
+      setWorkspacePanel(fromHash);
+      writeStoredMocDetailPanel(subjectId, fromHash);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [showPhasesPanel, subjectId]);
+
   const hasAnySheet = Boolean(initialFull || initialShortage || initialFulfillment);
   const hasIoPlans = !isSetSubject && ioSplitPlans.length > 0;
   const hasListArea = isSetSubject
@@ -409,67 +477,103 @@ export function MocDetailPartsSection({
     : hasAnySheet || hasOfficial || hasIoPlans;
 
   return (
-    <div id="moc-parts-sheet-tools" className="scroll-mt-24 pt-8">
-      <div className="section-panel space-y-5">
-        <header className="space-y-2">
-          <h2 className="text-base font-semibold text-[var(--text)]">零件表</h2>
-          <p className="text-sm leading-relaxed text-[var(--muted)]">
-            {isSetSubject ? (
-              <>左侧选「全部」；右侧切换完整 / 配货 / 缺件表。</>
-            ) : (
-              <>
-                左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件表，分包方案下切换各分包与汇总缺件表。亦可从{" "}
-                <Link href={listHref} className="text-[var(--accent)] underline">
-                  {ui.noun} 列表
-                </Link>{" "}
-                上传 CSV。
-              </>
-            )}
-          </p>
-        </header>
+    <div className="scroll-mt-24 pt-8">
+      {showPhasesPanel ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={`${WORKSPACE_PANEL_TAB_CLASS} ${
+              workspacePanel === "parts"
+                ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--border)] hover:text-[var(--text)]"
+            }`}
+            onClick={() => selectWorkspacePanel("parts")}
+          >
+            零件表
+          </button>
+          <button
+            type="button"
+            className={`${WORKSPACE_PANEL_TAB_CLASS} ${
+              workspacePanel === "phases"
+                ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]"
+                : "border-[var(--border-soft)] text-[var(--muted)] hover:border-[var(--border)] hover:text-[var(--text)]"
+            }`}
+            onClick={() => selectWorkspacePanel("phases")}
+          >
+            复刻阶段
+            {replicatePhases.length > 0 ? (
+              <span className="ml-1 tabular-nums text-[var(--muted)]">({replicatePhases.length})</span>
+            ) : null}
+          </button>
+        </div>
+      ) : null}
 
-        <PartsSheetImport
-          buildSubjectKind={subjectKind}
-          requestedLoadMocId={subjectId}
-          ioBatchId={ioBatchId}
-          initialFullSheet={isSetSubject ? null : initialFull}
-          initialShortageSheet={initialShortage}
-          initialFulfillmentSheet={initialFulfillment}
-          initialShortageClearedAt={initialShortageClearedAt}
-          initialMocLoadError={initialMocLoadError}
-          exportDisplayName={exportDisplayName}
-          mocDetailEmbed
-        />
+      {workspacePanel === "phases" && showPhasesPanel ? (
+        <div id={MOC_DETAIL_PANEL_HASH.phases} className="section-panel space-y-5 scroll-mt-24">
+          <MocReplicatePhasesPanel subjectId={subjectId} phases={replicatePhases} variant="workspace" />
+        </div>
+      ) : (
+        <div id={MOC_DETAIL_PANEL_HASH.parts} className="section-panel space-y-5 scroll-mt-24">
+          <header className="space-y-2">
+            <h2 className="text-base font-semibold text-[var(--text)]">零件表</h2>
+            <p className="text-sm leading-relaxed text-[var(--muted)]">
+              {isSetSubject ? (
+                <>左侧选「全部」；右侧切换完整 / 配货 / 缺件表。</>
+              ) : (
+                <>
+                  左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件表，分包方案下切换各分包与汇总缺件表。亦可从{" "}
+                  <Link href={listHref} className="text-[var(--accent)] underline">
+                    {ui.noun} 列表
+                  </Link>{" "}
+                  上传 CSV。
+                </>
+              )}
+            </p>
+          </header>
 
-        {ioBatchId ? (
-          <IoBatchEmbeddedList
-            subjectKind={subjectKind}
-            subjectId={subjectId}
+          <PartsSheetImport
+            buildSubjectKind={subjectKind}
+            requestedLoadMocId={subjectId}
             ioBatchId={ioBatchId}
+            initialFullSheet={isSetSubject ? null : initialFull}
+            initialShortageSheet={initialShortage}
+            initialFulfillmentSheet={initialFulfillment}
+            initialShortageClearedAt={initialShortageClearedAt}
+            initialMocLoadError={initialMocLoadError}
             exportDisplayName={exportDisplayName}
-            parentSubjectOwned={parentSubjectOwned}
-            initialFull={initialFull}
-            initialShortage={initialShortage}
-            initialFulfillment={initialFulfillment}
+            mocDetailEmbed
           />
-        ) : hasListArea ? (
-          <div className="border-t border-[var(--border-soft)] pt-5">
-            <MocPartsSheetBrowser
+
+          {ioBatchId ? (
+            <IoBatchEmbeddedList
               subjectKind={subjectKind}
               subjectId={subjectId}
+              ioBatchId={ioBatchId}
               exportDisplayName={exportDisplayName}
               parentSubjectOwned={parentSubjectOwned}
-              initialFull={isSetSubject ? null : initialFull}
+              initialFull={initialFull}
               initialShortage={initialShortage}
               initialFulfillment={initialFulfillment}
-              officialInventory={officialInventory}
-              ioSplitPlans={isSetSubject ? [] : ioSplitPlans}
-              allTab={listTab}
-              onAllTabChange={selectMocListTab}
             />
-          </div>
-        ) : null}
-      </div>
+          ) : hasListArea ? (
+            <div className="border-t border-[var(--border-soft)] pt-5">
+              <MocPartsSheetBrowser
+                subjectKind={subjectKind}
+                subjectId={subjectId}
+                exportDisplayName={exportDisplayName}
+                parentSubjectOwned={parentSubjectOwned}
+                initialFull={isSetSubject ? null : initialFull}
+                initialShortage={initialShortage}
+                initialFulfillment={initialFulfillment}
+                officialInventory={officialInventory}
+                ioSplitPlans={isSetSubject ? [] : ioSplitPlans}
+                allTab={listTab}
+                onAllTabChange={selectMocListTab}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

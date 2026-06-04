@@ -72,6 +72,12 @@ export const BUILD_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
 
 export const BUILD_ATTACHMENT_MAX_FILES_PER_SUBJECT = 24;
 
+export const BUILD_REPLICATE_PHASE_MAX_PER_SUBJECT = 30;
+
+export const BUILD_REPLICATE_PHASE_LABEL_MAX_LEN = 80;
+
+export const BUILD_REPLICATE_PHASE_NOTE_MAX_LEN = 500;
+
 export type BuildAttachmentKind = "pdf" | "io" | "ldr";
 
 export function inferBuildAttachmentKindFromName(fileName: string): BuildAttachmentKind | null {

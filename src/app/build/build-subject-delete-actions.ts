@@ -12,6 +12,7 @@ import {
   buildIoStepBatches,
   buildOwnedSubjects,
   buildProfiles,
+  buildReplicatePhases,
   buildSavedPartsSheets,
 } from "@/db/schema";
 import { BUILD_SUBJECT_MOC, isSafeBuildSubjectId, type BuildSubjectKind } from "@/lib/build-subject";
@@ -58,6 +59,11 @@ export async function deleteBuildSubjectAction(
         .run();
       tx.delete(buildIoStepBatches)
         .where(and(eq(buildIoStepBatches.subjectKind, key.kind), eq(buildIoStepBatches.subjectId, key.id)))
+        .run();
+      tx.delete(buildReplicatePhases)
+        .where(
+          and(eq(buildReplicatePhases.subjectKind, key.kind), eq(buildReplicatePhases.subjectId, key.id))
+        )
         .run();
       tx.delete(buildOwnedSubjects)
         .where(and(eq(buildOwnedSubjects.subjectKind, key.kind), eq(buildOwnedSubjects.subjectId, key.id)))
