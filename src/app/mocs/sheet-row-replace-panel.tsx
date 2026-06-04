@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { SheetThumbMismatchOverlay } from "@/components/sheet-thumb-mismatch-overlay";
 import type { BuildSubjectKind } from "@/lib/build-subject";
 import {
   formatGobricksBilingualColorLabel,
@@ -10,6 +11,12 @@ import {
 } from "@/lib/gobricks-display-caption";
 import { parseGobricksProductIdFromGdsItemId } from "@/lib/gobricks-item-filter-inventory";
 import { parseSheetRowReplaceMeta } from "@/lib/sheet-row-replaced-marker";
+import {
+  resolveGobricksPictureDisplay,
+  resolveGobricksThumbDisplay,
+  resolveLegoThumbDisplay,
+  type SheetRowThumbMismatchKind,
+} from "@/lib/parts-sheet-row-thumb";
 import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
 
 import { replaceBuildPartsSheetRowAction } from "@/app/mocs/moc-parts-sheet-actions";
@@ -100,6 +107,7 @@ type QuickPickTile = {
   /** 辅文案：乐高设计号 */
   footLine: string;
   imgUrl: string | null;
+  imgMismatchKind: SheetRowThumbMismatchKind | null;
   preresolvedProductId: string | null;
   badge: string;
 };
@@ -116,11 +124,13 @@ const TILE_SECONDARY_CLASS =
 
 function LegoReferenceHalfRow({
   imgUrl,
+  imgMismatchKind = null,
   partNum,
   partName,
   colorLine,
 }: {
   imgUrl: string | null;
+  imgMismatchKind?: SheetRowThumbMismatchKind | null;
   partNum: string;
   partName: string | null;
   colorLine: string;
@@ -141,6 +151,7 @@ function LegoReferenceHalfRow({
         ) : (
           <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">无图</span>
         )}
+        {imgUrl && imgMismatchKind ? <SheetThumbMismatchOverlay kind={imgMismatchKind} /> : null}
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-2)]">参考 · 乐高</div>
@@ -163,7 +174,8 @@ function buildGobricksQuickTile(
   key: string,
   badge: string,
   /** 用于从旧版 gdsCaption 中剥掉拼接的颜色后缀 */
-  legoColorName?: string | null
+  legoColorName?: string | null,
+  imgMismatchKind?: SheetRowThumbMismatchKind | null
 ): QuickPickTile | null {
   const partNum = partNumRaw.trim();
   if (!partNum) return null;
@@ -185,6 +197,7 @@ function buildGobricksQuickTile(
       idLine,
       footLine,
       imgUrl,
+      imgMismatchKind: imgMismatchKind ?? null,
       preresolvedProductId: pid,
       badge,
     };
@@ -200,6 +213,7 @@ function buildGobricksQuickTile(
       idLine: gdsTrim && !cap ? gdsTrim.slice(0, 36) : null,
       footLine,
       imgUrl,
+      imgMismatchKind: imgMismatchKind ?? null,
       preresolvedProductId: null,
       badge,
     };
@@ -287,16 +301,23 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
   const beforeReplaceTiles = useMemo((): QuickPickTile[] => {
     if (!replaceMeta.hasMarker) return [];
     const op = replaceMeta.originalPartNum?.trim();
-    if (!op) return [];
+    const ocid = replaceMeta.originalColorId;
+    if (!op || ocid == null || !Number.isFinite(ocid)) return [];
+    const ogThumb = resolveGobricksPictureDisplay(
+      replaceMeta.originalGobricksPicture,
+      replaceMeta.originalGobricksLegoColorId,
+      ocid
+    );
     const og = buildGobricksQuickTile(
       op,
       replaceMeta.originalGobricksItemId,
       replaceMeta.originalGobricksCaption,
       replaceMeta.originalGobricksCaptionEn,
-      replaceMeta.originalGobricksPicture,
+      ogThumb.src,
       "before-gobricks",
       "原·高砖",
-      replaceMeta.originalColorName
+      replaceMeta.originalColorName,
+      ogThumb.mismatchKind
     );
     return og ? [og] : [];
   }, [replaceMeta]);
@@ -304,18 +325,30 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
   const currentRowTiles = useMemo((): QuickPickTile[] => {
     const pn = item.partNum.trim();
     if (!pn) return [];
+    const cgThumb = resolveGobricksThumbDisplay(item, context.branch === "fulfillment");
     const cg = buildGobricksQuickTile(
       pn,
       item.gdsItemId,
       item.gdsCaption,
       item.gdsCaptionEn,
-      item.gdsPicture,
+      cgThumb.src,
       "current-gobricks",
       "现·高砖",
-      item.colorName
+      item.colorName,
+      cgThumb.mismatchKind
     );
     return cg ? [cg] : [];
-  }, [item.colorName, item.partNum, item.gdsItemId, item.gdsCaption, item.gdsCaptionEn, item.gdsPicture]);
+  }, [
+    context.branch,
+    item.colorId,
+    item.colorName,
+    item.partNum,
+    item.gdsItemId,
+    item.gdsCaption,
+    item.gdsCaptionEn,
+    item.gdsPicture,
+    item.gdsLegoColorId,
+  ]);
 
   /** 选高砖色时对照：配货表本行对应的乐高颜色名（已更换行优先用标记里存档的原色） */
   const legoReferenceColorLine = useMemo(() => {
@@ -339,21 +372,24 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
     item.colorName,
   ]);
 
-  const legoReferenceImgUrl = useMemo(() => {
+  const legoReferenceThumb = useMemo(() => {
     if (
       replaceMeta.hasMarker &&
       replaceMeta.originalColorId != null &&
       Number.isFinite(replaceMeta.originalColorId)
     ) {
       const snap = replaceMeta.originalLegoImgUrl?.trim();
-      if (snap) return snap;
+      if (snap) {
+        return { src: snap, mismatchKind: null as SheetRowThumbMismatchKind | null };
+      }
     }
-    return item.imgUrl?.trim() || null;
+    const d = resolveLegoThumbDisplay(item);
+    return { src: d.src, mismatchKind: d.mismatchKind };
   }, [
     replaceMeta.hasMarker,
     replaceMeta.originalColorId,
     replaceMeta.originalLegoImgUrl,
-    item.imgUrl,
+    item,
   ]);
 
   const legoReferencePartNum = useMemo(() => {
@@ -378,10 +414,17 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
   );
 
   const pickedGobricksThumb = useMemo(() => {
-    const pic =
-      selectedGobricksVariant?.picture?.trim() || pickedPartImgUrl?.trim() || null;
+    const variantPic = selectedGobricksVariant?.picture?.trim() || null;
     const rgb = selectedGobricksVariant?.rgb?.trim() || null;
-    return { picture: pic, rgb };
+    if (variantPic) {
+      return { picture: variantPic, rgb, mismatchKind: null as SheetRowThumbMismatchKind | null };
+    }
+    const fallback = pickedPartImgUrl?.trim() || null;
+    return {
+      picture: fallback,
+      rgb,
+      mismatchKind: fallback ? ("gds" as const) : null,
+    };
   }, [pickedPartImgUrl, selectedGobricksVariant]);
 
   const quickPickProductIds = useMemo(() => {
@@ -612,7 +655,10 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                 ) : (
                   <span className="flex h-full w-full items-center justify-center text-[10px] text-[var(--muted)]">无图</span>
                 )}
-                <span className="pointer-events-none absolute left-0.5 top-0.5 rounded border border-amber-400/40 bg-amber-700/90 px-1 py-px text-[8px] font-medium leading-none text-amber-50">
+                {t.imgUrl && t.imgMismatchKind ? (
+                  <SheetThumbMismatchOverlay kind={t.imgMismatchKind} />
+                ) : null}
+                <span className="pointer-events-none absolute left-0.5 top-0.5 z-[3] rounded border border-amber-400/40 bg-amber-700/90 px-1 py-px text-[8px] font-medium leading-none text-amber-50">
                   {t.badge}
                 </span>
               </div>
@@ -700,7 +746,8 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
             aria-label="本行乐高零件参考"
           >
             <LegoReferenceHalfRow
-              imgUrl={legoReferenceImgUrl}
+              imgUrl={legoReferenceThumb.src}
+              imgMismatchKind={legoReferenceThumb.mismatchKind}
               partNum={legoReferencePartNum}
               partName={legoReferencePartName}
               colorLine={legoReferenceColorLine}
@@ -786,7 +833,8 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
             aria-label="乐高参考与选中高砖零件"
           >
             <LegoReferenceHalfRow
-              imgUrl={legoReferenceImgUrl}
+              imgUrl={legoReferenceThumb.src}
+              imgMismatchKind={legoReferenceThumb.mismatchKind}
               partNum={legoReferencePartNum}
               partName={legoReferencePartName}
               colorLine={legoReferenceColorLine}
@@ -815,6 +863,9 @@ export function SheetRowReplacePanel({ item, context, onReplaced }: Props) {
                 ) : (
                   <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">无图</span>
                 )}
+                {pickedGobricksThumb.picture && pickedGobricksThumb.mismatchKind ? (
+                  <SheetThumbMismatchOverlay kind={pickedGobricksThumb.mismatchKind} />
+                ) : null}
               </div>
               <div className="min-w-0 flex-1 text-sm">
                 <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-2)]">选中 · 高砖</div>

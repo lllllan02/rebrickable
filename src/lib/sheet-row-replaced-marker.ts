@@ -1,3 +1,11 @@
+import {
+  gobricksPartFallbackPicture,
+  legoColorMatchedImgUrl,
+  legoPartFallbackImgUrl,
+  sheetRowGobricksThumbSrc,
+} from "@/lib/parts-sheet-row-thumb";
+import type { ShortageResolveItem } from "@/lib/shortage-resolve-types";
+
 /** 机器可读 token：`‖sheetRowReplaced‖`（旧）或 `‖sheetRowReplaced:base64url(json)‖`（含原零件 p/c 与可选快照）。 */
 
 const TOKEN_STRIP_RE = /‖sheetRowReplaced(?::[A-Za-z0-9_-]+)?‖/g;
@@ -264,9 +272,14 @@ export type RowSnapshotSource = {
 
 export function buildSheetRowReplaceSnapshotFromRow(row: RowSnapshotSource): SheetRowReplaceSnapshot | null {
   const unit = (row.gdsUnitPrice ?? row.gobricksUnitPrice ?? "").trim() || null;
+  const colorRow = row as ShortageResolveItem;
   const s: SheetRowReplaceSnapshot = {
-    originalLegoImgUrl: clipSnapshotStr(row.imgUrl ?? null),
-    originalGobricksPicture: clipSnapshotStr(row.gdsPicture ?? null),
+    originalLegoImgUrl: clipSnapshotStr(
+      legoColorMatchedImgUrl(colorRow) ?? legoPartFallbackImgUrl(colorRow)
+    ),
+    originalGobricksPicture: clipSnapshotStr(
+      sheetRowGobricksThumbSrc(colorRow) ?? gobricksPartFallbackPicture(colorRow)
+    ),
     originalGobricksItemId: clipSnapshotStr(row.gdsItemId ?? null),
     originalLegoPartName: clipSnapshotStr(row.partName ?? null),
     originalColorName: clipSnapshotStr(row.colorName ?? null),

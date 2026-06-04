@@ -27,6 +27,8 @@ import {
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
 import { randomUUID } from "@/lib/random-uuid";
+import { resolveSheetRowListThumb, sheetThumbMismatchLabel } from "@/lib/parts-sheet-row-thumb";
+import { SheetThumbMismatchOverlay } from "@/components/sheet-thumb-mismatch-overlay";
 
 type ShortageRow = ShortageResolveItem & { rowId: string };
 
@@ -628,7 +630,8 @@ export function PartsSheetImport({
   }, [exportStem, items]);
 
   const missingParts = items?.filter((i) => !i.partFound).length ?? 0;
-  const noImage = items?.filter((i) => i.partFound && !i.imgUrl).length ?? 0;
+  const noImage =
+    items?.filter((i) => i.partFound && !resolveSheetRowListThumb(i).src).length ?? 0;
 
   const sheetFilterOptions = useMemo(() => getSheetFilterOptionsFromItems(items ?? []), [items]);
 
@@ -1068,25 +1071,33 @@ export function PartsSheetImport({
             </p>
           ) : (
             <ul className="content-grid">
-            {listFiltered.map((r) => (
+            {listFiltered.map((r) => {
+              const thumb = resolveSheetRowListThumb(r);
+              return (
               <li key={r.rowId} className="result-card">
-                <div className="media-box media-box-sm">
-                  {r.imgUrl ? (
+                <div className="media-box media-box-sm relative">
+                  {thumb.src ? (
                     <button
                       type="button"
-                      className="flex h-full w-full cursor-zoom-in items-center justify-center border-0 bg-transparent p-0"
+                      className="relative flex h-full w-full cursor-zoom-in items-center justify-center border-0 bg-transparent p-0"
                       title="点击放大预览"
                       aria-label={`放大预览 ${r.partNum} 零件图`}
-                      onClick={() => setPreviewUrl(r.imgUrl!)}
+                      onClick={() => setPreviewUrl(thumb.src!)}
                     >
                       <Image
-                        src={r.imgUrl}
+                        src={thumb.src}
                         alt=""
                         width={56}
                         height={56}
                         className="box-border h-full w-full object-contain p-0.5"
                         sizes="56px"
                       />
+                      {thumb.mismatchKind ? (
+                        <SheetThumbMismatchOverlay
+                          kind={thumb.mismatchKind}
+                          className="pointer-events-none"
+                        />
+                      ) : null}
                     </button>
                   ) : (
                     <div
@@ -1124,12 +1135,12 @@ export function PartsSheetImport({
                           {r.colorName ? ` · ${r.colorName}` : ""}
                         </button>
                         <span className="badge badge-accent">×{r.quantity}</span>
-                        {r.imgSource === "part" ? (
+                        {thumb.mismatchKind === "lego" ? (
                           <span
-                            className="text-[10px] text-[var(--muted)]"
-                            title="当前颜色无库存图，已使用该零件其他颜色的图片"
+                            className="text-[10px] font-medium text-amber-200/95"
+                            title="本行颜色无库存图，图为其它配色示意"
                           >
-                            图·异色
+                            {sheetThumbMismatchLabel("lego")}
                           </span>
                         ) : null}
                         {r.partFound
@@ -1180,7 +1191,8 @@ export function PartsSheetImport({
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
             </ul>
           )}
         </>

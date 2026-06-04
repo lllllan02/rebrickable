@@ -10,6 +10,14 @@ import {
   rowMatchesSheetListFilter,
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
+import { SheetThumbMismatchOverlay } from "@/components/sheet-thumb-mismatch-overlay";
+import {
+  resolveGobricksPictureDisplay,
+  resolveGobricksThumbDisplay,
+  resolveLegoThumbDisplay,
+  resolveSheetRowListThumb,
+  type SheetRowThumbMismatchKind,
+} from "@/lib/parts-sheet-row-thumb";
 import {
   getShortageReasonFilterOptionsFromRests,
   rowMatchesShortageReasonFilter,
@@ -169,13 +177,6 @@ function shortageReasonSummaryLines(rest: string): string[] {
   return ids.map((id) => labelById.get(id) ?? id);
 }
 
-/** 配货 / 缺件列表：优先高砖商品图，否则乐高目录图 */
-function sheetRowListThumbSrc(r: ShortageResolveItem, preferGdsThumb: boolean): string | null {
-  const gds = r.gdsPicture?.trim() || null;
-  if (preferGdsThumb && gds) return gds;
-  return r.imgUrl?.trim() || null;
-}
-
 function rowHasGobricksDetailFields(item: ShortageResolveItem): boolean {
   return Boolean(
     item.gdsItemId?.trim() ||
@@ -238,27 +239,32 @@ function CatalogImageFigure({
 function SheetReplaceQuadThumb({
   imageUrl,
   emptyLabel,
+  mismatchKind = null,
 }: {
   imageUrl: string | null;
   emptyLabel: string;
+  mismatchKind?: SheetRowThumbMismatchKind | null;
 }) {
   return (
-    <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-[5.25rem] sm:w-[5.25rem]">
-      {imageUrl ? (
-        <RemoteCoverImage
-          src={imageUrl}
-          width={128}
-          height={128}
-          className="h-full w-full object-contain p-1"
-          sizes="96px"
-          fallbackLabel="无图"
-          fallbackClassName="!text-[10px]"
-        />
-      ) : (
-        <span className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] leading-tight text-[var(--muted)] sm:text-[11px]">
-          {emptyLabel}
-        </span>
-      )}
+    <div className="flex shrink-0 flex-col gap-0.5">
+      <div className="relative h-[4.5rem] w-[4.5rem] overflow-hidden rounded-md border border-neutral-300/25 bg-white sm:h-[5.25rem] sm:w-[5.25rem]">
+        {imageUrl ? (
+          <RemoteCoverImage
+            src={imageUrl}
+            width={128}
+            height={128}
+            className="h-full w-full object-contain p-1"
+            sizes="96px"
+            fallbackLabel="无图"
+            fallbackClassName="!text-[10px]"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] leading-tight text-[var(--muted)] sm:text-[11px]">
+            {emptyLabel}
+          </span>
+        )}
+        {imageUrl && mismatchKind ? <SheetThumbMismatchOverlay kind={mismatchKind} /> : null}
+      </div>
     </div>
   );
 }
@@ -316,7 +322,7 @@ function SheetReplaceCurrentLegoCell({
     );
   }
 
-  const curLegoImg = item.imgUrl?.trim() || null;
+  const curLegoThumb = resolveLegoThumbDisplay(item);
   const curColorLine = item.colorName
     ? `${item.colorName}（${item.colorId}）`
     : `色 ID ${item.colorId}`;
@@ -343,8 +349,9 @@ function SheetReplaceCurrentLegoCell({
       <div className={SHEET_QUAD_CELL_TITLE}>{title}</div>
       <div className="flex items-start gap-2 sm:gap-2.5">
         <SheetReplaceQuadThumb
-          imageUrl={curLegoImg}
+          imageUrl={curLegoThumb.src}
           emptyLabel={item.partFound ? "无图" : "未收录"}
+          mismatchKind={curLegoThumb.mismatchKind}
         />
         <div className={SHEET_QUAD_BODY_BASE}>
           <SheetReplaceQuadRow label="ID">{curLegoIdBlock}</SheetReplaceQuadRow>
@@ -359,15 +366,27 @@ function SheetReplaceCurrentLegoCell({
 }
 
 /** 与四宫格「现·高砖」同字段与样式 */
-function SheetReplaceCurrentGobricksCell({ title, item }: { title: string; item: ShortageResolveItem }) {
-  const curGdsPic = item.gdsPicture?.trim() || null;
+function SheetReplaceCurrentGobricksCell({
+  title,
+  item,
+  fulfillmentListMode = false,
+}: {
+  title: string;
+  item: ShortageResolveItem;
+  fulfillmentListMode?: boolean;
+}) {
+  const curGdsThumb = resolveGobricksThumbDisplay(item, fulfillmentListMode);
   const unitText = sheetRowGobricksUnitPriceText(item);
   const curGobricksColorLine = sheetRowGobricksColorLine(item);
   return (
     <div className={SHEET_QUAD_CELL_SHELL}>
       <div className={SHEET_QUAD_CELL_TITLE}>{title}</div>
       <div className="flex items-start gap-2 sm:gap-2.5">
-        <SheetReplaceQuadThumb imageUrl={curGdsPic} emptyLabel="无商品图" />
+        <SheetReplaceQuadThumb
+          imageUrl={curGdsThumb.src}
+          emptyLabel="无商品图"
+          mismatchKind={curGdsThumb.mismatchKind}
+        />
         <div className={SHEET_QUAD_BODY_BASE}>
           <SheetReplaceQuadRow label="ID">
             <span className="break-all font-mono">{item.gdsItemId?.trim() ?? "—"}</span>
@@ -386,11 +405,19 @@ function SheetReplaceCurrentGobricksCell({ title, item }: { title: string; item:
 }
 
 /** 未更换行：仅乐高 + 高砖两格，与四宫格现侧字段、样式一致 */
-function SheetLegoGobricksTwinCatalog({ item, onClose }: { item: ShortageResolveItem; onClose: () => void }) {
+function SheetLegoGobricksTwinCatalog({
+  item,
+  onClose,
+  fulfillmentListMode = false,
+}: {
+  item: ShortageResolveItem;
+  onClose: () => void;
+  fulfillmentListMode?: boolean;
+}) {
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:gap-3" aria-label="乐高与高砖">
       <SheetReplaceCurrentLegoCell title="乐高" item={item} onClose={onClose} />
-      <SheetReplaceCurrentGobricksCell title="高砖" item={item} />
+      <SheetReplaceCurrentGobricksCell title="高砖" item={item} fulfillmentListMode={fulfillmentListMode} />
     </div>
   );
 }
@@ -399,16 +426,25 @@ function SheetReplaceFourQuadrants({
   replaceMeta,
   item,
   onClose,
+  fulfillmentListMode = false,
 }: {
   replaceMeta: ReturnType<typeof parseSheetRowReplaceMeta>;
   item: ShortageResolveItem;
   onClose: () => void;
+  fulfillmentListMode?: boolean;
 }) {
   const opn = replaceMeta.originalPartNum;
   const ocid = replaceMeta.originalColorId;
   const hasOrigLego = opn != null && ocid != null;
   const origLegoImg = replaceMeta.originalLegoImgUrl?.trim() || null;
-  const origGdsPic = replaceMeta.originalGobricksPicture?.trim() || null;
+  const origGdsThumb =
+    ocid != null
+      ? resolveGobricksPictureDisplay(
+          replaceMeta.originalGobricksPicture,
+          replaceMeta.originalGobricksLegoColorId,
+          ocid
+        )
+      : { src: null, colorMatched: false, mismatchKind: null };
   const origGdsId = replaceMeta.originalGobricksItemId?.trim() || null;
   /** 有高砖商品 SKU（如 GDS-812-091）时才展示原·高砖详情；仅有色 ID 等无商品时视为未匹配 */
   const origHasGobricksSku = Boolean(origGdsId);
@@ -475,7 +511,11 @@ function SheetReplaceFourQuadrants({
           <p className={SHEET_QUAD_NO_MATCH}>无匹配零件</p>
         ) : (
           <div className="flex items-start gap-2 sm:gap-2.5">
-            <SheetReplaceQuadThumb imageUrl={origGdsPic} emptyLabel="无图" />
+            <SheetReplaceQuadThumb
+              imageUrl={origGdsThumb.src}
+              emptyLabel="无图"
+              mismatchKind={origGdsThumb.mismatchKind}
+            />
             <div className={SHEET_QUAD_BODY_BASE}>
               <SheetReplaceQuadRow label="ID">
                 <span className="break-all font-mono">{origGdsId}</span>
@@ -493,7 +533,11 @@ function SheetReplaceFourQuadrants({
       </div>
 
       <SheetReplaceCurrentLegoCell title="现·乐高" item={item} onClose={onClose} />
-      <SheetReplaceCurrentGobricksCell title="现·高砖" item={item} />
+      <SheetReplaceCurrentGobricksCell
+        title="现·高砖"
+        item={item}
+        fulfillmentListMode={fulfillmentListMode}
+      />
     </div>
   );
 }
@@ -920,8 +964,10 @@ function MocPartDetailBody({
         : item.partNum.trim() || "—";
   const showNameRowInDl = !(item.partFound && item.partName);
 
-  const gdsUrl = item.gdsPicture?.trim() || null;
-  const legoUrl = item.imgUrl?.trim() || null;
+  const legoThumb = resolveLegoThumbDisplay(item);
+  const gdsThumb = resolveGobricksThumbDisplay(item, fulfillmentListDetail);
+  const legoUrl = legoThumb.src;
+  const gdsUrl = gdsThumb.src;
   const hideGdsPictureUrl = Boolean(gdsUrl);
   const catalogDual = detailSubstituteSuggestions;
   const hasGobricksRowData = rowHasGobricksDetailFields(item);
@@ -1008,7 +1054,12 @@ function MocPartDetailBody({
               <span className="text-[var(--muted-2)]">数量</span>
               <span className="font-mono font-semibold text-[var(--text)]">{item.quantity}</span>
             </div>
-            <SheetReplaceFourQuadrants replaceMeta={replaceMeta} item={item} onClose={onClose} />
+            <SheetReplaceFourQuadrants
+              replaceMeta={replaceMeta}
+              item={item}
+              onClose={onClose}
+              fulfillmentListMode={fulfillmentListDetail}
+            />
           </div>
         ) : null}
 
@@ -1018,7 +1069,11 @@ function MocPartDetailBody({
               <span className="text-[var(--muted-2)]">数量</span>
               <span className="font-mono font-semibold text-[var(--text)]">{item.quantity}</span>
             </div>
-            <SheetLegoGobricksTwinCatalog item={item} onClose={onClose} />
+            <SheetLegoGobricksTwinCatalog
+              item={item}
+              onClose={onClose}
+              fulfillmentListMode={fulfillmentListDetail}
+            />
           </div>
         ) : null}
 
@@ -1037,13 +1092,18 @@ function MocPartDetailBody({
                 <div className="flex gap-3 sm:gap-4">
                   <div className="shrink-0">
                     {legoUrl ? (
-                      <CatalogImageFigure
-                        label="乐高目录图"
-                        imageUrl={legoUrl}
-                        sizes={catalogImgSizes}
-                        compact
-                        showCaption={false}
-                      />
+                      <div className="flex flex-col gap-1">
+                        <CatalogImageFigure
+                          label="乐高目录图"
+                          imageUrl={legoUrl}
+                          sizes={catalogImgSizes}
+                          compact
+                          showCaption={false}
+                        />
+                        {legoThumb.mismatchKind ? (
+                          <SheetThumbMismatchOverlay kind={legoThumb.mismatchKind} variant="banner" />
+                        ) : null}
+                      </div>
                     ) : (
                       <div className="flex aspect-square w-[min(12.5rem,50vw)] max-w-[14rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] leading-snug text-[var(--muted)]">
                         {item.partFound ? "无目录缩略图" : "未收录"}
@@ -1080,13 +1140,18 @@ function MocPartDetailBody({
                     <div className="flex gap-3 sm:gap-4">
                       <div className="shrink-0">
                         {gdsUrl ? (
-                          <CatalogImageFigure
-                            label="高砖商品图"
-                            imageUrl={gdsUrl}
-                            sizes={catalogImgSizes}
-                            compact
-                            showCaption={false}
-                          />
+                          <div className="flex flex-col gap-1">
+                            <CatalogImageFigure
+                              label="高砖商品图"
+                              imageUrl={gdsUrl}
+                              sizes={catalogImgSizes}
+                              compact
+                              showCaption={false}
+                            />
+                            {gdsThumb.mismatchKind ? (
+                              <SheetThumbMismatchOverlay kind={gdsThumb.mismatchKind} variant="banner" />
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="flex aspect-square w-[min(12.5rem,50vw)] max-w-[14rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
                             无高砖商品图
@@ -1128,13 +1193,18 @@ function MocPartDetailBody({
             <div className="flex gap-3 sm:gap-5">
               <div className="shrink-0">
                 {legoUrl ? (
-                  <CatalogImageFigure
-                    label="乐高目录图"
-                    imageUrl={legoUrl}
-                    sizes={catalogImgSizes}
-                    compact
-                    showCaption={false}
-                  />
+                  <div className="flex flex-col gap-1">
+                    <CatalogImageFigure
+                      label="乐高目录图"
+                      imageUrl={legoUrl}
+                      sizes={catalogImgSizes}
+                      compact
+                      showCaption={false}
+                    />
+                    {legoThumb.mismatchKind ? (
+                      <SheetThumbMismatchOverlay kind={legoThumb.mismatchKind} variant="banner" />
+                    ) : null}
+                  </div>
                 ) : (
                   <div className="flex aspect-square w-[min(12.5rem,52vw)] max-w-[14rem] items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.35)] px-2 text-center text-[10px] text-[var(--muted)]">
                     {item.partFound ? "无图" : "未收录"}
@@ -1227,6 +1297,9 @@ export function MocPartsList({
   const detailDialogRef = useRef<HTMLDialogElement>(null);
   const detailTitleId = useId();
 
+  /** 配货表（非缺件 Tab）：不标高砖「色不符」 */
+  const fulfillmentListMode = detailSubstituteSuggestions && !shortageListMode;
+
   const shortageReasonOptions = useMemo(() => {
     if (!shortageListMode) return [];
     return getShortageReasonFilterOptionsFromRests(items.map((r) => r.rest));
@@ -1270,9 +1343,10 @@ export function MocPartsList({
   }, [items, totalPartQtyProp, shortageListMode]);
 
   const missingParts = items.filter((i) => !i.partFound).length;
-  const noImage = items.filter(
-    (i) => i.partFound && !sheetRowListThumbSrc(i, detailSubstituteSuggestions)
-  ).length;
+  const noImage = items.filter((i) => {
+    if (!i.partFound) return false;
+    return !resolveSheetRowListThumb(i, detailSubstituteSuggestions, fulfillmentListMode).src;
+  }).length;
 
   const closeDetail = useCallback(() => {
     detailDialogRef.current?.close();
@@ -1399,7 +1473,15 @@ export function MocPartsList({
         <div className="tiles-grid">
           {listDisplayed.map((r, idx) => {
             const reasonLine = partsSheetGridReasonLine(r, shortageListMode);
-            const thumbSrc = sheetRowListThumbSrc(r, detailSubstituteSuggestions);
+            const thumb = resolveSheetRowListThumb(
+              r,
+              detailSubstituteSuggestions,
+              fulfillmentListMode
+            );
+            const thumbSrc = thumb.src;
+            const gdsThumb = detailSubstituteSuggestions
+              ? resolveGobricksThumbDisplay(r, fulfillmentListMode)
+              : null;
             const showUnitInTile = sheetRowReplaceContext?.branch === "fulfillment";
             const unitGrid = showUnitInTile ? sheetRowGobricksUnitPriceText(r) : undefined;
             const sheetRowModified = restHasSheetRowReplacedMarker(r.rest);
@@ -1438,7 +1520,7 @@ export function MocPartsList({
                     ) : null}
                   </div>
                 ) : null}
-                {detailSubstituteSuggestions && r.gdsPicture?.trim() ? (
+                {gdsThumb?.colorMatched && thumbSrc === gdsThumb.src ? (
                   <span className="pointer-events-none absolute right-1 top-1 z-[1] truncate text-[9px] font-medium leading-none text-violet-200/95">
                     高砖
                   </span>
@@ -1447,14 +1529,19 @@ export function MocPartsList({
                   className={`relative mx-auto ${thumbTopMarginClass} aspect-square w-[calc(100%-0.25rem)] max-w-[4.5rem] shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[rgba(7,10,18,0.72)]`}
                 >
                   {thumbSrc ? (
-                    <RemoteCoverImage
-                      src={thumbSrc}
-                      fill
-                      className="object-contain p-0.5"
-                      sizes="(max-width:640px)20vw,4.5rem"
-                      fallbackLabel={r.partFound ? "无图" : "?"}
-                      fallbackClassName="!text-[9px]"
-                    />
+                    <>
+                      <RemoteCoverImage
+                        src={thumbSrc}
+                        fill
+                        className="object-contain p-0.5"
+                        sizes="(max-width:640px)20vw,4.5rem"
+                        fallbackLabel={r.partFound ? "无图" : "?"}
+                        fallbackClassName="!text-[9px]"
+                      />
+                      {thumb.mismatchKind ? (
+                        <SheetThumbMismatchOverlay kind={thumb.mismatchKind} />
+                      ) : null}
+                    </>
                   ) : (
                     <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">
                       {r.partFound ? "无图" : "?"}
