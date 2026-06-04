@@ -6,6 +6,7 @@ import { useCallback, useState, useTransition } from "react";
 
 import { syncGobricksShortageForSubjectWithModifiedConfirm } from "@/app/mocs/gobricks-shortage-sync-client";
 import type { BuildSubjectKind } from "@/lib/build-subject";
+import { formatIsoDateTimeFull } from "@/lib/format-display-time";
 
 const triggerClass =
   "ml-1.5 inline cursor-pointer border-0 bg-transparent p-0 align-baseline font-inherit tabular-nums underline-offset-2 hover:underline disabled:cursor-wait disabled:no-underline disabled:opacity-45";
@@ -13,7 +14,7 @@ const triggerClass =
 function formatSyncHint(iso: string | null | undefined): string {
   const t = typeof iso === "string" ? iso.trim() : "";
   if (!t) return "";
-  return t.slice(0, 19).replace("T", " ");
+  return formatIsoDateTimeFull(t) ?? t.slice(0, 19).replace("T", " ");
 }
 
 type Props = {

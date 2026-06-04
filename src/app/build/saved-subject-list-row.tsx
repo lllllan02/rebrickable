@@ -5,6 +5,7 @@ import { BuildWorkflowStageListMark } from "@/components/build-workflow-stage-li
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 import { workflowStageCardClass, type BuildWorkflowStage } from "@/lib/build-workflow-stage";
+import { formatIsoDateTimeFull } from "@/lib/format-display-time";
 import { buildMocPartsDetailHref } from "@/lib/moc-parts-tab-navigation";
 
 function usableImgUrl(u: string | null | undefined): u is string {
@@ -56,7 +57,7 @@ export function SavedSubjectListRow({
   className?: string;
 }) {
   const coverImageClassName = kind === BUILD_SUBJECT_SET ? "object-contain p-3" : "object-cover";
-  const savedAt = updatedAtIso.slice(0, 19).replace("T", " ");
+  const savedAt = formatIsoDateTimeFull(updatedAtIso) ?? updatedAtIso.slice(0, 19).replace("T", " ");
   const hasShortage = shortageLineCount != null && shortageLineCount > 0;
   const markedNoShortage =
     typeof shortageClearedAt === "string" && shortageClearedAt.trim().length > 0;

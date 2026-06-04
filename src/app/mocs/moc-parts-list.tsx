@@ -19,6 +19,7 @@ import {
 } from "@/lib/shortage-reason-filter";
 import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT, PART_GRID_TILE_SHEET_ROW_MODIFIED } from "@/lib/part-grid-tile-classes";
 import { formatGobricksColorLine, gobricksCaptionNameOrFallback } from "@/lib/gobricks-display-caption";
+import { formatIsoDateTimeFull } from "@/lib/format-display-time";
 import {
   parseSheetRowReplaceMeta,
   restHasSheetRowReplacedMarker,
@@ -1334,7 +1335,7 @@ export function MocPartsList({
           ) : (
             <>
               {" · "}
-              保存于 {savedAt.slice(0, 19).replace("T", " ")}
+              保存于 {formatIsoDateTimeFull(savedAt) ?? savedAt.slice(0, 19).replace("T", " ")}
               {skippedHeader ? " · 导入时含表头" : ""}
             </>
           )}

@@ -9,6 +9,7 @@ import {
   type BricktimeConfigPublic,
 } from "@/app/sets/bricktime-config-actions";
 import { goodPriceBtnPrimary, goodPriceBtnSecondary } from "@/lib/set-good-price-buttons";
+import { formatIsoDateTimeLocale } from "@/lib/format-display-time";
 
 type Props = {
   initialConfig: BricktimeConfigPublic;
@@ -16,10 +17,7 @@ type Props = {
 
 function formatExpiresAt(isoLike: string | null): string | null {
   if (!isoLike?.trim()) return null;
-  const normalized = isoLike.includes("T") ? isoLike : isoLike.replace(" ", "T");
-  const d = new Date(normalized);
-  if (!Number.isFinite(d.getTime())) return isoLike;
-  return d.toLocaleString("zh-CN", { hour12: false });
+  return formatIsoDateTimeLocale(isoLike) ?? isoLike;
 }
 
 export function BricktimeConfigPanel({ initialConfig }: Props) {

@@ -3,6 +3,7 @@ import {
   workflowStagesForKind,
   type BuildWorkflowStage,
 } from "@/lib/build-workflow-stage";
+import { formatIsoDateTimeShort } from "@/lib/format-display-time";
 
 export type WorkflowStageTimestamps = Record<BuildWorkflowStage, string | null>;
 
@@ -93,14 +94,8 @@ export function workflowTimestampSetsForStage(
 }
 
 export function formatWorkflowStageTime(iso: string | null | undefined): string | null {
+  const formatted = formatIsoDateTimeShort(iso);
+  if (formatted) return formatted;
   if (typeof iso !== "string" || iso.trim().length < 10) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace("T", " ");
-  return d.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return iso.slice(0, 16).replace("T", " ");
 }

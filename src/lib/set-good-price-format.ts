@@ -1,3 +1,9 @@
+import {
+  currentMonthKeyInDisplayTz,
+  formatIsoDateOnly,
+  isoTimestampMonthKeyInDisplayTz,
+} from "@/lib/format-display-time";
+
 /** 用户录入的好价（元）；无效时返回 null */
 export function formatSetGoodPriceCny(priceCny: number | null | undefined): string | null {
   if (typeof priceCny !== "number" || !Number.isFinite(priceCny) || priceCny < 0) {
@@ -88,23 +94,16 @@ export function isBricktimeOnSaleSalesStatus(status: string | null | undefined):
   return formatBricktimeSalesStatusBrief(status) === "在售";
 }
 
-function isoTimestampMonthKey(iso: string): string | null {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** ISO 时间戳是否落在当前自然月 */
+/** ISO 时间戳是否落在当前自然月（北京时间） */
 export function isIsoTimestampInCurrentMonth(
   iso: string | null | undefined,
   now = new Date()
 ): boolean {
   const s = iso?.trim();
   if (!s) return false;
-  const tsMonth = isoTimestampMonthKey(s);
+  const tsMonth = isoTimestampMonthKeyInDisplayTz(s);
   if (!tsMonth) return false;
-  const nowMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  return tsMonth === nowMonth;
+  return tsMonth === currentMonthKeyInDisplayTz(now);
 }
 
 /** 绝版永久隐藏；在售且当月已查则暂时隐藏销售状态刷新入口 */
@@ -119,13 +118,11 @@ export function shouldHideBricktimeSalesStatusRefresh(
   );
 }
 
-/** 在售状态旁展示的最近查询日期（YYYY-MM-DD） */
+/** 在售状态旁展示的最近查询日期（YYYY-MM-DD，北京时间） */
 export function formatBricktimeSalesStatusFetchedLabel(
   fetchedAt: string | null | undefined
 ): string | null {
-  const s = fetchedAt?.trim();
-  if (!s || Number.isNaN(Date.parse(s))) return null;
-  return s.slice(0, 10);
+  return formatIsoDateOnly(fetchedAt);
 }
 
 /** ISO 日期 YYYY-MM-DD → 2025-10-01 或原样 */

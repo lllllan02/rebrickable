@@ -36,6 +36,7 @@ import { workflowStageFromRow } from "@/lib/build-workflow-from-row";
 import { workflowStageCardClass, type BuildWorkflowStage } from "@/lib/build-workflow-stage";
 import { likeFragment } from "@/lib/search";
 import { BUILD_SUBJECT_SET } from "@/lib/build-subject";
+import { formatIsoDateTimeFull } from "@/lib/format-display-time";
 
 /** 与 MOC 列表相同栅格，略减小每页条数以控制首屏高度 */
 const PAGE_SIZE = 24;
@@ -848,7 +849,7 @@ export async function SetsOfficialCatalogSection({
             const savedAtIso = sheet?.updatedAt;
             const savedAt =
               typeof savedAtIso === "string" && savedAtIso.trim().length > 0
-                ? savedAtIso.slice(0, 19).replace("T", " ")
+                ? formatIsoDateTimeFull(savedAtIso)
                 : null;
             return (
               <li

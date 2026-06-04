@@ -1,5 +1,7 @@
 import { Fragment } from "react";
 
+import { formatIsoDateTimeFull } from "@/lib/format-display-time";
+
 export type SetGoodPriceTimestampsInput = {
   priceUpdatedAt?: string | null;
   bricktimeFetchedAt?: string | null;
@@ -13,8 +15,10 @@ function parseTimestampEntry(
   iso: string | null | undefined
 ): TimestampEntry | null {
   const s = iso?.trim();
-  if (!s || Number.isNaN(Date.parse(s))) return null;
-  return { label, iso: s, display: s.slice(0, 19).replace("T", " ") };
+  if (!s) return null;
+  const display = formatIsoDateTimeFull(s);
+  if (!display) return null;
+  return { label, iso: s, display };
 }
 
 export function buildSetGoodPriceTimestampEntries(
