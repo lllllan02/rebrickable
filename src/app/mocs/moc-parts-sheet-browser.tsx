@@ -35,7 +35,6 @@ type Props = {
   subjectKind: BuildSubjectKind;
   subjectId: string;
   exportDisplayName: string;
-  parentSubjectOwned: boolean;
   initialFull: InitialBuildSheetFromServer | null;
   initialShortage: InitialBuildSheetFromServer | null;
   initialFulfillment: InitialBuildSheetFromServer | null;
@@ -82,7 +81,6 @@ export function MocPartsSheetBrowser({
   subjectKind,
   subjectId,
   exportDisplayName,
-  parentSubjectOwned,
   initialFull,
   initialShortage,
   initialFulfillment,
@@ -463,7 +461,6 @@ export function MocPartsSheetBrowser({
                   items={initialFull.items}
                   skippedHeader={initialFull.skippedHeader}
                   savedAt={initialFull.savedAt}
-                  parentSubjectOwned={parentSubjectOwned}
                 />
               ) : null}
               {allTab === "fulfillment" && allFulfillmentDisplay ? (
@@ -471,7 +468,6 @@ export function MocPartsSheetBrowser({
                   items={allFulfillmentDisplay.items}
                   skippedHeader={allFulfillmentDisplay.skippedHeader}
                   savedAt={allFulfillmentDisplay.savedAt}
-                  parentSubjectOwned={parentSubjectOwned}
                   detailSubstituteSuggestions
                   sheetRowReplaceContext={{
                     subjectKind,
@@ -485,7 +481,6 @@ export function MocPartsSheetBrowser({
                   items={initialShortage.items}
                   skippedHeader={initialShortage.skippedHeader}
                   savedAt={initialShortage.savedAt}
-                  parentSubjectOwned={parentSubjectOwned}
                   shortageListMode
                   detailSubstituteSuggestions
                   sheetRowReplaceContext={{ subjectKind, subjectId, branch: "shortage" }}
@@ -498,7 +493,6 @@ export function MocPartsSheetBrowser({
                     skippedHeader={false}
                     savedAt="2000-01-01T00:00:00.000Z"
                     sourceMetaLine={officialMetaLine}
-                    parentSubjectOwned={parentSubjectOwned}
                   />
                 ) : (
                   <p className="text-sm text-[var(--muted)]">本地库存中暂无该套装的零件行。</p>
@@ -585,7 +579,6 @@ export function MocPartsSheetBrowser({
                 batchIds={planBatchIds}
                 subjectKind={subjectKind}
                 subjectId={subjectId}
-                parentSubjectOwned={parentSubjectOwned}
                 planBatchIds={planBatchIds}
                 onSheetLoaded={handleIoSheetLoaded}
               />
@@ -595,7 +588,6 @@ export function MocPartsSheetBrowser({
                 batchId={activeBatch.id}
                 subjectKind={subjectKind}
                 subjectId={subjectId}
-                parentSubjectOwned={parentSubjectOwned}
                 planBatchIds={planBatchIds}
                 onSheetLoaded={handleIoSheetLoaded}
               />

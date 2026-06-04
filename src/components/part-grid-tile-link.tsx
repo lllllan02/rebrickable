@@ -8,7 +8,7 @@ function usableImgUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && u.trim().length > 0;
 }
 
-/** 零件列表 / 全站搜索 / 拥有页等共用的方格缩略图链接（与 `tiles-grid` 搭配） */
+/** 零件列表 / 全站搜索等共用的方格缩略图链接（与 `tiles-grid` 搭配） */
 export function PartGridTileLink({
   href,
   titleAttr,

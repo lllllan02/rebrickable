@@ -25,7 +25,7 @@ import {
   SHORTAGE_REASON_CATEGORY_DEFS,
   type ShortageReasonFilterId,
 } from "@/lib/shortage-reason-filter";
-import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_OWNED_HIGHLIGHT, PART_GRID_TILE_SHEET_ROW_MODIFIED } from "@/lib/part-grid-tile-classes";
+import { PART_GRID_TILE_CLASS_BASE, PART_GRID_TILE_SHEET_ROW_MODIFIED } from "@/lib/part-grid-tile-classes";
 import { formatGobricksColorLine, gobricksCaptionNameOrFallback } from "@/lib/gobricks-display-caption";
 import { formatIsoDateTimeFull } from "@/lib/format-display-time";
 import {
@@ -746,7 +746,6 @@ type LegoCatalogDetailBlockProps = {
   showNameRowInDl: boolean;
   reasonLines: string[];
   showShortageReasonSummary: boolean;
-  parentSubjectOwned: boolean;
   onClose: () => void;
   /** 配货表详情：在乐高侧摘要中附带高砖单价 */
   showGobricksUnitPrice?: boolean;
@@ -764,7 +763,6 @@ function LegoCatalogDetailBlock({
   showNameRowInDl,
   reasonLines,
   showShortageReasonSummary,
-  parentSubjectOwned,
   onClose,
   showGobricksUnitPrice = false,
   compact = false,
@@ -900,12 +898,6 @@ function LegoCatalogDetailBlock({
             </dd>
           </div>
         ) : null}
-        {parentSubjectOwned ? (
-          <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-2)]">完成</dt>
-            <dd className="mt-0.5 text-[var(--text)]">拼搭进度为「完成」。</dd>
-          </div>
-        ) : null}
       </dl>
     </>
   );
@@ -915,7 +907,6 @@ function MocPartDetailBody({
   item,
   titleId,
   onClose,
-  parentSubjectOwned,
   showShortageReasonSummary,
   detailSubstituteSuggestions,
   hideTopBar = false,
@@ -926,7 +917,6 @@ function MocPartDetailBody({
   item: ShortageResolveItem;
   titleId: string;
   onClose: () => void;
-  parentSubjectOwned: boolean;
   showShortageReasonSummary: boolean;
   detailSubstituteSuggestions: boolean;
   /** 为 true 时不渲染本组件顶部条（由外层模态框统一提供标题 / Tab 与关闭） */
@@ -1125,7 +1115,6 @@ function MocPartDetailBody({
                   showNameRowInDl={showNameRowInDl}
                   reasonLines={reasonLines}
                   showShortageReasonSummary={showShortageReasonSummary}
-                  parentSubjectOwned={parentSubjectOwned}
                   onClose={onClose}
                   showGobricksUnitPrice={fulfillmentListDetail}
                   compact
@@ -1226,7 +1215,6 @@ function MocPartDetailBody({
               showNameRowInDl={showNameRowInDl}
               reasonLines={reasonLines}
               showShortageReasonSummary={showShortageReasonSummary}
-              parentSubjectOwned={parentSubjectOwned}
               onClose={onClose}
               showGobricksUnitPrice={fulfillmentListDetail}
               compact
@@ -1265,8 +1253,6 @@ type Props = {
   totalPartQty?: number;
   /** 缺件表视图：缺件原因筛选、网格备注与详情弹层中的缺件原因摘要 */
   shortageListMode?: boolean;
-  /** 已在「我的拥有」中标记本 MOC/套装时，零件表内所有行使用拥有高亮样式 */
-  parentSubjectOwned?: boolean;
   /** 配货表 / 缺件表：详情弹层展示目录库中的推荐替换零件（part_relationships A/M） */
   detailSubstituteSuggestions?: boolean;
   /** 非空时与详情共用模态框，以 tab 切换「更换零件」 */
@@ -1284,7 +1270,6 @@ export function MocPartsList({
   sourceMetaLine = null,
   totalPartQty: totalPartQtyProp,
   shortageListMode = false,
-  parentSubjectOwned = false,
   detailSubstituteSuggestions = false,
   sheetRowReplaceContext = null,
   onSheetRowMutated,
@@ -1489,11 +1474,7 @@ export function MocPartsList({
             const thumbTopMarginClass = leftBadgeRows > 1 ? "mt-5" : "mt-3";
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
-              sheetRowModified
-                ? PART_GRID_TILE_SHEET_ROW_MODIFIED
-                : parentSubjectOwned
-                  ? PART_GRID_TILE_OWNED_HIGHLIGHT
-                  : "",
+              sheetRowModified ? PART_GRID_TILE_SHEET_ROW_MODIFIED : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -1672,7 +1653,6 @@ export function MocPartsList({
                     item={detailItem}
                     titleId={detailTitleId}
                     onClose={closeDetail}
-                    parentSubjectOwned={parentSubjectOwned}
                     showShortageReasonSummary={shortageListMode}
                     detailSubstituteSuggestions={detailSubstituteSuggestions}
                     hideTopBar

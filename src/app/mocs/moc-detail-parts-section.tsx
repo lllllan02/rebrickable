@@ -138,7 +138,6 @@ type Props = {
     inventoryId: number;
     version: number;
   } | null;
-  parentSubjectOwned?: boolean;
   exportDisplayName: string;
   ioBatchId?: number;
   ioSplitPlans?: IoSplitPlanGroup[];
@@ -153,7 +152,6 @@ function IoBatchEmbeddedList({
   subjectId,
   ioBatchId,
   exportDisplayName,
-  parentSubjectOwned,
   initialFull,
   initialShortage,
   initialFulfillment,
@@ -162,7 +160,6 @@ function IoBatchEmbeddedList({
   subjectId: string;
   ioBatchId: number;
   exportDisplayName: string;
-  parentSubjectOwned: boolean;
   initialFull: InitialBuildSheetFromServer | null;
   initialShortage: InitialBuildSheetFromServer | null;
   initialFulfillment: InitialBuildSheetFromServer | null;
@@ -277,7 +274,6 @@ function IoBatchEmbeddedList({
           items={initialFull.items}
           skippedHeader={initialFull.skippedHeader}
           savedAt={initialFull.savedAt}
-          parentSubjectOwned={parentSubjectOwned}
         />
       ) : null}
       {listTab === "fulfillment" && !fulfillmentSheet && initialFulfillment ? (
@@ -288,7 +284,6 @@ function IoBatchEmbeddedList({
           items={fulfillmentSheet.items}
           skippedHeader={fulfillmentSheet.skippedHeader}
           savedAt={fulfillmentSheet.savedAt}
-          parentSubjectOwned={parentSubjectOwned}
           detailSubstituteSuggestions
           sheetRowReplaceContext={{
             subjectKind,
@@ -304,7 +299,6 @@ function IoBatchEmbeddedList({
           items={shortageSheet.items}
           skippedHeader={shortageSheet.skippedHeader}
           savedAt={shortageSheet.savedAt}
-          parentSubjectOwned={parentSubjectOwned}
           shortageListMode
           detailSubstituteSuggestions
           sheetRowReplaceContext={{
@@ -332,7 +326,6 @@ export function MocDetailPartsSection({
   initialMocLoadError,
   initialShortageClearedAt = null,
   officialInventory = null,
-  parentSubjectOwned = false,
   exportDisplayName,
   ioBatchId,
   ioSplitPlans = [],
@@ -550,7 +543,6 @@ export function MocDetailPartsSection({
               subjectId={subjectId}
               ioBatchId={ioBatchId}
               exportDisplayName={exportDisplayName}
-              parentSubjectOwned={parentSubjectOwned}
               initialFull={initialFull}
               initialShortage={initialShortage}
               initialFulfillment={initialFulfillment}
@@ -561,7 +553,6 @@ export function MocDetailPartsSection({
                 subjectKind={subjectKind}
                 subjectId={subjectId}
                 exportDisplayName={exportDisplayName}
-                parentSubjectOwned={parentSubjectOwned}
                 initialFull={isSetSubject ? null : initialFull}
                 initialShortage={initialShortage}
                 initialFulfillment={initialFulfillment}

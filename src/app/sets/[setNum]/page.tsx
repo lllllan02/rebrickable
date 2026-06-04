@@ -281,7 +281,6 @@ export default async function SetDetailPage({ params }: Props) {
           inventoryId: inv.id,
           version: inv.version,
         }}
-        parentSubjectOwned={workflowProgress.stage === "complete"}
       />
     </div>
   );

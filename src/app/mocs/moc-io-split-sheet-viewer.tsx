@@ -30,7 +30,6 @@ export type { IoSplitSheetState };
 type Props = {
   subjectKind?: BuildSubjectKind;
   subjectId: string;
-  parentSubjectOwned?: boolean;
   onSheetLoaded?: (sheet: IoSplitSheetState | null, error: string | null) => void;
   /** 更换/还原后同时刷新方案级汇总缺件缓存 */
   planBatchIds?: number[];
@@ -83,7 +82,6 @@ function sheetRowReplaceContextForBatch(
 export function MocIoSplitSheetViewer({
   subjectKind = BUILD_SUBJECT_MOC,
   subjectId,
-  parentSubjectOwned = false,
   onSheetLoaded,
   planBatchIds = [],
   ...props
@@ -275,7 +273,6 @@ export function MocIoSplitSheetViewer({
               skippedHeader={sheet.skippedHeader}
               savedAt={sheet.savedAt ?? "2000-01-01T00:00:00.000Z"}
               totalPartQty={undefined}
-              parentSubjectOwned={parentSubjectOwned}
               shortageListMode={shortageMode}
               detailSubstituteSuggestions={detailSubstituteSuggestions}
               sourceMetaLine={sourceMetaLine}

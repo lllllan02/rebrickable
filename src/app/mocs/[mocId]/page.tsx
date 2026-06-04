@@ -152,7 +152,6 @@ export default async function MocDetailPage({ params }: Props) {
           initialFulfillment={initialFulfillment}
           initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
           initialMocLoadError={initialMocLoadError}
-          parentSubjectOwned={workflowProgress.stage === "complete"}
           ioSplitPlans={ioSplitPlans}
           replicatePhases={replicatePhases}
         />
