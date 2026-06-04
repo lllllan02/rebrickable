@@ -59,6 +59,37 @@ select {
   font: inherit;
 }
 
+/* 可交互元素：悬浮 pointer；禁用 not-allowed（组件内 disabled:cursor-* 可覆盖） */
+a[href],
+area[href],
+button:not(:disabled),
+summary,
+select:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="file"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="button"]:not(:disabled),
+label:has(input[type="checkbox"]:not(:disabled)),
+label:has(input[type="radio"]:not(:disabled)),
+label:has(input[type="file"]:not(:disabled)),
+[role="button"]:not([aria-disabled="true"]),
+[role="tab"]:not([aria-disabled="true"]),
+[role="link"]:not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]),
+[role="option"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+input:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 ::selection {
   background: var(--accent-soft);
   color: var(--text);
@@ -116,6 +147,7 @@ select {
 .site-brand {
   display: inline-flex;
   align-items: center;
+  cursor: pointer;
   text-decoration: none;
 }
 
@@ -152,6 +184,7 @@ select {
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--muted);
+  cursor: pointer;
   padding: 0.45rem 0.75rem;
   text-decoration: none;
 }
@@ -305,6 +338,7 @@ select {
   gap: 0.15rem;
   padding: 0.5rem 0.75rem;
   color: var(--text);
+  cursor: pointer;
   font-size: 0.8125rem;
   line-height: 1.35;
   text-decoration: none;
@@ -564,6 +598,7 @@ select {
   border: 1px solid var(--border-soft);
   border-left: 3px solid var(--stat-edge);
   color: inherit;
+  cursor: pointer;
   text-decoration: none;
   background: linear-gradient(125deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
   box-shadow: var(--shadow);
@@ -777,6 +812,7 @@ select {
   border-radius: 0.75rem;
   background: linear-gradient(135deg, var(--accent), #ff9f43);
   color: #14110a;
+  cursor: pointer;
   font-weight: 800;
   padding: 0.625rem 1rem;
 }
@@ -1274,6 +1310,7 @@ select {
 .pager-link {
   border: 1px solid var(--border);
   color: var(--text);
+  cursor: pointer;
 }
 
 .pager-link:hover {

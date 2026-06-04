@@ -1,6 +1,6 @@
 /** 零件方格列表中单卡基础样式（零件列表、拥有页、MOC/套装零件表共用） */
 export const PART_GRID_TILE_CLASS_BASE =
-  "group relative flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-1 pb-1.5 text-left shadow-[var(--shadow)] transition-[border-color,transform,background-color,box-shadow] duration-150 hover:-translate-y-px hover:border-amber-400/45 hover:bg-[linear-gradient(180deg,rgba(247,200,75,0.08),rgba(255,255,255,0.025))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
+  "group relative flex h-full min-h-0 cursor-pointer flex-col overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-soft)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-1 pb-1.5 text-left shadow-[var(--shadow)] transition-[border-color,transform,background-color,box-shadow] duration-150 hover:-translate-y-px hover:border-amber-400/45 hover:bg-[linear-gradient(180deg,rgba(247,200,75,0.08),rgba(255,255,255,0.025))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]";
 
 /** 已在「拥有」中登记：与全站 accent 一致的金色描边（叠在 BASE 之后） */
 export const PART_GRID_TILE_OWNED_HIGHLIGHT =
