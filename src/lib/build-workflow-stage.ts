@@ -1,7 +1,7 @@
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
 
-/** MOC 拼搭进度：收录 → 复刻 → 购入 → 完成 */
-export const MOC_WORKFLOW_STAGES = ["collected", "replicate", "purchase", "complete"] as const;
+/** MOC 拼搭进度：收录 → 制作 → 成模 → 购入 → 完成 */
+export const MOC_WORKFLOW_STAGES = ["collected", "produce", "replicate", "purchase", "complete"] as const;
 
 /** 套装进度：收录 → 心动 → 拥有（复用 replicate / complete 字段） */
 export const SET_WORKFLOW_STAGES = ["collected", "replicate", "complete"] as const;
@@ -17,7 +17,7 @@ export type WorkflowSubjectKind = BuildSubjectKind;
 export const BUILD_WORKFLOW_DEFAULT_STAGE: BuildWorkflowStage = "collected";
 
 /** MOC 列表 URL 筛选（不含收录） */
-export const LIST_WORKFLOW_MARK_STAGES = ["replicate", "purchase", "complete"] as const;
+export const LIST_WORKFLOW_MARK_STAGES = ["produce", "replicate", "purchase", "complete"] as const;
 
 /** 套装列表 URL 筛选（不含收录） */
 export const SET_LIST_WORKFLOW_MARK_STAGES = ["replicate", "complete"] as const;
@@ -27,7 +27,8 @@ export type SetListWorkflowMarkStage = (typeof SET_LIST_WORKFLOW_MARK_STAGES)[nu
 
 export const BUILD_WORKFLOW_STAGE_LABELS: Record<BuildWorkflowStage, string> = {
   collected: "收录",
-  replicate: "复刻",
+  produce: "制作",
+  replicate: "成模",
   purchase: "购入",
   complete: "完成",
 };
@@ -40,8 +41,9 @@ const SET_WORKFLOW_STAGE_LABELS: Record<SetWorkflowStage, string> = {
 
 export const BUILD_WORKFLOW_STAGE_HINTS: Record<BuildWorkflowStage, string> = {
   collected: "已纳入待拼列表，资料已就绪",
-  replicate: "在 Studio 等软件中复刻 / 搭建模型",
-  purchase: "模型已就绪，待购入零件",
+  produce: "整理零件表、图纸等搭建资料",
+  replicate: "模型与源文件已完成，待购入零件",
+  purchase: "正在购入或凑齐零件",
   complete: "零件已齐或作品已完成",
 };
 
@@ -53,6 +55,7 @@ const SET_WORKFLOW_STAGE_HINTS: Record<SetWorkflowStage, string> = {
 
 const LEGACY_STAGE_MAP: Record<string, BuildWorkflowStage> = {
   collected: "collected",
+  produce: "produce",
   replicate: "replicate",
   purchase: "purchase",
   complete: "complete",
@@ -68,7 +71,7 @@ export function workflowStagesForKind(kind: BuildSubjectKind): readonly BuildWor
 export function workflowStageLabel(stage: BuildWorkflowStage, kind: BuildSubjectKind): string {
   if (kind === BUILD_SUBJECT_SET) {
     const normalized = normalizeWorkflowStageForKind(stage, kind);
-    if (normalized && normalized !== "purchase") {
+    if (normalized && normalized !== "purchase" && normalized !== "produce") {
       return SET_WORKFLOW_STAGE_LABELS[normalized as SetWorkflowStage];
     }
   }
@@ -78,7 +81,7 @@ export function workflowStageLabel(stage: BuildWorkflowStage, kind: BuildSubject
 export function workflowStageHint(stage: BuildWorkflowStage, kind: BuildSubjectKind): string {
   if (kind === BUILD_SUBJECT_SET) {
     const normalized = normalizeWorkflowStageForKind(stage, kind);
-    if (normalized && normalized !== "purchase") {
+    if (normalized && normalized !== "purchase" && normalized !== "produce") {
       return SET_WORKFLOW_STAGE_HINTS[normalized as SetWorkflowStage];
     }
   }
@@ -97,7 +100,8 @@ export function listMarkFilterOptionsForKind(
   }
   return [
     { key: "all", label: "全部" },
-    { key: "replicate", label: "复刻" },
+    { key: "produce", label: "制作" },
+    { key: "replicate", label: "成模" },
     { key: "purchase", label: "购入" },
     { key: "complete", label: "完成" },
   ];
@@ -151,6 +155,7 @@ export function workflowStageCardClass(
     stage != null && kind === BUILD_SUBJECT_SET
       ? normalizeWorkflowStageForKind(stage, kind)
       : stage;
+  if (normalized === "produce") return " result-card--produce";
   if (normalized === "replicate") return " result-card--replicate";
   if (normalized === "purchase") return " result-card--purchase";
   if (normalized === "complete") return " result-card--complete";

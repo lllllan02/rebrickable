@@ -5,10 +5,11 @@ import { BUILD_SUBJECT_MOC, type BuildSubjectKind } from "@/lib/build-subject";
 import type { HomeWorkflowMarkKey } from "@/lib/home-workflow-list-href";
 import { listMarkFilterOptionsForKind, type BuildWorkflowStage } from "@/lib/build-workflow-stage";
 
-type StageTileTone = "violet" | "sky" | "amber" | "rose" | "sand";
+type StageTileTone = "violet" | "sky" | "amber" | "rose" | "sand" | "mint";
 
 const MOC_STAGE_TILE_TONE: Record<HomeWorkflowMarkKey, StageTileTone> = {
   all: "violet",
+  produce: "mint",
   replicate: "sky",
   purchase: "sand",
   complete: "amber",
@@ -16,6 +17,7 @@ const MOC_STAGE_TILE_TONE: Record<HomeWorkflowMarkKey, StageTileTone> = {
 
 const SET_STAGE_TILE_TONE: Record<HomeWorkflowMarkKey, StageTileTone> = {
   all: "violet",
+  produce: "mint",
   replicate: "rose",
   purchase: "sand",
   complete: "amber",

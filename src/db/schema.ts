@@ -320,10 +320,11 @@ export const buildOwnedSubjects = sqliteTable(
   {
     subjectKind: text("subject_kind").notNull(),
     subjectId: text("subject_id").notNull(),
-    /** collected | replicate | purchase | complete */
+    /** collected | produce | replicate | purchase | complete */
     workflowStage: text("workflow_stage").notNull(),
     markedAt: text("marked_at").notNull(),
     collectedAt: text("collected_at"),
+    produceAt: text("produce_at"),
     replicateAt: text("replicate_at"),
     purchaseAt: text("purchase_at"),
     completeAt: text("complete_at"),

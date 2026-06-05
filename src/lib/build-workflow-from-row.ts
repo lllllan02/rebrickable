@@ -28,6 +28,7 @@ export function workflowProgressFromRow(
         workflowStage: string;
         markedAt: string;
         collectedAt: string | null;
+        produceAt: string | null;
         replicateAt: string | null;
         purchaseAt: string | null;
         completeAt: string | null;

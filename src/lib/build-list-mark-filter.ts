@@ -51,7 +51,8 @@ export function isSetWorkflowMarkFilter(mark: SetListMarkFilter): mark is SetLis
 
 export const LIST_MARK_FILTER_OPTIONS: { key: ListMarkFilter; label: string }[] = [
   { key: "all", label: "全部" },
-  { key: "replicate", label: "复刻" },
+  { key: "produce", label: "制作" },
+  { key: "replicate", label: "成模" },
   { key: "purchase", label: "购入" },
   { key: "complete", label: "完成" },
 ];

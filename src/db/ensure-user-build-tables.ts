@@ -370,16 +370,18 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
       UPDATE build_owned_subjects SET workflow_stage = 'purchase' WHERE workflow_stage = 'procure';
       UPDATE build_owned_subjects SET workflow_stage = 'complete' WHERE workflow_stage = 'owned';
       UPDATE build_owned_subjects SET workflow_stage = 'collected'
-        WHERE workflow_stage NOT IN ('collected', 'replicate', 'purchase', 'complete');
+        WHERE workflow_stage NOT IN ('collected', 'produce', 'replicate', 'purchase', 'complete');
     `);
     const cols2 = tableColumnNames(sqlite, "build_owned_subjects");
-    for (const col of ["collected_at", "replicate_at", "purchase_at", "complete_at"] as const) {
+    for (const col of ["collected_at", "produce_at", "replicate_at", "purchase_at", "complete_at"] as const) {
       if (!cols2.has(col)) {
         sqlite.exec(`ALTER TABLE build_owned_subjects ADD COLUMN ${col} TEXT`);
       }
     }
     sqlite.exec(`
       UPDATE build_owned_subjects SET collected_at = marked_at WHERE collected_at IS NULL;
+      UPDATE build_owned_subjects SET produce_at = marked_at
+        WHERE produce_at IS NULL AND workflow_stage IN ('produce', 'replicate', 'purchase', 'complete');
       UPDATE build_owned_subjects SET replicate_at = marked_at
         WHERE replicate_at IS NULL AND workflow_stage IN ('replicate', 'purchase', 'complete');
       UPDATE build_owned_subjects SET purchase_at = marked_at

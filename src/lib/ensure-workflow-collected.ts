@@ -54,6 +54,7 @@ export async function ensureWorkflowCollected(
       workflowStage: BUILD_WORKFLOW_DEFAULT_STAGE,
       markedAt: now,
       collectedAt: now,
+      produceAt: null,
       replicateAt: null,
       purchaseAt: null,
       completeAt: null,

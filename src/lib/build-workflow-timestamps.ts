@@ -14,6 +14,7 @@ export type WorkflowProgressState = {
 
 const STAGE_AT_KEYS = {
   collected: "collectedAt",
+  produce: "produceAt",
   replicate: "replicateAt",
   purchase: "purchaseAt",
   complete: "completeAt",
@@ -21,6 +22,7 @@ const STAGE_AT_KEYS = {
 
 export type WorkflowStageTimestampDbSet = {
   collectedAt?: string;
+  produceAt?: string;
   replicateAt?: string;
   purchaseAt?: string;
   completeAt?: string;
@@ -38,6 +40,7 @@ type WorkflowRowShape = {
   workflowStage: string;
   markedAt: string;
   collectedAt: string | null;
+  produceAt: string | null;
   replicateAt: string | null;
   purchaseAt: string | null;
   completeAt: string | null;
@@ -46,6 +49,7 @@ type WorkflowRowShape = {
 export function emptyWorkflowStageTimestamps(): WorkflowStageTimestamps {
   return {
     collected: null,
+    produce: null,
     replicate: null,
     purchase: null,
     complete: null,
@@ -58,6 +62,7 @@ export function workflowStageTimestampsFromRow(
   if (!row) return emptyWorkflowStageTimestamps();
   return {
     collected: row.collectedAt ?? null,
+    produce: row.produceAt ?? null,
     replicate: row.replicateAt ?? null,
     purchase: row.purchaseAt ?? null,
     complete: row.completeAt ?? null,
@@ -70,21 +75,11 @@ export function workflowTimestampSetsForStage(
   now: string,
   existing: WorkflowStageTimestamps | null,
   subjectKind?: BuildSubjectKind
-): {
-  collectedAt?: string;
-  replicateAt?: string;
-  purchaseAt?: string;
-  completeAt?: string;
-} {
+): WorkflowStageTimestampDbSet {
   const prev = existing ?? emptyWorkflowStageTimestamps();
   const stages = workflowStagesForKind(subjectKind ?? "moc");
   const idx = stages.indexOf(stage);
-  const out: {
-    collectedAt?: string;
-    replicateAt?: string;
-    purchaseAt?: string;
-    completeAt?: string;
-  } = {};
+  const out: WorkflowStageTimestampDbSet = {};
   for (let i = 0; i <= idx; i++) {
     const s = stages[i]!;
     const key = STAGE_AT_KEYS[s];

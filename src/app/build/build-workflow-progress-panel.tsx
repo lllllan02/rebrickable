@@ -47,6 +47,7 @@ export function BuildWorkflowProgressPanel({
     subjectId,
     subjectKind,
     initialTimes.collected,
+    initialTimes.produce,
     initialTimes.replicate,
     initialTimes.purchase,
     initialTimes.complete,

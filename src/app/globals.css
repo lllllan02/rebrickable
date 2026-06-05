@@ -851,6 +851,15 @@ textarea:disabled,
 }
 
 /* 列表卡片：拼搭进度描边（收录无描边） */
+.result-card--produce {
+  border: 2px solid rgba(52, 211, 153, 0.45);
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.08), rgba(255, 255, 255, 0.015));
+}
+
+.result-card--produce:hover {
+  border-color: rgba(110, 231, 183, 0.65);
+}
+
 .result-card--replicate {
   border: 2px solid rgba(96, 165, 250, 0.45);
   background: linear-gradient(180deg, rgba(96, 165, 250, 0.08), rgba(255, 255, 255, 0.015));
@@ -883,7 +892,7 @@ textarea:disabled,
   transform: translateY(-1px);
 }
 
-/* 四段拼搭进度条 */
+/* 拼搭进度条 */
 .workflow-progress {
   display: flex;
   flex-direction: column;

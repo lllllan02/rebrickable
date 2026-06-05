@@ -27,7 +27,22 @@ function WorkflowCheckIcon({ className }: { className?: string }) {
   );
 }
 
-/** 复刻：积木块 */
+/** 制作：扳手 */
+function MocProduceIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none">
+      <path
+        d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.1 2.1-2.8-2.8 2.1-2.1z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+/** 成模：积木块 */
 function MocReplicateIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden fill="currentColor">
@@ -102,6 +117,17 @@ function MocWorkflowListMark({
   const badgeBase =
     "pointer-events-none inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border shadow-[0_1px_4px_rgba(0,0,0,0.45)] ring-1 ring-black/15";
 
+  if (stage === "produce") {
+    return (
+      <span
+        className={`${badgeBase} border-emerald-600 bg-emerald-600 text-white`}
+        title={`${label}：${hint}`}
+        aria-label={`拼搭进度：${label}`}
+      >
+        <MocProduceIcon className="h-4 w-4" />
+      </span>
+    );
+  }
   if (stage === "replicate") {
     return (
       <span
