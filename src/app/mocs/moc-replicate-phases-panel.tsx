@@ -124,27 +124,29 @@ export function MocReplicatePhasesPanel({ subjectId, phases, variant = "standalo
     setEditNote("");
   }, []);
 
-  const onUpdate = useCallback(() => {
-    if (editPhaseId == null) return;
-    setMessage(null);
-    setError(null);
-    startTransition(async () => {
-      const r = await updateReplicatePhaseAction({
-        subjectKind: BUILD_SUBJECT_MOC,
-        subjectId,
-        phaseId: editPhaseId,
-        label: editLabel,
-        note: editNote,
+  const onUpdate = useCallback(
+    (formData: FormData) => {
+      if (editPhaseId == null) return;
+      setMessage(null);
+      setError(null);
+      formData.set("subjectKind", BUILD_SUBJECT_MOC);
+      formData.set("subjectId", subjectId);
+      formData.set("phaseId", String(editPhaseId));
+      formData.set("label", editLabel);
+      formData.set("note", editNote);
+      startTransition(async () => {
+        const r = await updateReplicatePhaseAction(formData);
+        if (!r.ok) {
+          setError(r.error);
+          return;
+        }
+        cancelEdit();
+        setMessage("已更新阶段信息。");
+        router.refresh();
       });
-      if (!r.ok) {
-        setError(r.error);
-        return;
-      }
-      cancelEdit();
-      setMessage("已更新阶段信息。");
-      router.refresh();
-    });
-  }, [cancelEdit, editLabel, editNote, editPhaseId, router, subjectId]);
+    },
+    [cancelEdit, editLabel, editNote, editPhaseId, router, subjectId]
+  );
 
   const onDelete = useCallback(
     (phaseId: number) => {
@@ -241,7 +243,13 @@ export function MocReplicatePhasesPanel({ subjectId, phases, variant = "standalo
                 }`}
               >
                 {isEditing ? (
-                  <div className="space-y-3">
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      onUpdate(new FormData(e.currentTarget));
+                    }}
+                  >
                     <div className="flex items-center gap-3">
                       <div
                         className={`relative shrink-0 overflow-hidden rounded border border-[var(--border-soft)] bg-[var(--surface)] ${
@@ -282,6 +290,31 @@ export function MocReplicatePhasesPanel({ subjectId, phases, variant = "standalo
                           onChange={(e) => setEditNote(e.target.value)}
                         />
                       </label>
+                      <label className={PHASE_FIELD_LABEL_CLASS}>
+                        更换渲染图（可选）
+                        <input
+                          type="file"
+                          name="renderFile"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          disabled={pending}
+                          className="mt-1 block w-full text-xs text-[var(--text)] file:mr-2 file:rounded file:border-0 file:bg-[var(--surface-2)] file:px-2 file:py-1 file:text-xs"
+                        />
+                      </label>
+                      <label className={PHASE_FIELD_LABEL_CLASS}>
+                        更换 Studio .io（可选）
+                        {phase.ioOriginalName ? (
+                          <span className="ml-1 text-[var(--muted)]/80">
+                            当前：{phase.ioOriginalName}
+                          </span>
+                        ) : null}
+                        <input
+                          type="file"
+                          name="ioFile"
+                          accept=".io,application/zip,application/x-zip-compressed"
+                          disabled={pending}
+                          className="mt-1 block w-full text-xs text-[var(--text)] file:mr-2 file:rounded file:border-0 file:bg-[var(--surface-2)] file:px-2 file:py-1 file:text-xs"
+                        />
+                      </label>
                       <div className="flex flex-wrap justify-end gap-2 pt-0.5">
                         <button
                           type="button"
@@ -292,16 +325,15 @@ export function MocReplicatePhasesPanel({ subjectId, phases, variant = "standalo
                           取消
                         </button>
                         <button
-                          type="button"
+                          type="submit"
                           disabled={pending}
                           className="rounded-md border border-[var(--accent)]/50 bg-[var(--accent)]/10 px-3 py-1.5 text-xs text-[var(--text)] disabled:opacity-40"
-                          onClick={onUpdate}
                         >
                           {pending ? "保存中…" : "保存"}
                         </button>
                       </div>
                     </div>
-                  </div>
+                  </form>
                 ) : (
                 <div className="flex gap-3">
                   <button

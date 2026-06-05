@@ -206,42 +206,90 @@ export async function saveReplicatePhaseAction(
   }
 }
 
-export async function updateReplicatePhaseAction(input: {
-  subjectKind: BuildSubjectKind;
-  subjectId: string;
-  phaseId: number;
-  label: string;
-  note: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const subjectId = input.subjectId.trim();
-  if (!subjectId || subjectId.length > BUILD_UPLOAD_MAX_ID_LEN) {
-    return { ok: false, error: "主体 ID 无效。" };
+export async function updateReplicatePhaseAction(
+  formData: FormData
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sub = parseSubjectFromForm(formData);
+  if (!sub) {
+    return { ok: false, error: "主体无效。" };
   }
-  if (input.subjectKind !== BUILD_SUBJECT_MOC) {
+  if (sub.kind !== BUILD_SUBJECT_MOC) {
     return { ok: false, error: "复刻阶段仅支持 MOC。" };
   }
-  if (!isSafeBuildSubjectId(input.subjectKind, subjectId)) {
-    return { ok: false, error: "主体 ID 含有非法字符。" };
-  }
-  if (!Number.isFinite(input.phaseId) || input.phaseId <= 0) {
+
+  const phaseId = Number(formData.get("phaseId"));
+  if (!Number.isFinite(phaseId) || phaseId <= 0) {
     return { ok: false, error: "阶段 ID 无效。" };
   }
 
-  const label = input.label.trim();
-  if (!label) {
-    return { ok: false, error: "阶段名称不能为空。" };
+  const defaultLabel = replicatePhaseDefaultLabel(0);
+  const label = normalizePhaseLabel(String(formData.get("label") ?? ""), defaultLabel);
+  const note = normalizePhaseNote(String(formData.get("note") ?? ""));
+
+  const renderFile = formData.get("renderFile");
+  const ioFile = formData.get("ioFile");
+  const hasRenderFile = renderFile instanceof File && renderFile.size > 0;
+  const hasIoFile = ioFile instanceof File && ioFile.size > 0;
+
+  let renderMime: string | null = null;
+  let renderStoredFile: string | null = null;
+  let renderBuf: Buffer | null = null;
+  let renderOriginalName: string | null = null;
+
+  if (hasRenderFile) {
+    if (renderFile.size > BUILD_IMAGE_UPLOAD_MAX_BYTES) {
+      return {
+        ok: false,
+        error: `渲染图不超过 ${Math.round(BUILD_IMAGE_UPLOAD_MAX_BYTES / (1024 * 1024))} MB。`,
+      };
+    }
+    renderMime = resolvePhaseImageMime(renderFile);
+    if (!renderMime) {
+      return { ok: false, error: "渲染图仅支持 JPEG、PNG、WebP、GIF。" };
+    }
+    renderStoredFile = makeStoredImageFileName(renderMime);
+    if (!renderStoredFile) {
+      return { ok: false, error: "无法生成渲染图存储名。" };
+    }
+    renderBuf = Buffer.from(await renderFile.arrayBuffer());
+    renderOriginalName = renderFile.name.trim() || null;
+  }
+
+  let ioStoredFile: string | null = null;
+  let ioMime: string | null = null;
+  let ioBuf: Buffer | null = null;
+  let ioOriginalName: string | null = null;
+
+  if (hasIoFile) {
+    if (ioFile.size > BUILD_ATTACHMENT_MAX_BYTES) {
+      return {
+        ok: false,
+        error: `.io 文件不超过 ${Math.round(BUILD_ATTACHMENT_MAX_BYTES / (1024 * 1024))} MB。`,
+      };
+    }
+    if (!ioFile.name.toLowerCase().endsWith(".io")) {
+      return { ok: false, error: "请上传 .io 文件。" };
+    }
+    ioStoredFile = makeStoredAttachmentFileName("io");
+    ioMime = resolveBuildAttachmentMime(ioFile, "io");
+    ioBuf = Buffer.from(await ioFile.arrayBuffer());
+    ioOriginalName = ioFile.name.trim() || null;
   }
 
   try {
     const db = getUserDb();
     const [row] = await db
-      .select({ id: buildReplicatePhases.id })
+      .select({
+        id: buildReplicatePhases.id,
+        renderStoredFile: buildReplicatePhases.renderStoredFile,
+        ioStoredFile: buildReplicatePhases.ioStoredFile,
+      })
       .from(buildReplicatePhases)
       .where(
         and(
-          eq(buildReplicatePhases.id, input.phaseId),
-          eq(buildReplicatePhases.subjectKind, input.subjectKind),
-          eq(buildReplicatePhases.subjectId, subjectId)
+          eq(buildReplicatePhases.id, phaseId),
+          eq(buildReplicatePhases.subjectKind, sub.kind),
+          eq(buildReplicatePhases.subjectId, sub.id)
         )
       )
       .limit(1);
@@ -250,16 +298,57 @@ export async function updateReplicatePhaseAction(input: {
       return { ok: false, error: "未找到该阶段。" };
     }
 
-    await db
-      .update(buildReplicatePhases)
-      .set({
-        label: label.slice(0, BUILD_REPLICATE_PHASE_LABEL_MAX_LEN),
-        note: normalizePhaseNote(input.note),
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(buildReplicatePhases.id, row.id));
+    const dir = await ensureBuildUploadDir(sub.kind, sub.id);
+    const writtenFiles: string[] = [];
 
-    revalidateBuildSubjectPaths(input.subjectKind, subjectId);
+    try {
+      if (hasRenderFile && renderStoredFile && renderBuf && renderMime) {
+        await fs.writeFile(path.join(dir, renderStoredFile), renderBuf);
+        writtenFiles.push(renderStoredFile);
+      }
+      if (hasIoFile && ioStoredFile && ioBuf && ioMime) {
+        await fs.writeFile(path.join(dir, ioStoredFile), ioBuf);
+        writtenFiles.push(ioStoredFile);
+      }
+
+      const now = new Date().toISOString();
+      await db
+        .update(buildReplicatePhases)
+        .set({
+          label,
+          note,
+          ...(hasRenderFile && renderStoredFile && renderMime && renderBuf
+            ? {
+                renderStoredFile,
+                renderMimeType: renderMime,
+                renderByteSize: renderBuf.length,
+                renderOriginalName,
+              }
+            : {}),
+          ...(hasIoFile && ioStoredFile && ioMime && ioBuf
+            ? {
+                ioStoredFile,
+                ioMimeType: ioMime,
+                ioByteSize: ioBuf.length,
+                ioOriginalName,
+              }
+            : {}),
+          updatedAt: now,
+        })
+        .where(eq(buildReplicatePhases.id, row.id));
+
+      if (hasRenderFile) {
+        await fs.unlink(path.join(dir, row.renderStoredFile)).catch(() => {});
+      }
+      if (hasIoFile) {
+        await fs.unlink(path.join(dir, row.ioStoredFile)).catch(() => {});
+      }
+    } catch {
+      await Promise.all(writtenFiles.map((f) => fs.unlink(path.join(dir, f)).catch(() => {})));
+      return { ok: false, error: "更新失败，请重试。" };
+    }
+
+    revalidateBuildSubjectPaths(sub.kind, sub.id);
     return { ok: true };
   } catch {
     return { ok: false, error: "更新失败，请重试。" };
