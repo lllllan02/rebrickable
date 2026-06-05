@@ -245,16 +245,22 @@ export function SetGoodPriceListRow({
             <button
               type="button"
               onClick={onMarkWanted}
-              disabled={markWantedDisabled || isWanted || isOwned}
+              disabled={markWantedDisabled || isOwned}
               className={`absolute right-1.5 top-1.5 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.45)] ring-1 ring-black/15 transition-colors ${
                 isWanted
-                  ? "bg-red-500 text-white"
+                  ? "bg-red-500 text-white hover:bg-black/55"
                   : isOwned
                     ? "bg-[var(--accent)] text-[#141414]"
                     : "bg-black/55 text-white hover:bg-red-500"
               } disabled:cursor-default disabled:opacity-95`}
-              title={isOwned ? "已拥有" : isWanted ? "已心动" : "标记心动"}
-              aria-label={isOwned ? `${title} 已拥有` : isWanted ? `${title} 已心动` : `${title} 标记心动`}
+              title={isOwned ? "已拥有" : isWanted ? "取消心动" : "标记心动"}
+              aria-label={
+                isOwned
+                  ? `${title} 已拥有`
+                  : isWanted
+                    ? `${title} 取消心动`
+                    : `${title} 标记心动`
+              }
             >
               <HeartIcon className="h-4 w-4" />
             </button>

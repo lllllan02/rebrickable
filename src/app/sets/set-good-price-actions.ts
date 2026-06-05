@@ -495,6 +495,26 @@ export async function markSetWantedFromGoodPriceAction(input: {
   return { ok: true };
 }
 
+/** 取消套装心动标记，恢复为收录阶段 */
+export async function unmarkSetWantedFromGoodPriceAction(input: {
+  setNum: string;
+}): Promise<SaveSetGoodPriceResult> {
+  const setNum = input.setNum.trim();
+  if (!setNum || !isSafeBuildSubjectId(BUILD_SUBJECT_SET, setNum)) {
+    return { ok: false, error: "套装编号无效。" };
+  }
+
+  const workflowRes = await setBuildWorkflowStageAction({
+    subjectKind: BUILD_SUBJECT_SET,
+    subjectId: setNum,
+    stage: "collected",
+  });
+  if (!workflowRes.ok) return workflowRes;
+
+  revalidateSetGoodPricePaths(setNum);
+  return { ok: true };
+}
+
 export type FetchSetGoodPriceGobricksCompareResult =
   | {
       ok: true;

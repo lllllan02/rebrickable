@@ -11,6 +11,7 @@ import {
   fetchSetGoodPriceSalesStatusAction,
   markSetOwnedFromGoodPriceAction,
   markSetWantedFromGoodPriceAction,
+  unmarkSetWantedFromGoodPriceAction,
 } from "@/app/sets/set-good-price-actions";
 import {
   SetGoodPriceBomDialog,
@@ -124,9 +125,12 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
     });
   };
 
-  const markWanted = (item: GoodPriceListRowProps) => {
+  const toggleWanted = (item: GoodPriceListRowProps) => {
+    const isWanted = item.workflowStage === "replicate";
     startTransition(async () => {
-      const res = await markSetWantedFromGoodPriceAction({ setNum: item.setNum });
+      const res = isWanted
+        ? await unmarkSetWantedFromGoodPriceAction({ setNum: item.setNum })
+        : await markSetWantedFromGoodPriceAction({ setNum: item.setNum });
       if (!res.ok) {
         alert(res.error);
         return;
@@ -257,7 +261,7 @@ export function GoodPricesListClient({ items, sortState, heatFilter, markFilter 
               bricktimeBuildingTime={item.bricktimeBuildingTime}
               bricktimePriceHistory={item.bricktimePriceHistory}
               workflowStage={item.workflowStage}
-              onMarkWanted={() => markWanted(item)}
+              onMarkWanted={() => toggleWanted(item)}
               markWantedDisabled={pending}
               onViewPriceHistory={() => openPriceHistory(item)}
               isEditing={isEditing}
