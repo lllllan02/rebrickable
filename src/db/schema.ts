@@ -335,6 +335,22 @@ export const buildOwnedSubjects = sqliteTable(
   ]
 );
 
+/** 用户散装拥有的零件（按零件号 + 颜色汇总数量；可由套装「杀肉」写入） */
+export const buildOwnedParts = sqliteTable(
+  "build_owned_parts",
+  {
+    partNum: text("part_num").notNull(),
+    colorId: integer("color_id").notNull(),
+    quantity: integer("quantity").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.partNum, t.colorId] }),
+    index("build_owned_parts_part_idx").on(t.partNum),
+    index("build_owned_parts_updated_idx").on(t.updatedAt),
+  ]
+);
+
 /** 用户「收藏」的套装 / MOC（与拥有、是否已存零件表无关） */
 export const buildFavoriteSubjects = sqliteTable(
   "build_favorite_subjects",

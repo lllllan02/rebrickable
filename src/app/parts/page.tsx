@@ -235,6 +235,15 @@ export default async function PartsPage({ searchParams }: Props) {
                   {totalAll.toLocaleString("zh-CN")} 条零件）
                 </span>
               </Link>
+              <Link
+                href="/parts/owned"
+                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
+              >
+                <span className="text-sm font-semibold text-[var(--text)]">散装拥有</span>
+                <span className="text-xs text-[var(--muted)]">
+                  由官方套装杀肉写入的零件库存
+                </span>
+              </Link>
             </div>
             <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">按分类浏览</h2>
             <PartsCategoryPickerGrid

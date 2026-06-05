@@ -108,6 +108,16 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     );
     CREATE INDEX IF NOT EXISTS build_owned_kind_idx ON build_owned_subjects(subject_kind);
 
+    CREATE TABLE IF NOT EXISTS build_owned_parts (
+      part_num TEXT NOT NULL,
+      color_id INTEGER NOT NULL,
+      quantity INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (part_num, color_id)
+    );
+    CREATE INDEX IF NOT EXISTS build_owned_parts_part_idx ON build_owned_parts(part_num);
+    CREATE INDEX IF NOT EXISTS build_owned_parts_updated_idx ON build_owned_parts(updated_at);
+
     CREATE TABLE IF NOT EXISTS build_favorite_subjects (
       subject_kind TEXT NOT NULL,
       subject_id TEXT NOT NULL,

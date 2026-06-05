@@ -6,6 +6,7 @@ import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 import { CopyableId } from "@/components/copyable-id";
 import { getCatalogDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
+import { loadOwnedQtyForPart } from "@/lib/load-owned-parts";
 import {
   colors,
   elements,
@@ -46,7 +47,7 @@ export default async function PartDetailPage({ params }: Props) {
     ne(inventoryParts.imgUrl, "")
   );
 
-  const [asParent, asChild, elemRows, setRows, heroThumbRow, colorThumbRows] =
+  const [asParent, asChild, elemRows, setRows, heroThumbRow, colorThumbRows, ownedQty] =
     await Promise.all([
       catalogDb
         .select({
@@ -107,6 +108,7 @@ export default async function PartDetailPage({ params }: Props) {
         .from(inventoryParts)
         .where(imgClause)
         .groupBy(inventoryParts.colorId),
+      loadOwnedQtyForPart(partNum),
     ]);
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
@@ -165,6 +167,17 @@ export default async function PartDetailPage({ params }: Props) {
                 <div>
                   <dt className="inline text-[var(--text)]">材质：</dt>
                   <dd className="inline">{row.material}</dd>
+                </div>
+              ) : null}
+              {ownedQty > 0 ? (
+                <div>
+                  <dt className="inline text-[var(--text)]">散装拥有：</dt>
+                  <dd className="inline tabular-nums">
+                    {ownedQty.toLocaleString("zh-CN")} 粒 ·{" "}
+                    <Link href="/parts/owned" className="text-[var(--accent)] underline underline-offset-2">
+                      查看清单
+                    </Link>
+                  </dd>
                 </div>
               ) : null}
             </dl>

@@ -5,6 +5,7 @@ import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-act
 import { loadBuildPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailEditorial, type SetDetailOfficialMeta } from "@/app/mocs/moc-detail-editorial";
 import { CreateMocFromSetButton } from "@/app/sets/create-moc-from-set-button";
+import { PartOutSetButton } from "@/app/sets/part-out-set-button";
 import { listDerivedMocsForSet } from "@/lib/moc-derived-from-set";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import type { MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
@@ -251,12 +252,20 @@ export default async function SetDetailPage({ params }: Props) {
         gobricksGdsPriceCny={gobricksGdsPriceCny}
         setOfficial={setOfficial}
         setPageAside={
-          <CreateMocFromSetButton
-            setNum={setNum}
-            catalogName={catalog?.name ?? null}
-            derivedMocs={derivedMocs}
-            embedded
-          />
+          <>
+            <PartOutSetButton
+              setNum={setNum}
+              catalogName={catalog?.name ?? null}
+              isOwned={workflowProgress.stage === "complete"}
+              embedded
+            />
+            <CreateMocFromSetButton
+              setNum={setNum}
+              catalogName={catalog?.name ?? null}
+              derivedMocs={derivedMocs}
+              embedded
+            />
+          </>
         }
       />
 
