@@ -48,6 +48,12 @@ import {
   SheetRowReplacePanel,
   type SheetRowReplaceContext,
 } from "@/app/mocs/sheet-row-replace-panel";
+import { FulfillmentSheetSortControl } from "@/app/mocs/fulfillment-sheet-sort-control";
+import {
+  FULFILLMENT_SHEET_NEUTRAL_SORT_STATE,
+  sortFulfillmentSheetItems,
+  type FulfillmentSheetSortState,
+} from "@/lib/fulfillment-sheet-list-sort";
 
 function substituteRelBadgeLabel(t: "A" | "M"): string {
   return t === "A" ? "替代" : "模具";
@@ -1275,8 +1281,12 @@ export function MocPartsList({
   onSheetRowMutated,
 }: Props) {
   const router = useRouter();
+  const fulfillmentSortEnabled = sheetRowReplaceContext?.branch === "fulfillment";
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [shortageReasonFilter, setShortageReasonFilter] = useState<ShortageReasonFilterId>("all");
+  const [fulfillmentSortState, setFulfillmentSortState] = useState<FulfillmentSheetSortState>(
+    () => ({ ...FULFILLMENT_SHEET_NEUTRAL_SORT_STATE }),
+  );
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
   const [detailModalTab, setDetailModalTab] = useState<DetailModalTab>("detail");
   const detailDialogRef = useRef<HTMLDialogElement>(null);
@@ -1318,7 +1328,10 @@ export function MocPartsList({
     [listAfterShortageReason, sheetListFilter]
   );
 
-  const listDisplayed = listFiltered;
+  const listDisplayed = useMemo(() => {
+    if (!fulfillmentSortEnabled) return listFiltered;
+    return sortFulfillmentSheetItems(listFiltered, fulfillmentSortState);
+  }, [fulfillmentSortEnabled, listFiltered, fulfillmentSortState]);
 
   const totalPartQty = useMemo(() => {
     if (!shortageListMode && typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
@@ -1422,6 +1435,12 @@ export function MocPartsList({
           </span>
         ) : null}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {fulfillmentSortEnabled ? (
+          <FulfillmentSheetSortControl
+            sortState={fulfillmentSortState}
+            onSortStateChange={setFulfillmentSortState}
+          />
+        ) : null}
         {sheetFilterOptions.length > 1 ? (
           <span className="inline-flex flex-wrap items-center gap-1.5">
             <span className="text-[var(--muted-2)]">零件类型：</span>
