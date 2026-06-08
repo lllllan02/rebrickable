@@ -171,7 +171,7 @@ export default async function PartDetailPage({ params }: Props) {
               ) : null}
               {ownedQty > 0 ? (
                 <div>
-                  <dt className="inline text-[var(--text)]">散装拥有：</dt>
+                  <dt className="inline text-[var(--text)]">零件库：</dt>
                   <dd className="inline tabular-nums">
                     {ownedQty.toLocaleString("zh-CN")} 粒 ·{" "}
                     <Link href="/parts/owned" className="text-[var(--accent)] underline underline-offset-2">

@@ -16,7 +16,7 @@ export type PartOutSetResult =
   | { ok: true; lineCount: number; partQty: number; uniqueParts: number }
   | { ok: false; error: string };
 
-/** 套装「杀肉」：解除拥有状态，并将官方库存零件写入散装拥有表 */
+/** 套装「杀肉」：解除拥有状态，并将官方库存零件写入零件库表 */
 export async function partOutSetAction(setNumRaw: string): Promise<PartOutSetResult> {
   const setNum = setNumRaw.trim();
   if (!setNum || setNum.length > BUILD_UPLOAD_MAX_ID_LEN) {

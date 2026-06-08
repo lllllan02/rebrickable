@@ -1174,6 +1174,11 @@ textarea:disabled,
   grid-template-columns: repeat(auto-fill, minmax(5.75rem, 1fr));
 }
 
+.tiles-grid > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 7.5rem;
+}
+
 /* 套装 / MOC 等卡片栅格：略加大屏间距 */
 .list-cards-grid {
   gap: 1rem;

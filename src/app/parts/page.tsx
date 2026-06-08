@@ -28,34 +28,12 @@ import {
   partRelationships,
   parts,
 } from "@/db/schema";
+import { pageNavSequence } from "@/lib/page-nav-sequence";
 import { likeFragment } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 40;
-
-/** 页码序列：首尾与当前附近若干页，间断处用 gap 占位以便渲染省略号 */
-function pageNavSequence(
-  current: number,
-  total: number,
-  neighbors = 3
-): (number | "gap")[] {
-  if (total <= 1) return [1];
-  const set = new Set<number>();
-  set.add(1);
-  set.add(total);
-  for (let p = current - neighbors; p <= current + neighbors; p++) {
-    if (p >= 1 && p <= total) set.add(p);
-  }
-  const sorted = [...set].sort((a, b) => a - b);
-  const out: (number | "gap")[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const p = sorted[i]!;
-    if (i > 0 && p - sorted[i - 1]! > 1) out.push("gap");
-    out.push(p);
-  }
-  return out;
-}
 
 function usableImgUrl(u: string | null | undefined): u is string {
   return typeof u === "string" && u.trim().length > 0;
@@ -239,7 +217,7 @@ export default async function PartsPage({ searchParams }: Props) {
                 href="/parts/owned"
                 className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
               >
-                <span className="text-sm font-semibold text-[var(--text)]">散装拥有</span>
+                <span className="text-sm font-semibold text-[var(--text)]">零件库</span>
                 <span className="text-xs text-[var(--muted)]">
                   由官方套装杀肉写入的零件库存
                 </span>

@@ -61,6 +61,8 @@ export function RemoteCoverImage({
     );
   }
 
+  const imageLoading = priority ? undefined : ("lazy" as const);
+
   if (useFill) {
     return (
       <Image
@@ -71,6 +73,7 @@ export function RemoteCoverImage({
         sizes={sizes}
         unoptimized={unoptimized}
         priority={priority}
+        loading={imageLoading}
         onError={onError}
       />
     );
@@ -87,6 +90,7 @@ export function RemoteCoverImage({
         sizes={sizes}
         unoptimized={unoptimized}
         priority={priority}
+        loading={imageLoading}
         onError={onError}
       />
     );

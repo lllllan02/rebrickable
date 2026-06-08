@@ -23,7 +23,7 @@ export function PartOutSetButton({ setNum, catalogName, isOwned, embedded = fals
   const runPartOut = useCallback(() => {
     const title = catalogName?.trim() || setNum;
     const ok = window.confirm(
-      `确定对「${title}」（${setNum}）杀肉？\n\n将解除套装「拥有」状态，并把官方库存中的零件写入你的散装拥有清单。此操作不可自动撤销。`
+      `确定对「${title}」（${setNum}）杀肉？\n\n将解除套装「拥有」状态，并把官方库存中的零件写入你的零件库。此操作不可自动撤销。`
     );
     if (!ok) return;
 
@@ -53,7 +53,7 @@ export function PartOutSetButton({ setNum, catalogName, isOwned, embedded = fals
       <p className={embedded ? "text-xs text-[var(--muted)]" : "text-sm leading-relaxed text-[var(--muted)]"}>
         杀肉：解除本套装的「拥有」标记，并将官方库存零件转入
         <Link href="/parts/owned" className="mx-1 text-[var(--accent)] underline underline-offset-2">
-          散装拥有
+          零件库
         </Link>
         清单。
       </p>

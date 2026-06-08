@@ -336,7 +336,7 @@ export const buildOwnedSubjects = sqliteTable(
   ]
 );
 
-/** 用户散装拥有的零件（按零件号 + 颜色汇总数量；可由套装「杀肉」写入） */
+/** 用户零件库中的零件（按零件号 + 颜色汇总数量；可由套装「杀肉」写入） */
 export const buildOwnedParts = sqliteTable(
   "build_owned_parts",
   {

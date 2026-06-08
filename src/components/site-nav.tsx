@@ -10,7 +10,7 @@ const trailingLinks = [
   { href: "/sets", label: "Sets" },
   { href: "/sets/prices", label: "好价" },
   { href: "/parts", label: "Parts" },
-  { href: "/parts/owned", label: "散装" },
+  { href: "/parts/owned", label: "零件库" },
 ] as const;
 
 export function SiteNav() {
