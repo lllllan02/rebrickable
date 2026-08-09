@@ -3,14 +3,13 @@ import Link from "next/link";
 import { BuildPartsSheetUpload } from "@/app/build/build-parts-sheet-upload";
 import { SiteBrandLogo } from "@/components/site-brand-logo";
 import { GlobalSearch } from "@/components/global-search";
+import { SiteNavPartsMenu } from "@/components/site-nav-parts-menu";
 import { BUILD_SUBJECT_MOC } from "@/lib/build-subject";
 
 const trailingLinks = [
   { href: "/mocs", label: "MOCs" },
   { href: "/sets", label: "Sets" },
   { href: "/sets/prices", label: "好价" },
-  { href: "/parts", label: "Parts" },
-  { href: "/parts/owned", label: "零件库" },
 ] as const;
 
 export function SiteNav() {
@@ -27,6 +26,7 @@ export function SiteNav() {
                 {l.label}
               </Link>
             ))}
+            <SiteNavPartsMenu />
           </nav>
           <BuildPartsSheetUpload kind={BUILD_SUBJECT_MOC} variant="minimal" />
           <GlobalSearch />

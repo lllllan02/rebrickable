@@ -4,8 +4,10 @@ import { notFound } from "next/navigation";
 import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
 import { CopyableId } from "@/components/copyable-id";
+import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
 import { getCatalogDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
+import { isPartFavorite } from "@/lib/load-favorite-parts";
 import { loadOwnedQtyForPart } from "@/lib/load-owned-parts";
 import {
   colors,
@@ -47,8 +49,16 @@ export default async function PartDetailPage({ params }: Props) {
     ne(inventoryParts.imgUrl, "")
   );
 
-  const [asParent, asChild, elemRows, setRows, heroThumbRow, colorThumbRows, ownedQty] =
-    await Promise.all([
+  const [
+    asParent,
+    asChild,
+    elemRows,
+    setRows,
+    heroThumbRow,
+    colorThumbRows,
+    ownedQty,
+    favorite,
+  ] = await Promise.all([
       catalogDb
         .select({
           relType: partRelationships.relType,
@@ -109,6 +119,7 @@ export default async function PartDetailPage({ params }: Props) {
         .where(imgClause)
         .groupBy(inventoryParts.colorId),
       loadOwnedQtyForPart(partNum),
+      isPartFavorite(partNum),
     ]);
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
@@ -145,17 +156,35 @@ export default async function PartDetailPage({ params }: Props) {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="page-kicker">Part detail</p>
-            <h1 className="mt-1">
-              <CopyableId
-                value={row.partNum}
-                kind="零件号"
-                className="font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]"
-              >
-                {row.partNum}
-              </CopyableId>
-            </h1>
-            <p className="mt-1 text-lg">{row.name}</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="page-kicker">Part detail</p>
+                <h1 className="mt-1">
+                  <CopyableId
+                    value={row.partNum}
+                    kind="零件号"
+                    className="font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]"
+                  >
+                    {row.partNum}
+                  </CopyableId>
+                </h1>
+                <p className="mt-1 text-lg">{row.name}</p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <PartFavoriteToggle
+                  partNum={row.partNum}
+                  initialFavorite={favorite}
+                />
+                {favorite ? (
+                  <Link
+                    href="/parts/favorites"
+                    className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
+                  >
+                    查看收藏
+                  </Link>
+                ) : null}
+              </div>
+            </div>
             <dl className="meta-row mt-4 text-sm">
               {row.catName ? (
                 <div>

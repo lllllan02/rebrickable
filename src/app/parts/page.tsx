@@ -20,6 +20,7 @@ import {
 import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
 import { getCatalogDb } from "@/db/client";
 import {
   elements,
@@ -28,6 +29,7 @@ import {
   partRelationships,
   parts,
 } from "@/db/schema";
+import { loadFavoritePartNums } from "@/lib/load-favorite-parts";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 import { likeFragment } from "@/lib/search";
 
@@ -201,6 +203,21 @@ export default async function PartsPage({ searchParams }: Props) {
               请先选择零件类型（分类）以浏览该类下的列表；也可通过全库入口不按类型筛选，并配合关键词或普通/印刷筛选。卡片配图为该类型下清单中的零件示意图。
             </p>
           </div>
+          <form method="get" action="/parts" className="filter-bar">
+            <label className="sr-only" htmlFor="parts-q-picker">
+              搜索零件
+            </label>
+            <input
+              id="parts-q-picker"
+              name="q"
+              defaultValue=""
+              placeholder="名称、part_num 或 element_id…"
+              className="field min-w-[200px] flex-1 text-sm"
+            />
+            <button type="submit" className="button-primary text-sm">
+              搜索
+            </button>
+          </form>
           <div className="table-shell p-4 sm:p-5">
             <div className="mb-6 flex flex-wrap gap-3">
               <Link
@@ -212,6 +229,13 @@ export default async function PartsPage({ searchParams }: Props) {
                   不按类型筛选，可配合关键词与普通/印刷筛选（共{" "}
                   {totalAll.toLocaleString("zh-CN")} 条零件）
                 </span>
+              </Link>
+              <Link
+                href="/parts/favorites"
+                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
+              >
+                <span className="text-sm font-semibold text-[var(--text)]">收藏</span>
+                <span className="text-xs text-[var(--muted)]">已收藏的零件清单</span>
               </Link>
               <Link
                 href="/parts/owned"
@@ -328,8 +352,9 @@ export default async function PartsPage({ searchParams }: Props) {
   const printedPartNums = new Set<string>();
   const matchedElementsByPart = new Map<string, string[]>();
   const elementMatchTruncated = new Set<string>();
+  let favoritePartNums = new Set<string>();
   if (partNums.length > 0) {
-    const [thumbRows, countRows, colorRows, printedRows, matchRows] =
+    const [thumbRows, countRows, colorRows, printedRows, matchRows, favSet] =
       await Promise.all([
         db
           .select({
@@ -389,7 +414,9 @@ export default async function PartsPage({ searchParams }: Props) {
           : Promise.resolve(
               [] as { partNum: string; elementId: string }[]
             ),
+        loadFavoritePartNums(partNums),
       ]);
+    favoritePartNums = favSet;
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
@@ -437,12 +464,20 @@ export default async function PartsPage({ searchParams }: Props) {
               </p>
             ) : null}
           </div>
-          <Link
-            href="/parts"
-            className="shrink-0 text-sm text-[var(--accent)] underline-offset-2 hover:underline"
-          >
-            ← 选择分类
-          </Link>
+          <div className="flex shrink-0 flex-wrap items-center gap-3 text-sm">
+            <Link
+              href="/parts/favorites"
+              className="text-[var(--accent)] underline-offset-2 hover:underline"
+            >
+              收藏
+            </Link>
+            <Link
+              href="/parts"
+              className="text-[var(--accent)] underline-offset-2 hover:underline"
+            >
+              ← 选择分类
+            </Link>
+          </div>
         </div>
         <p className="page-description mt-3">
           当前列表共 {total.toLocaleString("zh-CN")}{" "}
@@ -523,6 +558,15 @@ export default async function PartsPage({ searchParams }: Props) {
                 partNum={r.partNum}
                 thumbUrl={thumb}
                 isPrinted={isPrinted}
+                topRight={
+                  <span className="absolute right-0.5 top-0.5 z-[2]">
+                    <PartFavoriteToggle
+                      partNum={r.partNum}
+                      initialFavorite={favoritePartNums.has(r.partNum)}
+                      compact
+                    />
+                  </span>
+                }
               >
                 {colorCount > 0 || elemCount > 0 ? (
                   <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">

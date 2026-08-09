@@ -126,6 +126,12 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     );
     CREATE INDEX IF NOT EXISTS build_favorite_kind_idx ON build_favorite_subjects(subject_kind);
 
+    CREATE TABLE IF NOT EXISTS build_favorite_parts (
+      part_num TEXT PRIMARY KEY,
+      marked_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_favorite_parts_marked_idx ON build_favorite_parts(marked_at);
+
     CREATE TABLE IF NOT EXISTS build_set_good_prices (
       set_num TEXT PRIMARY KEY,
       price_new_cny REAL,

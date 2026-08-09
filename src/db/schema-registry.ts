@@ -26,6 +26,7 @@ export const userSchema = {
   buildOwnedSubjects: schema.buildOwnedSubjects,
   buildOwnedParts: schema.buildOwnedParts,
   buildFavoriteSubjects: schema.buildFavoriteSubjects,
+  buildFavoriteParts: schema.buildFavoriteParts,
   buildSetGoodPrices: schema.buildSetGoodPrices,
   buildBricktimeConfig: schema.buildBricktimeConfig,
 };

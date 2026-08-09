@@ -11,7 +11,7 @@ import { ensureUserBuildTables } from "./ensure-user-build-tables";
 import { migrateLegacyBuildDataFromCatalogDb } from "./migrate-legacy-build-to-user-db";
 import { catalogSchema, userSchema } from "./schema-registry";
 
-const USER_SCHEMA_ENSURE_VERSION = "build_profiles_is_premium";
+const USER_SCHEMA_ENSURE_VERSION = "build_favorite_parts";
 
 function openCatalogSqlite(): Database.Database {
   const dbPath = catalogDbPath();

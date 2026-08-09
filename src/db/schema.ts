@@ -366,6 +366,16 @@ export const buildFavoriteSubjects = sqliteTable(
   ]
 );
 
+/** 用户收藏的零件（按零件号；与零件库库存无关） */
+export const buildFavoriteParts = sqliteTable(
+  "build_favorite_parts",
+  {
+    partNum: text("part_num").primaryKey(),
+    markedAt: text("marked_at").notNull(),
+  },
+  (t) => [index("build_favorite_parts_marked_idx").on(t.markedAt)]
+);
+
 /** 官方套装用户记录的可购买好价（元）；与高砖参考价无关 */
 export const buildSetGoodPrices = sqliteTable(
   "build_set_good_prices",
