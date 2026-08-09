@@ -66,14 +66,17 @@ export function FavoritePartsQuickAdd() {
   const busy = lookupPending || addPending;
 
   return (
-    <section className="section-panel" aria-labelledby="favorite-quick-add-heading">
-      <h2 id="favorite-quick-add-heading" className="section-title">
-        快捷添加
+    <section
+      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3"
+      aria-labelledby="favorite-quick-add-heading"
+    >
+      <h2
+        id="favorite-quick-add-heading"
+        className="text-xs font-semibold text-[var(--text)]"
+      >
+        添加
       </h2>
-      <p className="mt-1 text-sm text-[var(--muted)]">
-        输入零件号或 element_id，核对信息后确认加入收藏。
-      </p>
-      <form onSubmit={onLookup} className="filter-bar mt-3">
+      <form onSubmit={onLookup} className="mt-2 flex flex-col gap-2">
         <label className="sr-only" htmlFor="favorite-quick-add-q">
           零件编号
         </label>
@@ -84,15 +87,15 @@ export function FavoritePartsQuickAdd() {
             setQuery(e.target.value);
             if (preview || error) resetPreview();
           }}
-          placeholder="零件号或 element_id…"
-          className="field min-w-[200px] flex-1 font-mono text-sm"
+          placeholder="零件号 / element…"
+          className="field w-full font-mono text-xs"
           autoComplete="off"
           spellCheck={false}
           disabled={busy}
         />
         <button
           type="submit"
-          className="button-primary text-sm"
+          className="button-primary w-full text-xs"
           disabled={busy || !query.trim()}
         >
           {lookupPending ? "查找中…" : "查找"}
@@ -100,31 +103,32 @@ export function FavoritePartsQuickAdd() {
       </form>
 
       {error ? (
-        <p className="mt-3 text-sm text-[var(--danger)]" role="alert">
+        <p className="mt-2 text-xs text-[var(--danger)]" role="alert">
           {error}
         </p>
       ) : null}
 
       {preview ? (
-        <div className="mt-4 flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:flex-row sm:items-center sm:p-4">
-          <div className="media-box media-box-sm mx-auto shrink-0 sm:mx-0">
+        <div className="mt-2 space-y-2 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+          <div className="mx-auto aspect-square w-16 overflow-hidden rounded border border-[var(--border)] bg-[var(--surface-3)]">
             {preview.thumbUrl ? (
               <RemoteCoverImage
                 src={preview.thumbUrl}
-                width={80}
-                height={80}
-                className="h-full w-full object-contain p-1.5"
+                width={64}
+                height={64}
+                className="h-full w-full object-contain p-1"
                 alt=""
                 fallbackLabel="无图"
+                fallbackClassName="text-[9px]"
               />
             ) : (
-              <span className="flex h-full min-h-[5rem] w-full items-center justify-center text-xs text-[var(--muted)]">
+              <span className="flex h-full w-full items-center justify-center text-[9px] text-[var(--muted)]">
                 无图
               </span>
             )}
           </div>
-          <div className="min-w-0 flex-1 text-center sm:text-left">
-            <p className="font-mono text-base font-semibold text-[var(--accent)]">
+          <div className="min-w-0 text-center">
+            <p className="truncate font-mono text-xs font-semibold text-[var(--accent)]">
               <Link
                 href={`/parts/${encodeURIComponent(preview.partNum)}`}
                 className="underline-offset-2 hover:underline"
@@ -132,19 +136,18 @@ export function FavoritePartsQuickAdd() {
                 {preview.partNum}
               </Link>
             </p>
-            <p className="mt-0.5 text-sm text-[var(--text)]">{preview.name}</p>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              {preview.catName ? `分类：${preview.catName}` : "未分类"}
-              {preview.matchedElementId
-                ? ` · element ${preview.matchedElementId}`
-                : null}
-              {preview.alreadyFavorite ? " · 已在收藏中" : null}
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[var(--text)]">
+              {preview.name}
+            </p>
+            <p className="mt-1 text-[10px] text-[var(--muted)]">
+              {preview.catName ?? "未分类"}
+              {preview.alreadyFavorite ? " · 已收藏" : null}
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap justify-center gap-2 sm:justify-end">
+          <div className="flex flex-col gap-1.5">
             <button
               type="button"
-              className="button-primary text-sm"
+              className="button-primary w-full text-xs"
               disabled={busy || preview.alreadyFavorite}
               onClick={onConfirmAdd}
             >
@@ -156,7 +159,7 @@ export function FavoritePartsQuickAdd() {
             </button>
             <button
               type="button"
-              className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface-3)]"
               disabled={busy}
               onClick={resetPreview}
             >
