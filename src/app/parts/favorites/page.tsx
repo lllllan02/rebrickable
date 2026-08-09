@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { FavoritePartsQuickAdd } from "@/app/parts/favorites/favorite-parts-quick-add";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import {
@@ -41,7 +42,7 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
               >
                 零件目录
               </Link>
-              或详情页点击 ★ 加入收藏；与零件库库存无关。
+              或详情页点击 ★ 加入收藏；也可在下方按编号快捷添加。与零件库库存无关。
             </p>
             {total > 0 ? (
               <p className="mt-2 text-sm tabular-nums text-[var(--text)]">
@@ -58,17 +59,19 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
         </div>
       </header>
 
+      <FavoritePartsQuickAdd />
+
       {total === 0 ? (
         <section className="section-panel">
           <p className="text-sm text-[var(--muted)]">
-            尚未收藏任何零件。前往
+            尚未收藏任何零件。可使用上方快捷添加，或前往
             <Link
               href="/parts"
               className="mx-1 text-[var(--accent)] underline underline-offset-2"
             >
               零件目录
             </Link>
-            浏览并点击 ★ 即可加入。
+            浏览并点击 ★ 加入。
           </p>
         </section>
       ) : (
