@@ -1,20 +1,21 @@
 import Link from "next/link";
 
 import { OwnedPartsCategoryNav } from "@/app/parts/owned/owned-parts-category-nav";
+import { OwnedPartsSortControl } from "@/app/parts/owned/owned-parts-sort-control";
 import { OwnedPartsTiles } from "@/app/parts/owned/owned-parts-tiles";
+import { ownedPartsHref } from "@/lib/owned-parts-href";
 import {
   OWNED_PARTS_PAGE_SIZE,
   loadOwnedCategoryLabel,
   loadOwnedCategorySummary,
   loadOwnedElementsPage,
   loadOwnedPartsPage,
+  parseOwnedSortState,
   parseOwnedViewParam,
   type OwnedElementPageRow,
   type OwnedPartPageRow,
-  type OwnedViewMode,
 } from "@/lib/load-owned-parts";
 import {
-  ownedCategoryQueryValue,
   parseOwnedCategoryParam,
   type OwnedCategoryFilter,
 } from "@/lib/owned-parts-category";
@@ -23,7 +24,13 @@ import { pageNavSequence } from "@/lib/page-nav-sequence";
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: Promise<{ page?: string; cat?: string; view?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    cat?: string;
+    view?: string;
+    sort?: string;
+    dir?: string;
+  }>;
 };
 
 function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
@@ -32,37 +39,31 @@ function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
   return parsed;
 }
 
-function viewHref(
-  view: OwnedViewMode,
-  catFilter: OwnedCategoryFilter,
-  page = 1
-): string {
-  const u = new URLSearchParams();
-  if (catFilter !== "all") {
-    u.set("cat", ownedCategoryQueryValue(catFilter));
-  }
-  if (view === "element") {
-    u.set("view", "element");
-  }
-  if (page > 1) u.set("page", String(page));
-  const s = u.toString();
-  return s ? `/parts/owned?${s}` : "/parts/owned";
-}
-
 export default async function OwnedPartsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   const catFilter = parseCatFilter(sp.cat);
   const view = parseOwnedViewParam(sp.view);
+  const sort = parseOwnedSortState(sp.sort, sp.dir);
 
   const [summary, categoryLabel, partPage, elementPage] = await Promise.all([
     loadOwnedCategorySummary(),
     loadOwnedCategoryLabel(catFilter),
     view === "part"
-      ? loadOwnedPartsPage(requestedPage, OWNED_PARTS_PAGE_SIZE, catFilter)
+      ? loadOwnedPartsPage(
+          requestedPage,
+          OWNED_PARTS_PAGE_SIZE,
+          catFilter,
+          sort
+        )
       : Promise.resolve({ total: 0, page: 1, rows: [] as OwnedPartPageRow[] }),
     view === "element"
-      ? loadOwnedElementsPage(requestedPage, OWNED_PARTS_PAGE_SIZE, catFilter)
+      ? loadOwnedElementsPage(
+          requestedPage,
+          OWNED_PARTS_PAGE_SIZE,
+          catFilter,
+          sort
+        )
       : Promise.resolve({
           total: 0,
           page: 1,
@@ -73,17 +74,6 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
   const total = view === "element" ? elementPage.total : partPage.total;
   const page = view === "element" ? elementPage.page : partPage.page;
   const totalPages = Math.max(1, Math.ceil(total / OWNED_PARTS_PAGE_SIZE));
-
-  const qs = (p: number) => {
-    const u = new URLSearchParams();
-    if (catFilter !== "all") {
-      u.set("cat", ownedCategoryQueryValue(catFilter));
-    }
-    if (view === "element") u.set("view", "element");
-    if (p > 1) u.set("page", String(p));
-    const s = u.toString();
-    return s ? `?${s}` : "";
-  };
 
   return (
     <div className="page-stack">
@@ -122,33 +112,44 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
           </div>
 
           {summary.total > 0 ? (
-            <div
-              className="inline-flex rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-0.5 text-xs"
-              role="group"
-              aria-label="展示粒度"
-            >
-              <Link
-                href={viewHref("part", catFilter)}
-                aria-current={view === "part" ? "page" : undefined}
-                className={`rounded px-2.5 py-1 transition-colors ${
-                  view === "part"
-                    ? "bg-[var(--accent-soft)] font-medium text-[var(--text)]"
-                    : "text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <div
+                className="inline-flex rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-0.5 text-xs"
+                role="group"
+                aria-label="展示粒度"
               >
-                零件
-              </Link>
-              <Link
-                href={viewHref("element", catFilter)}
-                aria-current={view === "element" ? "page" : undefined}
-                className={`rounded px-2.5 py-1 transition-colors ${
-                  view === "element"
-                    ? "bg-[var(--accent-soft)] font-medium text-[var(--text)]"
-                    : "text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                元素
-              </Link>
+                <Link
+                  href={ownedPartsHref({ view: "part", cat: catFilter, sort })}
+                  aria-current={view === "part" ? "page" : undefined}
+                  className={`rounded px-2.5 py-1 transition-colors ${
+                    view === "part"
+                      ? "bg-[var(--accent-soft)] font-medium text-[var(--text)]"
+                      : "text-[var(--muted)] hover:text-[var(--text)]"
+                  }`}
+                >
+                  零件
+                </Link>
+                <Link
+                  href={ownedPartsHref({
+                    view: "element",
+                    cat: catFilter,
+                    sort,
+                  })}
+                  aria-current={view === "element" ? "page" : undefined}
+                  className={`rounded px-2.5 py-1 transition-colors ${
+                    view === "element"
+                      ? "bg-[var(--accent-soft)] font-medium text-[var(--text)]"
+                      : "text-[var(--muted)] hover:text-[var(--text)]"
+                  }`}
+                >
+                  元素
+                </Link>
+              </div>
+              <OwnedPartsSortControl
+                view={view}
+                cat={catFilter}
+                sortState={sort}
+              />
             </div>
           ) : null}
 
@@ -167,7 +168,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
             <p className="text-sm text-[var(--muted)]">
               当前分类下没有零件库记录。
               <Link
-                href={viewHref(view, "all")}
+                href={ownedPartsHref({ view, cat: "all", sort })}
                 className="ml-1 text-[var(--accent)] underline underline-offset-2"
               >
                 查看全部
@@ -185,7 +186,12 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                   <nav aria-label="分页" className="pagination-shell">
                     {page > 1 ? (
                       <Link
-                        href={`/parts/owned${qs(page - 1)}`}
+                        href={ownedPartsHref({
+                          view,
+                          cat: catFilter,
+                          sort,
+                          page: page - 1,
+                        })}
                         className="pager-link shrink-0"
                       >
                         上一页
@@ -214,7 +220,12 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                         ) : (
                           <Link
                             key={`p-${item}`}
-                            href={`/parts/owned${qs(item)}`}
+                            href={ownedPartsHref({
+                              view,
+                              cat: catFilter,
+                              sort,
+                              page: item,
+                            })}
                             className="pager-link inline-flex min-w-[1.75rem] justify-center"
                           >
                             {item}
@@ -224,7 +235,12 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                     </div>
                     {page < totalPages ? (
                       <Link
-                        href={`/parts/owned${qs(page + 1)}`}
+                        href={ownedPartsHref({
+                          view,
+                          cat: catFilter,
+                          sort,
+                          page: page + 1,
+                        })}
                         className="pager-link shrink-0"
                       >
                         下一页
@@ -247,6 +263,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
               uncategorizedCount={summary.uncategorizedCount}
               active={catFilter}
               view={view}
+              sort={sort}
             />
           ) : null}
         </aside>

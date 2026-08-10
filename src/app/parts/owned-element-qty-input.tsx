@@ -9,8 +9,10 @@ type Props = {
   partNum: string;
   colorId: number;
   initialQuantity: number;
-  /** 数量成功变更后回调（零件库展开行用于重算合计） */
+  /** 数量成功变更后回调（零件库列表用于重算合计） */
   onQuantityChange?: (quantity: number) => void;
+  /** 方格角标用更小输入框 */
+  compact?: boolean;
   className?: string;
 };
 
@@ -23,6 +25,7 @@ export function OwnedElementQtyInput({
   colorId,
   initialQuantity,
   onQuantityChange,
+  compact = false,
   className = "",
 }: Props) {
   const router = useRouter();
@@ -85,10 +88,13 @@ export function OwnedElementQtyInput({
     });
   }
 
+  const inputClass = compact
+    ? "h-4 w-7 rounded border border-[var(--border)] bg-[rgba(7,10,18,0.9)] px-0.5 text-center text-[9px] font-semibold tabular-nums leading-none text-[var(--text)] shadow-sm outline-none focus:border-[var(--accent)] disabled:opacity-50"
+    : "field w-16 px-1.5 py-1 text-center text-xs tabular-nums disabled:opacity-50";
+
   return (
     <label
       className={`inline-flex shrink-0 flex-col items-end gap-0.5 ${className}`.trim()}
-      onClick={(e) => e.stopPropagation()}
     >
       <span className="sr-only">购入数量</span>
       <input
@@ -100,7 +106,7 @@ export function OwnedElementQtyInput({
         placeholder="0"
         title="购入零件总数"
         aria-label="购入零件总数"
-        className="field w-16 px-1.5 py-1 text-center text-xs tabular-nums disabled:opacity-50"
+        className={inputClass}
         onChange={(e) => {
           const next = e.target.value.replace(/[^\d]/g, "");
           setValue(next);

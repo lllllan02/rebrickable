@@ -25,10 +25,15 @@ import {
   parts,
 } from "@/db/schema";
 import type { OwnedCategoryFilter } from "@/lib/owned-parts-category";
+import type { OwnedSortDir, OwnedSortKey, OwnedSortState } from "@/lib/owned-parts-sort";
+import { OWNED_DEFAULT_SORT } from "@/lib/owned-parts-sort";
 
 export const OWNED_PARTS_PAGE_SIZE = 40;
 
 export type OwnedViewMode = "part" | "element";
+
+export type { OwnedSortDir, OwnedSortKey, OwnedSortState } from "@/lib/owned-parts-sort";
+export { parseOwnedSortState } from "@/lib/owned-parts-sort";
 
 export type OwnedPartsStats = {
   totalRows: number;
@@ -122,17 +127,102 @@ async function loadAllOwnedPartAggs(): Promise<OwnedPartAgg[]> {
     .from(buildOwnedParts)
     .groupBy(buildOwnedParts.partNum);
 
-  return rows
-    .map((r) => ({
-      partNum: r.partNum,
-      totalQty: r.totalQty ?? 0,
-      updatedAt: r.updatedAt ?? "",
-    }))
-    .sort(
-      (a, b) =>
-        b.updatedAt.localeCompare(a.updatedAt) ||
-        a.partNum.localeCompare(b.partNum, "en")
-    );
+  return rows.map((r) => ({
+    partNum: r.partNum,
+    totalQty: r.totalQty ?? 0,
+    updatedAt: r.updatedAt ?? "",
+  }));
+}
+
+async function loadMinColorIdByPart(
+  partNums: readonly string[]
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (partNums.length === 0) return map;
+  const userDb = getUserDb();
+  const rows = await userDb
+    .select({
+      partNum: buildOwnedParts.partNum,
+      colorId: min(buildOwnedParts.colorId),
+    })
+    .from(buildOwnedParts)
+    .where(inArray(buildOwnedParts.partNum, [...partNums]))
+    .groupBy(buildOwnedParts.partNum);
+  for (const r of rows) {
+    if (r.colorId != null) map.set(r.partNum, r.colorId);
+  }
+  return map;
+}
+
+async function loadCategorySortMeta(
+  partNums: readonly string[]
+): Promise<{
+  catIdByPart: Map<string, number | null>;
+  catNameById: Map<number, string>;
+}> {
+  const catIdByPart = await loadOwnedPartCatByNum(partNums);
+  const catIds = [
+    ...new Set(
+      [...catIdByPart.values()].filter((id): id is number => id != null)
+    ),
+  ];
+  const catNameById = new Map<number, string>();
+  if (catIds.length === 0) return { catIdByPart, catNameById };
+
+  const catalogDb = getCatalogDb();
+  const nameRows = await catalogDb
+    .select({ id: partCategories.id, name: partCategories.name })
+    .from(partCategories)
+    .where(inArray(partCategories.id, catIds));
+  for (const r of nameRows) {
+    catNameById.set(r.id, (r.name ?? "").trim() || `分类 ${r.id}`);
+  }
+  return { catIdByPart, catNameById };
+}
+
+function compareNullableNumber(a: number | null | undefined, b: number | null | undefined): number {
+  const aMissing = a == null;
+  const bMissing = b == null;
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  return a - b;
+}
+
+function withDir(cmp: number, dir: OwnedSortDir): number {
+  return dir === "desc" ? -cmp : cmp;
+}
+
+function sortOwnedPartAggs(
+  rows: OwnedPartAgg[],
+  sort: OwnedSortState,
+  opts: {
+    minColorByPart?: Map<string, number>;
+    catIdByPart?: Map<string, number | null>;
+    catNameById?: Map<number, string>;
+  }
+): OwnedPartAgg[] {
+  const copy = [...rows];
+  copy.sort((a, b) => {
+    let primary = 0;
+    if (sort.key === "qty") {
+      primary = a.totalQty - b.totalQty;
+    } else if (sort.key === "color") {
+      const ca = opts.minColorByPart?.get(a.partNum);
+      const cb = opts.minColorByPart?.get(b.partNum);
+      primary = compareNullableNumber(ca, cb);
+    } else if (sort.key === "category") {
+      const idA = opts.catIdByPart?.get(a.partNum) ?? null;
+      const idB = opts.catIdByPart?.get(b.partNum) ?? null;
+      const nameA = idA == null ? "\uffff" : opts.catNameById?.get(idA) ?? "";
+      const nameB = idB == null ? "\uffff" : opts.catNameById?.get(idB) ?? "";
+      primary = nameA.localeCompare(nameB, "zh-Hans-CN");
+    } else {
+      primary = a.partNum.localeCompare(b.partNum, "en");
+    }
+    return withDir(primary, sort.dir) || a.partNum.localeCompare(b.partNum, "en");
+  });
+  return copy;
 }
 
 function filterOwnedAggsByCat(
@@ -264,29 +354,46 @@ export async function loadOwnedQtyByColorForPart(
 export async function loadOwnedPartsPage(
   page: number,
   pageSize = OWNED_PARTS_PAGE_SIZE,
-  catFilter: OwnedCategoryFilter = "all"
+  catFilter: OwnedCategoryFilter = "all",
+  sort: OwnedSortState = OWNED_DEFAULT_SORT
 ): Promise<{ total: number; page: number; rows: OwnedPartPageRow[] }> {
   const allAggs = await loadAllOwnedPartAggs();
   if (allAggs.length === 0) {
     return { total: 0, page: 1, rows: [] };
   }
 
-  const catByPart =
-    catFilter === "all"
-      ? new Map<string, number | null>()
-      : await loadOwnedPartCatByNum(allAggs.map((r) => r.partNum));
+  const allPartNums = allAggs.map((r) => r.partNum);
+  const needsCatMeta = catFilter !== "all" || sort.key === "category";
+  const catByPart = needsCatMeta
+    ? (await loadOwnedPartCatByNum(allPartNums))
+    : new Map<string, number | null>();
 
   const filtered = filterOwnedAggsByCat(allAggs, catByPart, catFilter);
-  const total = filtered.length;
+  if (filtered.length === 0) {
+    return { total: 0, page: 1, rows: [] };
+  }
+
+  let minColorByPart: Map<string, number> | undefined;
+  let catNameById: Map<number, string> | undefined;
+  if (sort.key === "color") {
+    minColorByPart = await loadMinColorIdByPart(filtered.map((r) => r.partNum));
+  } else if (sort.key === "category") {
+    const meta = await loadCategorySortMeta(filtered.map((r) => r.partNum));
+    catNameById = meta.catNameById;
+  }
+
+  const sorted = sortOwnedPartAggs(filtered, sort, {
+    minColorByPart,
+    catIdByPart: catByPart,
+    catNameById,
+  });
+
+  const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
   const safePage = Math.min(totalPages, Math.max(1, page));
   const offset = (safePage - 1) * pageSize;
 
-  if (total === 0) {
-    return { total: 0, page: 1, rows: [] };
-  }
-
-  const pageAggs = filtered.slice(offset, offset + pageSize);
+  const pageAggs = sorted.slice(offset, offset + pageSize);
   if (pageAggs.length === 0) {
     return { total, page: safePage, rows: [] };
   }
@@ -348,7 +455,8 @@ export async function loadOwnedPartsPage(
 export async function loadOwnedElementsPage(
   page: number,
   pageSize = OWNED_PARTS_PAGE_SIZE,
-  catFilter: OwnedCategoryFilter = "all"
+  catFilter: OwnedCategoryFilter = "all",
+  sort: OwnedSortState = OWNED_DEFAULT_SORT
 ): Promise<{ total: number; page: number; rows: OwnedElementPageRow[] }> {
   const userDb = getUserDb();
   const allRows = await userDb
@@ -360,49 +468,115 @@ export async function loadOwnedElementsPage(
     })
     .from(buildOwnedParts);
 
-  const sorted = allRows
+  const baseRows = allRows
     .filter((r) => r.quantity > 0)
     .map((r) => ({
       partNum: r.partNum,
       colorId: r.colorId,
       quantity: r.quantity,
       updatedAt: r.updatedAt ?? "",
-    }))
-    .sort(
-      (a, b) =>
-        b.updatedAt.localeCompare(a.updatedAt) ||
-        a.partNum.localeCompare(b.partNum, "en") ||
-        a.colorId - b.colorId
-    );
+    }));
 
-  if (sorted.length === 0) {
+  if (baseRows.length === 0) {
     return { total: 0, page: 1, rows: [] };
   }
 
-  const partNumsAll = [...new Set(sorted.map((r) => r.partNum))];
-  const catByPart =
-    catFilter === "all"
-      ? new Map<string, number | null>()
-      : await loadOwnedPartCatByNum(partNumsAll);
+  const partNumsAll = [...new Set(baseRows.map((r) => r.partNum))];
+  const needsCatMeta = catFilter !== "all" || sort.key === "category";
+  const catByPart = needsCatMeta
+    ? await loadOwnedPartCatByNum(partNumsAll)
+    : new Map<string, number | null>();
 
-  const filtered = filterOwnedColorRowsByCat(sorted, catByPart, catFilter);
-  const total = filtered.length;
+  const filtered = filterOwnedColorRowsByCat(baseRows, catByPart, catFilter);
+  if (filtered.length === 0) {
+    return { total: 0, page: 1, rows: [] };
+  }
+
+  // 元素编号 / 分类名：排序前需补齐元数据（针对筛选后的全部行）
+  const filteredPartNums = [...new Set(filtered.map((r) => r.partNum))];
+  const filteredColorIds = [...new Set(filtered.map((r) => r.colorId))];
+  const catalogDb = getCatalogDb();
+
+  let elementByPartColor = new Map<string, string>();
+  let catNameById = new Map<number, string>();
+  if (sort.key === "id" || sort.key === "category") {
+    const [elementRows, catMeta] = await Promise.all([
+      sort.key === "id"
+        ? catalogDb
+            .select({
+              partNum: elements.partNum,
+              colorId: elements.colorId,
+              elementId: elements.elementId,
+            })
+            .from(elements)
+            .where(
+              and(
+                inArray(elements.partNum, filteredPartNums),
+                inArray(elements.colorId, filteredColorIds)
+              )
+            )
+            .orderBy(asc(elements.elementId))
+        : Promise.resolve(
+            [] as { partNum: string; colorId: number; elementId: string }[]
+          ),
+      sort.key === "category"
+        ? loadCategorySortMeta(filteredPartNums)
+        : Promise.resolve({
+            catIdByPart: catByPart,
+            catNameById: new Map<number, string>(),
+          }),
+    ]);
+    for (const e of elementRows) {
+      const key = `${e.partNum}\0${e.colorId}`;
+      if (!elementByPartColor.has(key)) {
+        elementByPartColor.set(key, e.elementId);
+      }
+    }
+    if (sort.key === "category") {
+      catNameById = catMeta.catNameById;
+      for (const [k, v] of catMeta.catIdByPart) catByPart.set(k, v);
+    }
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    let primary = 0;
+    if (sort.key === "qty") {
+      primary = a.quantity - b.quantity;
+    } else if (sort.key === "color") {
+      primary = a.colorId - b.colorId;
+    } else if (sort.key === "category") {
+      const idA = catByPart.get(a.partNum) ?? null;
+      const idB = catByPart.get(b.partNum) ?? null;
+      const nameA = idA == null ? "\uffff" : catNameById.get(idA) ?? "";
+      const nameB = idB == null ? "\uffff" : catNameById.get(idB) ?? "";
+      primary = nameA.localeCompare(nameB, "zh-Hans-CN");
+    } else {
+      const keyA = `${a.partNum}\0${a.colorId}`;
+      const keyB = `${b.partNum}\0${b.colorId}`;
+      const elA =
+        elementByPartColor.get(keyA) ?? `\uffff${a.partNum}/${a.colorId}`;
+      const elB =
+        elementByPartColor.get(keyB) ?? `\uffff${b.partNum}/${b.colorId}`;
+      primary = elA.localeCompare(elB, "en");
+    }
+    return (
+      withDir(primary, sort.dir) ||
+      a.partNum.localeCompare(b.partNum, "en") ||
+      a.colorId - b.colorId
+    );
+  });
+
+  const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
   const safePage = Math.min(totalPages, Math.max(1, page));
   const offset = (safePage - 1) * pageSize;
-
-  if (total === 0) {
-    return { total: 0, page: 1, rows: [] };
-  }
-
-  const pageRows = filtered.slice(offset, offset + pageSize);
+  const pageRows = sorted.slice(offset, offset + pageSize);
   if (pageRows.length === 0) {
     return { total, page: safePage, rows: [] };
   }
 
   const partNums = [...new Set(pageRows.map((r) => r.partNum))];
   const colorIds = [...new Set(pageRows.map((r) => r.colorId))];
-  const catalogDb = getCatalogDb();
 
   const [nameRows, colorRows, elementRows, thumbRows, printedRows] =
     await Promise.all([
@@ -463,7 +637,6 @@ export async function loadOwnedElementsPage(
       rgb: (c.rgb ?? "CCCCCC").trim() || "CCCCCC",
     });
   }
-  const elementByPartColor = new Map<string, string>();
   for (const e of elementRows) {
     const key = `${e.partNum}\0${e.colorId}`;
     if (!elementByPartColor.has(key)) {

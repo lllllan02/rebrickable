@@ -1,3 +1,4 @@
+import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { elementDomId } from "@/lib/dom-anchors";
 import type {
@@ -82,7 +83,7 @@ export function OwnedPartsTiles({
         return (
           <li
             key={`${r.partNum}-${r.colorId}-${r.elementId ?? "x"}`}
-            className="min-w-0"
+            className="relative min-w-0"
           >
             <PartGridTileLink
               href={href}
@@ -90,7 +91,6 @@ export function OwnedPartsTiles({
               partNum={label}
               thumbUrl={r.thumbUrl}
               isPrinted={r.isPrinted}
-              topRight={<QtyBadge qty={r.quantity} />}
             >
               <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-[var(--muted-2)]">
                 <span
@@ -101,6 +101,15 @@ export function OwnedPartsTiles({
                 {r.colorName}
               </p>
             </PartGridTileLink>
+            {/* 放在 Link 外，避免点击输入框触发详情跳转 */}
+            <div className="absolute right-0.5 top-0.5 z-[3]">
+              <OwnedElementQtyInput
+                partNum={r.partNum}
+                colorId={r.colorId}
+                initialQuantity={r.quantity}
+                compact
+              />
+            </div>
           </li>
         );
       })}

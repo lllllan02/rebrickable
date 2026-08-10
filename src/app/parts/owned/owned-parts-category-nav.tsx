@@ -1,25 +1,12 @@
 import Link from "next/link";
 
+import { ownedPartsHref } from "@/lib/owned-parts-href";
 import type {
   OwnedCategorySummaryRow,
   OwnedViewMode,
 } from "@/lib/load-owned-parts";
-import {
-  ownedCategoryQueryValue,
-  type OwnedCategoryFilter,
-} from "@/lib/owned-parts-category";
-
-function catHref(filter: OwnedCategoryFilter, view: OwnedViewMode): string {
-  const u = new URLSearchParams();
-  if (filter !== "all") {
-    u.set("cat", ownedCategoryQueryValue(filter));
-  }
-  if (view === "element") {
-    u.set("view", "element");
-  }
-  const s = u.toString();
-  return s ? `/parts/owned?${s}` : "/parts/owned";
-}
+import type { OwnedCategoryFilter } from "@/lib/owned-parts-category";
+import type { OwnedSortState } from "@/lib/owned-parts-sort";
 
 function NavRow({
   href,
@@ -56,12 +43,14 @@ export function OwnedPartsCategoryNav({
   uncategorizedCount,
   active,
   view,
+  sort,
 }: {
   total: number;
   categories: OwnedCategorySummaryRow[];
   uncategorizedCount: number;
   active: OwnedCategoryFilter;
   view: OwnedViewMode;
+  sort: OwnedSortState;
 }) {
   return (
     <nav
@@ -71,14 +60,14 @@ export function OwnedPartsCategoryNav({
       <h2 className="text-xs font-semibold text-[var(--text)]">分类</h2>
       <div className="mt-2 max-h-[min(28rem,55vh)] space-y-0.5 overflow-y-auto pr-0.5">
         <NavRow
-          href={catHref("all", view)}
+          href={ownedPartsHref({ view, cat: "all", sort })}
           label="全部"
           count={total}
           active={active === "all"}
         />
         {uncategorizedCount > 0 ? (
           <NavRow
-            href={catHref("uncategorized", view)}
+            href={ownedPartsHref({ view, cat: "uncategorized", sort })}
             label="未分类"
             count={uncategorizedCount}
             active={active === "uncategorized"}
@@ -87,7 +76,7 @@ export function OwnedPartsCategoryNav({
         {categories.map((c) => (
           <NavRow
             key={c.id}
-            href={catHref(c.id, view)}
+            href={ownedPartsHref({ view, cat: c.id, sort })}
             label={c.name}
             count={c.count}
             active={active === c.id}
