@@ -192,6 +192,32 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     CREATE INDEX IF NOT EXISTS build_io_batches_subject_idx ON build_io_step_batches(subject_kind, subject_id);
     CREATE INDEX IF NOT EXISTS build_io_batches_attachment_idx ON build_io_step_batches(attachment_id);
 
+    CREATE TABLE IF NOT EXISTS build_manual_split_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_kind TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      source_kind TEXT NOT NULL,
+      source_payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_manual_split_plans_subject_idx
+      ON build_manual_split_plans(subject_kind, subject_id);
+
+    CREATE TABLE IF NOT EXISTS build_manual_split_bags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      sort_order INTEGER NOT NULL,
+      is_remainder INTEGER NOT NULL DEFAULT 0,
+      items_json TEXT NOT NULL,
+      line_count INTEGER NOT NULL,
+      total_part_qty INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_manual_split_bags_plan_idx ON build_manual_split_bags(plan_id);
+
     CREATE TABLE IF NOT EXISTS build_replicate_phases (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_kind TEXT NOT NULL,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -7,6 +8,10 @@ import {
   type IoBatchListRow,
   type IoSplitPlanGroup,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
+import { ManualSplitBagViewer } from "@/app/mocs/manual-split-bag-viewer";
+import { ManualSplitPlanDeleteButton } from "@/app/mocs/manual-split-plan-delete";
+import { ManualSplitStartButton } from "@/app/mocs/manual-split-start-button";
+import type { ManualSplitPlanGroup } from "@/app/mocs/manual-split-actions";
 import { MocIoSplitPlanDeleteButton } from "@/app/mocs/moc-io-split-plan-delete";
 import { MocIoSplitSheetViewer, type IoSplitSheetState } from "@/app/mocs/moc-io-split-sheet-viewer";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
@@ -14,6 +19,7 @@ import { MocPartsList } from "@/app/mocs/moc-parts-list";
 import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
 import { fulfillmentItemsForDisplay } from "@/lib/sheet-row-replaced-marker";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET, type BuildSubjectKind } from "@/lib/build-subject";
+import { buildSubjectManualSplitPath } from "@/lib/build-subject-paths";
 import {
   MOC_PARTS_TAB_HASH,
   type MocPartsListTab,
@@ -27,7 +33,10 @@ import { formatGobricksGdsPriceCny } from "@/lib/gobricks-display-caption";
 import { ioSplitPackageLabel } from "@/lib/io-split-labels";
 
 type ListTab = MocPartsListTab;
-type PrimaryPanel = { kind: "all" } | { kind: "io"; groupKey: string };
+type PrimaryPanel =
+  | { kind: "all" }
+  | { kind: "io"; groupKey: string }
+  | { kind: "manual"; planId: number };
 
 type IoSecondary = { kind: "batch"; batchId: number } | { kind: "merged-shortage" };
 
@@ -44,6 +53,9 @@ type Props = {
     version: number;
   } | null;
   ioSplitPlans: IoSplitPlanGroup[];
+  manualSplitPlans?: ManualSplitPlanGroup[];
+  /** 是否可从完整零件表进入手动分包 */
+  canManualSplit?: boolean;
   /** 与 URL hash 同步的「全部」二级 Tab（仅 MOC 详情页传入） */
   allTab?: ListTab;
   onAllTabChange?: (tab: ListTab) => void;
@@ -86,6 +98,8 @@ export function MocPartsSheetBrowser({
   initialFulfillment,
   officialInventory,
   ioSplitPlans,
+  manualSplitPlans = [],
+  canManualSplit = false,
   allTab: controlledAllTab,
   onAllTabChange,
 }: Props) {
@@ -96,8 +110,19 @@ export function MocPartsSheetBrowser({
     if (ioSplitPlans.length > 0 && !initialFull && !initialShortage && !initialFulfillment) {
       return { kind: "io", groupKey: ioSplitPlans[0]!.groupKey };
     }
+    if (
+      manualSplitPlans.length > 0 &&
+      !initialFull &&
+      !initialShortage &&
+      !initialFulfillment &&
+      !hasOfficial
+    ) {
+      return { kind: "manual", planId: manualSplitPlans[0]!.planId };
+    }
     return { kind: "all" };
   });
+
+  const [manualBagId, setManualBagId] = useState<number | null>(null);
 
   const [internalAllTab, setInternalAllTab] = useState<ListTab>(() => {
     if (controlledAllTab) return controlledAllTab;
@@ -136,12 +161,29 @@ export function MocPartsSheetBrowser({
     [primary, ioSplitPlans]
   );
 
+  const activeManualPlan = useMemo(
+    () =>
+      primary.kind === "manual"
+        ? manualSplitPlans.find((p) => p.planId === primary.planId) ?? null
+        : null,
+    [primary, manualSplitPlans]
+  );
+
   const activePlanIndex = useMemo(
     () => (activePlan ? ioSplitPlans.findIndex((p) => p.groupKey === activePlan.groupKey) : -1),
     [activePlan, ioSplitPlans]
   );
 
+  const activeManualPlanIndex = useMemo(
+    () =>
+      activeManualPlan
+        ? manualSplitPlans.findIndex((p) => p.planId === activeManualPlan.planId)
+        : -1,
+    [activeManualPlan, manualSplitPlans]
+  );
+
   const activePlanGroupKey = primary.kind === "io" ? primary.groupKey : null;
+  const activeManualPlanId = primary.kind === "manual" ? primary.planId : null;
   const activePlanBatchIdsKey =
     activePlan?.batches.map((b) => b.id).join(",") ?? "";
 
@@ -162,6 +204,17 @@ export function MocPartsSheetBrowser({
       return { kind: "batch", batchId: firstBatchId };
     });
   }, [activePlan, activePlanBatchIdsKey, activePlanGroupKey, primary.kind]);
+
+  useEffect(() => {
+    if (primary.kind !== "manual" || !activeManualPlan?.bags.length) {
+      setManualBagId(null);
+      return;
+    }
+    const firstId = activeManualPlan.bags[0]!.id;
+    setManualBagId((prev) =>
+      prev != null && activeManualPlan.bags.some((b) => b.id === prev) ? prev : firstId
+    );
+  }, [activeManualPlan, activeManualPlanId, primary.kind]);
 
   const ioSecondaryBatchId = ioSecondary?.kind === "batch" ? ioSecondary.batchId : null;
 
@@ -272,10 +325,15 @@ export function MocPartsSheetBrowser({
     setPrimary({ kind: "io", groupKey });
   }, []);
 
+  const selectManualPlan = useCallback((planId: number) => {
+    setPrimary({ kind: "manual", planId });
+  }, []);
+
   const handlePlanDeleted = useCallback(() => {
     setPrimary({ kind: "all" });
     setIoSecondary(null);
     setIoExportSheet(null);
+    setManualBagId(null);
   }, []);
 
   useEffect(() => {
@@ -284,6 +342,13 @@ export function MocPartsSheetBrowser({
       handlePlanDeleted();
     }
   }, [handlePlanDeleted, ioSplitPlans, primary]);
+
+  useEffect(() => {
+    if (primary.kind !== "manual") return;
+    if (!manualSplitPlans.some((p) => p.planId === primary.planId)) {
+      handlePlanDeleted();
+    }
+  }, [handlePlanDeleted, manualSplitPlans, primary]);
 
   const officialMetaLine =
     officialInventory != null
@@ -310,6 +375,21 @@ export function MocPartsSheetBrowser({
       </p>
     ) : null;
 
+  const manualPlanMeta =
+    activeManualPlan && activeManualPlanIndex >= 0 ? (
+      <p className="mb-3 text-xs text-[var(--muted)]">
+        手动分包 · 源
+        {activeManualPlan.sourceKind === "official" ? "官方清单" : "完整零件表"}
+        {manualBagId != null
+          ? (() => {
+              const b = activeManualPlan.bags.find((x) => x.id === manualBagId);
+              if (!b) return null;
+              return ` · ${b.label.trim() || "分包"} · ${b.totalPartQty} 片`;
+            })()
+          : null}
+      </p>
+    ) : null;
+
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
       <nav
@@ -323,6 +403,50 @@ export function MocPartsSheetBrowser({
         >
           全部
         </button>
+        {manualSplitPlans.map((plan, i) => {
+          const isActive = primary.kind === "manual" && primary.planId === plan.planId;
+          const label = plan.name.trim() || `手动分包${i + 1}`;
+          const title = `手动分包 · ${plan.sourceKind === "official" ? "官方清单" : "完整零件表"}`;
+
+          if (!isActive) {
+            return (
+              <button
+                key={`manual-${plan.planId}`}
+                type="button"
+                title={title}
+                className={`${navBtn} ${navBtnIdle}`}
+                onClick={() => selectManualPlan(plan.planId)}
+              >
+                {label}
+              </button>
+            );
+          }
+
+          return (
+            <div
+              key={`manual-${plan.planId}`}
+              className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-0.5 gap-y-1.5"
+            >
+              <button
+                type="button"
+                title={title}
+                className={`${navBtn} ${navBtnActive} min-w-0 truncate`}
+                onClick={() => selectManualPlan(plan.planId)}
+              >
+                {label}
+              </button>
+              <ManualSplitPlanDeleteButton
+                variant="compact"
+                subjectKind={subjectKind}
+                subjectId={subjectId}
+                planId={plan.planId}
+                planDisplayName={label}
+                bagCount={plan.bags.length}
+                onDeleted={handlePlanDeleted}
+              />
+            </div>
+          );
+        })}
         {ioSplitPlans.map((plan, i) => {
           const isActive = primary.kind === "io" && primary.groupKey === plan.groupKey;
           const label = planDisplayName(plan, i);
@@ -371,7 +495,9 @@ export function MocPartsSheetBrowser({
       </nav>
 
       <div
-        className={`min-w-0 flex-1 ${primary.kind === "io" ? "min-h-[min(42vh,28rem)]" : ""}`}
+        className={`min-w-0 flex-1 ${
+          primary.kind === "io" || primary.kind === "manual" ? "min-h-[min(42vh,28rem)]" : ""
+        }`}
       >
         {primary.kind === "all" ? (
           <>
@@ -441,18 +567,25 @@ export function MocPartsSheetBrowser({
                   </>
                 )}
               </div>
-              {(allTab === "full" || allTab === "shortage" || allTab === "fulfillment") &&
-              subjectKind === BUILD_SUBJECT_MOC ? (
-                <MocDetailPartsListExportBar
-                  subjectKind={subjectKind}
-                  subjectId={subjectId}
-                  exportDisplayName={exportDisplayName}
-                  listTab={allTab}
-                  initialFull={initialFull}
-                  initialShortage={initialShortage}
-                  initialFulfillment={allFulfillmentDisplay ?? initialFulfillment}
-                />
-              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {canManualSplit &&
+                ((isSetSubject && allTab === "official") ||
+                  (!isSetSubject && allTab === "full")) ? (
+                  <ManualSplitStartButton subjectKind={subjectKind} subjectId={subjectId} />
+                ) : null}
+                {(allTab === "full" || allTab === "shortage" || allTab === "fulfillment") &&
+                subjectKind === BUILD_SUBJECT_MOC ? (
+                  <MocDetailPartsListExportBar
+                    subjectKind={subjectKind}
+                    subjectId={subjectId}
+                    exportDisplayName={exportDisplayName}
+                    listTab={allTab}
+                    initialFull={initialFull}
+                    initialShortage={initialShortage}
+                    initialFulfillment={allFulfillmentDisplay ?? initialFulfillment}
+                  />
+                ) : null}
+              </div>
             </div>
 
             <div id={!isSetSubject ? MOC_PARTS_TAB_HASH[allTab] : undefined}>
@@ -512,6 +645,45 @@ export function MocPartsSheetBrowser({
                 <p className="text-sm text-[var(--muted)]">尚无缺件表。</p>
               ) : null}
             </div>
+          </>
+        ) : activeManualPlan ? (
+          <>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {activeManualPlan.bags.map((b, i) => {
+                  const isActive = manualBagId === b.id;
+                  const label = b.label.trim() || (b.isRemainder ? "剩余" : ioSplitPackageLabel(i + 1));
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      title={`${label} · ${b.totalPartQty} 片`}
+                      className={`${subTabBtn} inline-flex items-baseline gap-1.5 ${
+                        isActive ? subTabActive : subTabIdle
+                      }`}
+                      onClick={() => setManualBagId(b.id)}
+                    >
+                      <span>{label}</span>
+                      <span
+                        className={`tabular-nums text-[10px] sm:text-[11px] ${
+                          isActive ? "text-[var(--muted)]" : "text-[var(--muted-2)]"
+                        }`}
+                      >
+                        {b.totalPartQty} 片
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <Link
+                href={buildSubjectManualSplitPath(subjectKind, subjectId, activeManualPlan.planId)}
+                className="rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium text-[var(--text)] hover:opacity-90"
+              >
+                继续编辑
+              </Link>
+            </div>
+            {manualPlanMeta}
+            {manualBagId != null ? <ManualSplitBagViewer bagId={manualBagId} /> : null}
           </>
         ) : activePlan ? (
           <>

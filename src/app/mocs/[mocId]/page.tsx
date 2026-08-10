@@ -2,7 +2,9 @@ import { Suspense } from "react";
 import { and, asc, eq } from "drizzle-orm";
 
 import { listIoSplitPlanGroupsForMoc } from "@/app/mocs/io-batch-parts-sheet-actions";
+import { listManualSplitPlansForSubject } from "@/app/mocs/manual-split-actions";
 import type { InitialBuildSheetFromServer } from "@/app/mocs/moc-parts-sheet-actions";
+
 import { loadMocPartsSheetFromDb } from "@/app/mocs/moc-parts-sheet-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import { getUserDb } from "@/db/client";
@@ -35,7 +37,7 @@ export default async function MocDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, mocId)
   );
   const mocProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_MOC), eq(buildProfiles.subjectId, mocId));
-  const [imgRows, attRows, sheet, profileRow, ioSplitPlans, derivedFromSet, replicatePhases] =
+  const [imgRows, attRows, sheet, profileRow, ioSplitPlans, manualSplitPlans, derivedFromSet, replicatePhases] =
     await Promise.all([
     db
       .select({
@@ -61,6 +63,7 @@ export default async function MocDetailPage({ params }: Props) {
     loadMocPartsSheetFromDb(mocId),
     db.select().from(buildProfiles).where(mocProfKey).limit(1),
     listIoSplitPlanGroupsForMoc(mocId),
+    listManualSplitPlansForSubject(BUILD_SUBJECT_MOC, mocId),
     loadMocDerivedFromSetMeta(mocId),
     loadReplicatePhasesForSubject(BUILD_SUBJECT_MOC, mocId),
   ]);
@@ -153,6 +156,8 @@ export default async function MocDetailPage({ params }: Props) {
           initialShortageClearedAt={sheet.ok ? sheet.shortageClearedAt ?? null : null}
           initialMocLoadError={initialMocLoadError}
           ioSplitPlans={ioSplitPlans}
+          manualSplitPlans={manualSplitPlans}
+          canManualSplit={Boolean(initialFull && initialFull.items.length > 0)}
           replicatePhases={replicatePhases}
         />
       </Suspense>

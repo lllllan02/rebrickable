@@ -11,6 +11,30 @@ export function rowMatchesSheetListFilter(r: ShortageResolveItem, f: SheetListFi
   return r.sheetTags.includes(f);
 }
 
+/** 零件号 / 名称 / 颜色 / element 等文本检索（空查询视为全部匹配） */
+export function rowMatchesPartsSheetTextSearch(r: ShortageResolveItem, queryRaw: string): boolean {
+  const q = queryRaw.trim().toLowerCase();
+  if (!q) return true;
+  const hay = [
+    r.partNum,
+    r.partName,
+    r.colorName,
+    r.partCatName,
+    r.elementId,
+    r.ldrawPartNum,
+    r.gdsCaption,
+    r.gdsCaptionEn,
+    r.gdsColorNameZh,
+    r.gdsColorNameEn,
+    r.gdsItemId,
+    Number.isFinite(r.colorId) ? String(r.colorId) : null,
+  ]
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .map((s) => s.trim().toLowerCase())
+    .join("\n");
+  return hay.includes(q);
+}
+
 /** 根据当前数据生成可选筛选项（无某类则不显示该按钮） */
 export function getSheetFilterOptionsFromItems(
   items: ShortageResolveItem[]

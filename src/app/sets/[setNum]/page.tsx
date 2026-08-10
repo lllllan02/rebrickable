@@ -7,6 +7,7 @@ import { MocDetailEditorial, type SetDetailOfficialMeta } from "@/app/mocs/moc-d
 import { CreateMocFromSetButton } from "@/app/sets/create-moc-from-set-button";
 import { PartOutSetButton } from "@/app/sets/part-out-set-button";
 import { listDerivedMocsForSet } from "@/lib/moc-derived-from-set";
+import { listManualSplitPlansForSubject } from "@/app/mocs/manual-split-actions";
 import { MocDetailPartsSection } from "@/app/mocs/moc-detail-parts-section";
 import type { MocAttachmentRow } from "@/app/mocs/moc-attachments-panel";
 import type { MocGalleryImage } from "@/app/mocs/moc-image-carousel";
@@ -52,7 +53,7 @@ export default async function SetDetailPage({ params }: Props) {
     eq(buildAttachments.subjectId, setNum)
   );
   const setProfKey = and(eq(buildProfiles.subjectKind, BUILD_SUBJECT_SET), eq(buildProfiles.subjectId, setNum));
-  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, workflowProgress, derivedMocs] =
+  const [[inv], [catalog], imgRows, attRows, sheet, profileRow, workflowProgress, derivedMocs, manualSplitPlans] =
     await Promise.all([
     catalogDb
       .select({
@@ -98,6 +99,7 @@ export default async function SetDetailPage({ params }: Props) {
     userDb.select().from(buildProfiles).where(setProfKey).limit(1),
     ensureWorkflowCollected(BUILD_SUBJECT_SET, setNum),
     listDerivedMocsForSet(setNum),
+    listManualSplitPlansForSubject(BUILD_SUBJECT_SET, setNum),
   ]);
 
   if (!inv) notFound();
@@ -290,6 +292,11 @@ export default async function SetDetailPage({ params }: Props) {
           inventoryId: inv.id,
           version: inv.version,
         }}
+        manualSplitPlans={manualSplitPlans}
+        canManualSplit={
+          officialInventoryItems.length > 0 ||
+          Boolean(sheet.ok && sheet.full && sheet.full.items.length > 0)
+        }
       />
     </div>
   );

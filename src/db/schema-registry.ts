@@ -19,6 +19,8 @@ export const catalogSchema = {
 export const userSchema = {
   buildSavedPartsSheets: schema.buildSavedPartsSheets,
   buildIoStepBatches: schema.buildIoStepBatches,
+  buildManualSplitPlans: schema.buildManualSplitPlans,
+  buildManualSplitBags: schema.buildManualSplitBags,
   buildProfiles: schema.buildProfiles,
   buildImages: schema.buildImages,
   buildAttachments: schema.buildAttachments,

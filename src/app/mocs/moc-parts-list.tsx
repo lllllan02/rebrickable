@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { PARTS_SHEET_TAG_LABELS, PARTS_SHEET_TAG_ORDER } from "@/lib/parts-sheet-tags";
 import {
   getSheetFilterOptionsFromItems,
+  rowMatchesPartsSheetTextSearch,
   rowMatchesSheetListFilter,
   type SheetListFilter,
 } from "@/lib/parts-sheet-list-filter";
@@ -1265,6 +1266,14 @@ type Props = {
   sheetRowReplaceContext?: SheetRowReplaceContext | null;
   /** 更换/还原成功后：由父级刷新列表（如 Studio 分包客户端缓存表） */
   onSheetRowMutated?: () => void | Promise<void>;
+  /**
+   * 手动分包点选：点击瓦片调用回调并跳过详情弹层。
+   * 为 true 时须提供 `onPickUnit`。
+   */
+  pickMode?: boolean;
+  onPickUnit?: (item: ShortageResolveItem) => void;
+  /** 显示零件号/名称/颜色等文本搜索；默认在 pickMode 下开启 */
+  textSearch?: boolean;
 };
 
 type DetailModalTab = "detail" | "replace";
@@ -1279,14 +1288,19 @@ export function MocPartsList({
   detailSubstituteSuggestions = false,
   sheetRowReplaceContext = null,
   onSheetRowMutated,
+  pickMode = false,
+  onPickUnit,
+  textSearch: textSearchProp,
 }: Props) {
   const router = useRouter();
+  const textSearchEnabled = textSearchProp ?? pickMode;
   const fulfillmentSortEnabled = sheetRowReplaceContext?.branch === "fulfillment";
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [shortageReasonFilter, setShortageReasonFilter] = useState<ShortageReasonFilterId>("all");
   const [fulfillmentSortState, setFulfillmentSortState] = useState<FulfillmentSheetSortState>(
     () => ({ ...FULFILLMENT_SHEET_NEUTRAL_SORT_STATE }),
   );
+  const [textQuery, setTextQuery] = useState("");
   const [detailItem, setDetailItem] = useState<ShortageResolveItem | null>(null);
   const [detailModalTab, setDetailModalTab] = useState<DetailModalTab>("detail");
   const detailDialogRef = useRef<HTMLDialogElement>(null);
@@ -1323,9 +1337,17 @@ export function MocPartsList({
     [shortageListMode, items, shortageReasonFilter]
   );
 
-  const listFiltered = useMemo(
+  const listAfterSheetFilter = useMemo(
     () => listAfterShortageReason.filter((r) => rowMatchesSheetListFilter(r, sheetListFilter)),
     [listAfterShortageReason, sheetListFilter]
+  );
+
+  const listFiltered = useMemo(
+    () =>
+      textSearchEnabled
+        ? listAfterSheetFilter.filter((r) => rowMatchesPartsSheetTextSearch(r, textQuery))
+        : listAfterSheetFilter,
+    [listAfterSheetFilter, textSearchEnabled, textQuery]
   );
 
   const listDisplayed = useMemo(() => {
@@ -1389,13 +1411,17 @@ export function MocPartsList({
     }
   }, [detailItem]);
 
+  const hasActiveTextQuery = textSearchEnabled && textQuery.trim().length > 0;
+
   return (
     <section className="space-y-3" aria-label="零件列表">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-xs text-[var(--muted)]">
           共 {totalPartQty.toLocaleString("zh-CN")} 个零件
           <span className="text-[var(--muted-2)]">（{items.length.toLocaleString("zh-CN")} 行）</span>
-          {(shortageReasonFilter !== "all" || sheetListFilter !== "all") &&
+          {(shortageReasonFilter !== "all" ||
+            sheetListFilter !== "all" ||
+            hasActiveTextQuery) &&
           listFiltered.length !== items.length
             ? `，当前筛选 ${listFiltered.length} 条`
             : ""}
@@ -1412,6 +1438,27 @@ export function MocPartsList({
             </>
           )}
         </p>
+        {textSearchEnabled ? (
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:max-w-xs">
+            <input
+              type="search"
+              value={textQuery}
+              onChange={(e) => setTextQuery(e.target.value)}
+              placeholder="搜索零件号、名称、颜色…"
+              aria-label="搜索零件"
+              className="min-w-0 flex-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)] px-2.5 py-1 text-xs text-[var(--text)] outline-none placeholder:text-[var(--muted-2)] focus:border-[var(--accent)]"
+            />
+            {hasActiveTextQuery ? (
+              <button
+                type="button"
+                className="shrink-0 rounded-md border border-[var(--border-soft)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-[var(--text)]"
+                onClick={() => setTextQuery("")}
+              >
+                清除
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="meta-row flex flex-col gap-2 text-xs text-[var(--muted)]">
@@ -1469,9 +1516,11 @@ export function MocPartsList({
 
       {listDisplayed.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">
-          {shortageListMode
-            ? "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」或调整「缺件原因」查看完整列表。"
-            : "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」查看完整列表。"}
+          {hasActiveTextQuery
+            ? "没有匹配当前搜索的零件。可改关键词或点「清除」。"
+            : shortageListMode
+              ? "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」或调整「缺件原因」查看完整列表。"
+              : "当前筛选下没有匹配条目。未收录零件不参与「零件类型」筛选；可点「全部」查看完整列表。"}
         </p>
       ) : (
         <div className="tiles-grid">
@@ -1577,9 +1626,13 @@ export function MocPartsList({
               <button
                 key={key}
                 type="button"
-                title={title}
+                title={pickMode ? `${title} · 点击移 1 件` : title}
                 className={tileClass}
                 onClick={() => {
+                  if (pickMode) {
+                    onPickUnit?.(r);
+                    return;
+                  }
                   setDetailModalTab("detail");
                   setDetailItem(r);
                 }}

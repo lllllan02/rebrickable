@@ -17,3 +17,16 @@ export function mocIoSplitPath(mocId: string): string {
 export function mocIoBatchPath(mocId: string, batchId: number): string {
   return `${buildSubjectDetailPath(BUILD_SUBJECT_MOC, mocId)}/io-batches/${batchId}`;
 }
+
+/** 手动分包工作页；可选 planId 继续编辑 */
+export function buildSubjectManualSplitPath(
+  kind: BuildSubjectKind,
+  subjectId: string,
+  planId?: number
+): string {
+  const base = `${buildSubjectDetailPath(kind, subjectId)}/manual-split`;
+  if (planId != null && Number.isFinite(planId) && planId > 0) {
+    return `${base}?planId=${Math.trunc(planId)}`;
+  }
+  return base;
+}

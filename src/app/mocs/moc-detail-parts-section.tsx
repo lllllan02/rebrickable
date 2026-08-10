@@ -11,6 +11,7 @@ import {
   fetchIoBatchShortageSheetAction,
   type IoSplitPlanGroup,
 } from "@/app/mocs/io-batch-parts-sheet-actions";
+import type { ManualSplitPlanGroup } from "@/app/mocs/manual-split-actions";
 import { invalidateIoSplitSheetCacheForBatch } from "@/lib/io-split-sheet-cache";
 import { MocDetailPartsListExportBar } from "@/app/mocs/moc-detail-parts-export";
 import { MocPartsSheetBrowser } from "@/app/mocs/moc-parts-sheet-browser";
@@ -141,6 +142,8 @@ type Props = {
   exportDisplayName: string;
   ioBatchId?: number;
   ioSplitPlans?: IoSplitPlanGroup[];
+  manualSplitPlans?: ManualSplitPlanGroup[];
+  canManualSplit?: boolean;
   replicatePhases?: ReplicatePhaseRow[];
 };
 
@@ -329,6 +332,8 @@ export function MocDetailPartsSection({
   exportDisplayName,
   ioBatchId,
   ioSplitPlans = [],
+  manualSplitPlans = [],
+  canManualSplit = false,
   replicatePhases = [],
 }: Props) {
   const router = useRouter();
@@ -465,9 +470,13 @@ export function MocDetailPartsSection({
 
   const hasAnySheet = Boolean(initialFull || initialShortage || initialFulfillment);
   const hasIoPlans = !isSetSubject && ioSplitPlans.length > 0;
+  const hasManualPlans = manualSplitPlans.length > 0;
   const hasListArea = isSetSubject
-    ? officialInventory != null || Boolean(initialShortage) || Boolean(initialFulfillment)
-    : hasAnySheet || hasOfficial || hasIoPlans;
+    ? officialInventory != null ||
+      Boolean(initialShortage) ||
+      Boolean(initialFulfillment) ||
+      hasManualPlans
+    : hasAnySheet || hasOfficial || hasIoPlans || hasManualPlans;
 
   return (
     <div className="scroll-mt-24 pt-8">
@@ -511,10 +520,12 @@ export function MocDetailPartsSection({
             <h2 className="text-base font-semibold text-[var(--text)]">零件表</h2>
             <p className="text-sm leading-relaxed text-[var(--muted)]">
               {isSetSubject ? (
-                <>左侧选「全部」；右侧切换完整 / 配货 / 缺件表。</>
+                <>
+                  左侧选「全部」或手动分包方案；「全部」下切换完整 / 配货 / 缺件表，可从完整零件表进入手动分包。
+                </>
               ) : (
                 <>
-                  左侧选「全部」或分包方案；「全部」下为完整 / 配货 / 缺件表，分包方案下切换各分包与汇总缺件表。亦可从{" "}
+                  左侧选「全部」、手动分包或 .io 分包方案；「全部」下为完整 / 配货 / 缺件表。亦可从{" "}
                   <Link href={listHref} className="text-[var(--accent)] underline">
                     {ui.noun} 列表
                   </Link>{" "}
@@ -558,6 +569,8 @@ export function MocDetailPartsSection({
                 initialFulfillment={initialFulfillment}
                 officialInventory={officialInventory}
                 ioSplitPlans={isSetSubject ? [] : ioSplitPlans}
+                manualSplitPlans={manualSplitPlans}
+                canManualSplit={canManualSplit}
                 allTab={listTab}
                 onAllTabChange={selectMocListTab}
               />

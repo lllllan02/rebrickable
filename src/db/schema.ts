@@ -237,6 +237,43 @@ export const buildImages = sqliteTable(
 );
 
 /**
+ * 手动分包方案（无 .io 源文件时按说明书点选拆包；与主零件表 / .io 分包并存）。
+ */
+export const buildManualSplitPlans = sqliteTable(
+  "build_manual_split_plans",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    name: text("name").notNull(),
+    /** `full` | `official` */
+    sourceKind: text("source_kind").notNull(),
+    /** 创建时源 BOM 快照：`{ skippedHeader, items }` */
+    sourcePayloadJson: text("source_payload_json").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_manual_split_plans_subject_idx").on(t.subjectKind, t.subjectId)]
+);
+
+/** 手动分包方案内的包（含唯一剩余包） */
+export const buildManualSplitBags = sqliteTable(
+  "build_manual_split_bags",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    planId: integer("plan_id").notNull(),
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+    isRemainder: integer("is_remainder", { mode: "boolean" }).notNull().default(false),
+    itemsJson: text("items_json").notNull(),
+    lineCount: integer("line_count").notNull(),
+    totalPartQty: integer("total_part_qty").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_manual_split_bags_plan_idx").on(t.planId)]
+);
+
+/**
  * Studio .io 分步拆出的零件表批次（每批独立 full/shortage/fulfillment JSON，与主 MOC 零件表并存）。
  */
 export const buildIoStepBatches = sqliteTable(
