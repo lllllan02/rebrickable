@@ -612,4 +612,23 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     DROP TABLE IF EXISTS moc_saved_parts_sheets;
     DROP TABLE IF EXISTS moc_profiles;
   `);
+
+  // 零件库按元素重构：一次性清空旧库存（杀肉 / 旧色卡写入的数据）
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS build_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+  const ownedPartsCleared = sqlite
+    .prepare(`SELECT 1 AS x FROM build_meta WHERE key = ?`)
+    .get("owned_parts_cleared_element_rewrite_v1") as { x: number } | undefined;
+  if (!ownedPartsCleared && tableExists(sqlite, "build_owned_parts")) {
+    sqlite.exec(`DELETE FROM build_owned_parts`);
+    sqlite
+      .prepare(
+        `INSERT INTO build_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+      )
+      .run("owned_parts_cleared_element_rewrite_v1", new Date().toISOString());
+  }
 }

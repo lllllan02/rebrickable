@@ -243,7 +243,7 @@ export default async function PartsPage({ searchParams }: Props) {
               >
                 <span className="text-sm font-semibold text-[var(--text)]">零件库</span>
                 <span className="text-xs text-[var(--muted)]">
-                  由官方套装杀肉写入的零件库存
+                  已购入的零件库存（可按元素编辑数量）
                 </span>
               </Link>
             </div>

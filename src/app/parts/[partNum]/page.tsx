@@ -4,11 +4,15 @@ import { notFound } from "next/navigation";
 import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 
 import { CopyableId } from "@/components/copyable-id";
+import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
 import { getCatalogDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
 import { isPartFavorite } from "@/lib/load-favorite-parts";
-import { loadOwnedQtyForPart } from "@/lib/load-owned-parts";
+import {
+  loadOwnedQtyByColorForPart,
+  loadOwnedQtyForPart,
+} from "@/lib/load-owned-parts";
 import {
   colors,
   elements,
@@ -57,6 +61,7 @@ export default async function PartDetailPage({ params }: Props) {
     heroThumbRow,
     colorThumbRows,
     ownedQty,
+    ownedQtyByColor,
     favorite,
   ] = await Promise.all([
       catalogDb
@@ -119,6 +124,7 @@ export default async function PartDetailPage({ params }: Props) {
         .where(imgClause)
         .groupBy(inventoryParts.colorId),
       loadOwnedQtyForPart(partNum),
+      loadOwnedQtyByColorForPart(partNum),
       isPartFavorite(partNum),
     ]);
 
@@ -265,6 +271,11 @@ export default async function PartDetailPage({ params }: Props) {
                     </span>
                   </div>
                 </div>
+                <OwnedElementQtyInput
+                  partNum={partNum}
+                  colorId={e.colorId}
+                  initialQuantity={ownedQtyByColor.get(e.colorId) ?? 0}
+                />
               </li>
             );
           })}

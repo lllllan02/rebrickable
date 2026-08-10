@@ -1,213 +1,256 @@
 import Link from "next/link";
 
-import { RemoteCoverImage } from "@/components/remote-cover-image";
+import { OwnedPartsCategoryNav } from "@/app/parts/owned/owned-parts-category-nav";
+import { OwnedPartsTiles } from "@/app/parts/owned/owned-parts-tiles";
 import {
-  OWNED_PARTS_BATCH_SIZE,
+  OWNED_PARTS_PAGE_SIZE,
   loadOwnedCategoryLabel,
   loadOwnedCategorySummary,
-  loadOwnedPartCardsFiltered,
+  loadOwnedElementsPage,
+  loadOwnedPartsPage,
+  parseOwnedViewParam,
+  type OwnedElementPageRow,
+  type OwnedPartPageRow,
+  type OwnedViewMode,
 } from "@/lib/load-owned-parts";
 import {
   ownedCategoryQueryValue,
   parseOwnedCategoryParam,
+  type OwnedCategoryFilter,
 } from "@/lib/owned-parts-category";
-import { serializeOwnedPartCards } from "@/lib/serialize-owned-part-cards";
-
-import { OwnedPartsInfiniteGrid } from "./owned-parts-infinite-grid";
+import { pageNavSequence } from "@/lib/page-nav-sequence";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: Promise<{ cat?: string }>;
+  searchParams: Promise<{ page?: string; cat?: string; view?: string }>;
 };
 
-function usableImgUrl(u: string | null | undefined): u is string {
-  return typeof u === "string" && u.trim().length > 0;
+function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
+  const parsed = parseOwnedCategoryParam(raw);
+  if (parsed == null) return "all";
+  return parsed;
 }
 
-function ownedCatHref(filter: "all" | "uncategorized" | number): string {
-  const value = ownedCategoryQueryValue(filter);
-  return `/parts/owned?cat=${encodeURIComponent(value)}`;
+function viewHref(
+  view: OwnedViewMode,
+  catFilter: OwnedCategoryFilter,
+  page = 1
+): string {
+  const u = new URLSearchParams();
+  if (catFilter !== "all") {
+    u.set("cat", ownedCategoryQueryValue(catFilter));
+  }
+  if (view === "element") {
+    u.set("view", "element");
+  }
+  if (page > 1) u.set("page", String(page));
+  const s = u.toString();
+  return s ? `/parts/owned?${s}` : "/parts/owned";
 }
 
 export default async function OwnedPartsPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const catRaw = (sp.cat ?? "").trim();
-  const categoryFilter = parseOwnedCategoryParam(catRaw);
-  const invalidCatParam = catRaw.length > 0 && categoryFilter == null;
+  const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const catFilter = parseCatFilter(sp.cat);
+  const view = parseOwnedViewParam(sp.view);
 
-  const { stats, categories, uncategorizedCount } = await loadOwnedCategorySummary();
-  const showCategoryPicker = categoryFilter == null && !invalidCatParam;
+  const [summary, categoryLabel, partPage, elementPage] = await Promise.all([
+    loadOwnedCategorySummary(),
+    loadOwnedCategoryLabel(catFilter),
+    view === "part"
+      ? loadOwnedPartsPage(requestedPage, OWNED_PARTS_PAGE_SIZE, catFilter)
+      : Promise.resolve({ total: 0, page: 1, rows: [] as OwnedPartPageRow[] }),
+    view === "element"
+      ? loadOwnedElementsPage(requestedPage, OWNED_PARTS_PAGE_SIZE, catFilter)
+      : Promise.resolve({
+          total: 0,
+          page: 1,
+          rows: [] as OwnedElementPageRow[],
+        }),
+  ]);
 
-  const categoryLabel =
-    categoryFilter != null ? await loadOwnedCategoryLabel(categoryFilter) : null;
+  const total = view === "element" ? elementPage.total : partPage.total;
+  const page = view === "element" ? elementPage.page : partPage.page;
+  const totalPages = Math.max(1, Math.ceil(total / OWNED_PARTS_PAGE_SIZE));
 
-  const initialBatch =
-    categoryFilter != null
-      ? await loadOwnedPartCardsFiltered(categoryFilter, 0, OWNED_PARTS_BATCH_SIZE)
-      : null;
-  const initialCards =
-    initialBatch != null ? await serializeOwnedPartCards(initialBatch.rows) : [];
+  const qs = (p: number) => {
+    const u = new URLSearchParams();
+    if (catFilter !== "all") {
+      u.set("cat", ownedCategoryQueryValue(catFilter));
+    }
+    if (view === "element") u.set("view", "element");
+    if (p > 1) u.set("page", String(p));
+    const s = u.toString();
+    return s ? `?${s}` : "";
+  };
 
   return (
     <div className="page-stack">
-      <header className="hero-panel">
-        <p className="page-kicker">本地标记</p>
-        <h1 className="page-title text-xl sm:text-2xl">零件库</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">
-          由官方套装「杀肉」写入的零件库存，按零件号与颜色分别记录数量。也可在
-          <Link href="/parts" className="mx-1 text-[var(--accent)] underline underline-offset-2">
-            零件目录
-          </Link>
-          中查看单个零件详情。
-        </p>
-        {stats.uniqueParts > 0 ? (
-          <p className="mt-2 text-sm tabular-nums text-[var(--text)]">
-            {stats.uniqueParts.toLocaleString("zh-CN")} 种零件 ·{" "}
-            {stats.totalRows.toLocaleString("zh-CN")} 条 · {stats.totalQty.toLocaleString("zh-CN")}{" "}
-            粒
-          </p>
-        ) : null}
-      </header>
-
-      {stats.uniqueParts === 0 ? (
-        <section className="section-panel">
-          <p className="text-sm text-[var(--muted)]">
-            零件库尚无记录。在已标记为「拥有」的官方套装详情页点击「杀肉」，即可将官方库存零件转入此清单。
-          </p>
-        </section>
-      ) : showCategoryPicker ? (
-        <section className="section-panel">
-          <p className="mb-4 text-sm leading-relaxed text-[var(--muted)]">
-            先选择零件类型（分类）浏览该类下的零件库；也可查看全部，滚动到底部会自动加载更多。
-          </p>
-          <div className="mb-6 flex flex-wrap gap-3">
-            <Link
-              href={ownedCatHref("all")}
-              className="result-card inline-flex min-w-[min(100%,14rem)] flex-1 flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
-            >
-              <span className="text-sm font-semibold text-[var(--text)]">全部零件库</span>
-              <span className="text-xs tabular-nums text-[var(--muted)]">
-                {stats.totalRows.toLocaleString("zh-CN")} 条
-              </span>
-            </Link>
-            {uncategorizedCount > 0 ? (
-              <Link
-                href={ownedCatHref("uncategorized")}
-                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
-              >
-                <span className="text-sm font-semibold text-[var(--text)]">未分类</span>
-                <span className="text-xs tabular-nums text-[var(--muted)]">
-                  {uncategorizedCount.toLocaleString("zh-CN")} 条
-                </span>
-              </Link>
-            ) : null}
-          </div>
-          <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">按分类浏览</h2>
-          {categories.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">暂无已分类的零件库条目。</p>
-          ) : (
-            <ul
-              className="list-cards-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
-              role="list"
-            >
-              {categories.map((c) => (
-                <li
-                  key={c.id}
-                  className="result-card flex min-w-0 flex-col gap-0 overflow-hidden p-0"
-                >
-                  <Link
-                    href={ownedCatHref(c.id)}
-                    className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]"
-                    aria-label={`${c.name} 示意缩略图`}
-                  >
-                    {usableImgUrl(c.hero) ? (
-                      <RemoteCoverImage
-                        src={c.hero.trim()}
-                        fill
-                        className="object-contain p-2 sm:p-3"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1536px) 20vw, 16vw"
-                        alt=""
-                        fallbackLabel="无图"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center px-2 text-center text-sm text-[var(--muted)]">
-                        无预览图
-                      </span>
-                    )}
-                  </Link>
-                  <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
-                    <div className="min-w-0">
-                      <Link
-                        href={ownedCatHref(c.id)}
-                        className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
-                      >
-                        {c.name}
-                      </Link>
-                      <p className="mt-1 text-xs tabular-nums text-[var(--muted)]">
-                        {c.count.toLocaleString("zh-CN")} 条
-                      </p>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : (
-        <section className="section-panel">
-          {invalidCatParam ? (
-            <p className="mb-3 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
-              分类参数无效，请从{" "}
-              <Link
-                href="/parts/owned"
-                className="text-[var(--accent)] underline-offset-2 hover:underline"
-              >
-                分类列表
-              </Link>{" "}
-              重新选择。
-            </p>
-          ) : null}
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm leading-relaxed text-[var(--muted)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-start">
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-[var(--text)] sm:text-lg">
+                零件库
+                {summary.total > 0 ? (
+                  <span className="ml-2 text-sm font-normal tabular-nums text-[var(--muted)]">
+                    · {summary.total.toLocaleString("zh-CN")} 种
+                    {summary.stats.totalQty > 0
+                      ? ` · ${summary.stats.totalQty.toLocaleString("zh-CN")} 粒`
+                      : null}
+                    {view === "element" && total > 0
+                      ? catFilter !== "all"
+                        ? ` / 本类 ${total.toLocaleString("zh-CN")} 元素`
+                        : ` · ${total.toLocaleString("zh-CN")} 元素`
+                      : catFilter !== "all" && total !== summary.total
+                        ? ` / 本类 ${total.toLocaleString("zh-CN")}`
+                        : null}
+                  </span>
+                ) : null}
+              </h1>
               {categoryLabel ? (
-                <>
-                  当前分类：<span className="text-[var(--text)]">{categoryLabel}</span>
-                  {initialBatch ? (
-                    <span className="tabular-nums">
-                      {" "}
-                      · 共 {initialBatch.totalRows.toLocaleString("zh-CN")} 条
-                    </span>
-                  ) : null}
-                </>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">{categoryLabel}</p>
               ) : null}
-              <span className="block sm:inline">
-                {" "}
-                每张卡片对应一种零件的一种颜色；滚动到底自动加载更多。
-              </span>
-            </p>
+            </div>
             <Link
-              href="/parts/owned"
-              className="shrink-0 text-sm text-[var(--accent)] underline-offset-2 hover:underline"
+              href="/parts"
+              className="shrink-0 text-xs text-[var(--accent)] underline-offset-2 hover:underline"
             >
-              ← 选择分类
+              ← 零件目录
             </Link>
           </div>
-          {categoryFilter != null && initialBatch != null ? (
-            initialBatch.totalRows === 0 ? (
-              <p className="text-sm text-[var(--muted)]">该分类下暂无零件库记录。</p>
-            ) : (
-              <OwnedPartsInfiniteGrid
-                key={ownedCategoryQueryValue(categoryFilter)}
-                initialCards={initialCards}
-                categoryQuery={ownedCategoryQueryValue(categoryFilter)}
-                initialHasMore={initialBatch.hasMore}
-                totalRows={initialBatch.totalRows}
-              />
-            )
+
+          {summary.total > 0 ? (
+            <div
+              className="inline-flex rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-0.5 text-xs"
+              role="group"
+              aria-label="展示粒度"
+            >
+              <Link
+                href={viewHref("part", catFilter)}
+                aria-current={view === "part" ? "page" : undefined}
+                className={`rounded px-2.5 py-1 transition-colors ${
+                  view === "part"
+                    ? "bg-[var(--accent-soft)] font-medium text-[var(--text)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                零件
+              </Link>
+              <Link
+                href={viewHref("element", catFilter)}
+                aria-current={view === "element" ? "page" : undefined}
+                className={`rounded px-2.5 py-1 transition-colors ${
+                  view === "element"
+                    ? "bg-[var(--accent-soft)] font-medium text-[var(--text)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                元素
+              </Link>
+            </div>
           ) : null}
-        </section>
-      )}
+
+          {summary.total === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              零件库尚无记录。可在
+              <Link
+                href="/parts"
+                className="mx-1 text-[var(--accent)] underline underline-offset-2"
+              >
+                零件详情
+              </Link>
+              的元素旁填写购入数量，或对已「拥有」的官方套装执行「杀肉」。
+            </p>
+          ) : total === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              当前分类下没有零件库记录。
+              <Link
+                href={viewHref(view, "all")}
+                className="ml-1 text-[var(--accent)] underline underline-offset-2"
+              >
+                查看全部
+              </Link>
+            </p>
+          ) : (
+            <>
+              <OwnedPartsTiles
+                view={view}
+                partRows={partPage.rows}
+                elementRows={elementPage.rows}
+              />
+              {totalPages > 1 ? (
+                <div className="flex justify-end">
+                  <nav aria-label="分页" className="pagination-shell">
+                    {page > 1 ? (
+                      <Link
+                        href={`/parts/owned${qs(page - 1)}`}
+                        className="pager-link shrink-0"
+                      >
+                        上一页
+                      </Link>
+                    ) : (
+                      <span className="pager-disabled shrink-0">上一页</span>
+                    )}
+                    <div className="flex flex-wrap items-center gap-0.5">
+                      {pageNavSequence(page, totalPages, 4).map((item, i) =>
+                        item === "gap" ? (
+                          <span
+                            key={`g-${i}`}
+                            className="px-0.5 text-[var(--muted)]"
+                            aria-hidden
+                          >
+                            …
+                          </span>
+                        ) : item === page ? (
+                          <span
+                            key={`p-${item}`}
+                            className="pager-current inline-flex min-w-[1.75rem] justify-center"
+                            aria-current="page"
+                          >
+                            {item}
+                          </span>
+                        ) : (
+                          <Link
+                            key={`p-${item}`}
+                            href={`/parts/owned${qs(item)}`}
+                            className="pager-link inline-flex min-w-[1.75rem] justify-center"
+                          >
+                            {item}
+                          </Link>
+                        )
+                      )}
+                    </div>
+                    {page < totalPages ? (
+                      <Link
+                        href={`/parts/owned${qs(page + 1)}`}
+                        className="pager-link shrink-0"
+                      >
+                        下一页
+                      </Link>
+                    ) : (
+                      <span className="pager-disabled shrink-0">下一页</span>
+                    )}
+                  </nav>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <aside className="space-y-3 lg:sticky lg:top-20">
+          {summary.total > 0 ? (
+            <OwnedPartsCategoryNav
+              total={summary.total}
+              categories={summary.categories}
+              uncategorizedCount={summary.uncategorizedCount}
+              active={catFilter}
+              view={view}
+            />
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }
