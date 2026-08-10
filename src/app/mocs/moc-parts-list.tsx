@@ -1272,11 +1272,177 @@ type Props = {
    */
   pickMode?: boolean;
   onPickUnit?: (item: ShortageResolveItem) => void;
-  /** 显示零件号/名称/颜色等文本搜索；默认在 pickMode 下开启 */
+  /**
+   * 分包内数量调节：瓦片显示 − / +，不打开详情。
+   * 为 true 时须提供 `onAdjustUnit`。
+   */
+  qtyAdjustMode?: boolean;
+  /** + 是否可用（如剩余池仍有该零件） */
+  canIncrementUnit?: (item: ShortageResolveItem) => boolean;
+  onAdjustUnit?: (item: ShortageResolveItem, delta: 1 | -1) => void;
+  /** 显示零件号/名称/颜色等文本搜索；默认在 pickMode / qtyAdjustMode 下开启 */
   textSearch?: boolean;
 };
 
 type DetailModalTab = "detail" | "replace";
+
+const PART_TILE_HOVER_PREVIEW_MS = 700;
+
+function useLongHoverPreview(delayMs = PART_TILE_HOVER_PREVIEW_MS) {
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onEnter = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setOpen(true), delayMs);
+  }, [delayMs]);
+
+  const onLeave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setOpen(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  return { open, onEnter, onLeave };
+}
+
+function PartTileHoverPreview({ item }: { item: ShortageResolveItem }) {
+  const name = item.partName?.trim() || "";
+  const color = item.colorName?.trim() || "";
+  const cat = item.partCatName?.trim() || "";
+  const eid = item.elementId?.trim() || "";
+  const hasAny = Boolean(name || color || cat || eid);
+  return (
+    <div
+      role="tooltip"
+      className="pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 z-30 w-[min(14rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-left shadow-[0_10px_28px_-8px_rgba(0,0,0,0.55)]"
+    >
+      <p className="font-mono text-[10px] font-semibold text-[#b8e632]">
+        {item.quantity} × {item.partNum}
+      </p>
+      <div className="mt-1 space-y-0.5">
+        {name ? (
+          <p className="text-[11px] leading-snug text-[var(--text)]">{name}</p>
+        ) : null}
+        {color ? <p className="text-[11px] text-[var(--muted)]">{color}</p> : null}
+        {cat ? <p className="text-[10px] text-[var(--muted-2)]">{cat}</p> : null}
+        {eid ? (
+          <p className="font-mono text-[10px] text-[var(--muted-2)]">element {eid}</p>
+        ) : null}
+        {!hasAny ? <p className="text-[10px] text-[var(--muted-2)]">暂无更多信息</p> : null}
+      </div>
+    </div>
+  );
+}
+
+const partTileDetailBtnClass =
+  "mt-1 w-full rounded border border-[var(--border-soft)] px-1 py-0.5 text-[10px] font-medium text-[var(--muted)] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface-2)] hover:text-[var(--text)]";
+
+const partTileQtyBtnClass =
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[var(--border-soft)] bg-[var(--surface-2)] text-sm font-medium leading-none text-[var(--text)] transition-colors hover:border-[var(--accent)]/45 hover:bg-[var(--accent-soft)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-[var(--border-soft)] disabled:hover:bg-[var(--surface-2)]";
+
+function SplitPickPartTile({
+  item,
+  tileClass,
+  title,
+  inner,
+  onPick,
+  onOpenDetail,
+}: {
+  item: ShortageResolveItem;
+  tileClass: string;
+  title: string;
+  inner: ReactNode;
+  onPick: () => void;
+  onOpenDetail: () => void;
+}) {
+  const { open: preview, onEnter, onLeave } = useLongHoverPreview();
+  return (
+    <div
+      className={`${tileClass} relative !cursor-default hover:!translate-y-0 ${
+        preview ? "z-30 overflow-visible" : ""
+      }`}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      {preview ? <PartTileHoverPreview item={item} /> : null}
+      <button
+        type="button"
+        className="flex w-full min-w-0 flex-col text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        onClick={onPick}
+        aria-label={`${title}，点击移 1 件`}
+      >
+        {inner}
+      </button>
+      <button type="button" className={partTileDetailBtnClass} onClick={onOpenDetail}>
+        详情
+      </button>
+    </div>
+  );
+}
+
+function QtyAdjustPartTile({
+  item,
+  tileClass,
+  title,
+  inner,
+  canPlus,
+  onAdjust,
+  onOpenDetail,
+}: {
+  item: ShortageResolveItem;
+  tileClass: string;
+  title: string;
+  inner: ReactNode;
+  canPlus: boolean;
+  onAdjust: (delta: 1 | -1) => void;
+  onOpenDetail: () => void;
+}) {
+  const { open: preview, onEnter, onLeave } = useLongHoverPreview();
+  return (
+    <div
+      className={`${tileClass} relative ${preview ? "z-30 overflow-visible" : ""}`}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      aria-label={title}
+    >
+      {preview ? <PartTileHoverPreview item={item} /> : null}
+      {inner}
+      <div className="mt-1.5 flex items-center justify-center gap-2">
+        <button
+          type="button"
+          className={partTileQtyBtnClass}
+          aria-label={`减少 1 件 ${item.partNum}`}
+          title="移回剩余"
+          disabled={Math.trunc(item.quantity) < 1}
+          onClick={() => onAdjust(-1)}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className={partTileQtyBtnClass}
+          aria-label={`增加 1 件 ${item.partNum}`}
+          title={canPlus ? "从剩余移入" : "剩余无库存"}
+          disabled={!canPlus}
+          onClick={() => onAdjust(1)}
+        >
+          +
+        </button>
+      </div>
+      <button type="button" className={partTileDetailBtnClass} onClick={onOpenDetail}>
+        详情
+      </button>
+    </div>
+  );
+}
 
 export function MocPartsList({
   items,
@@ -1290,10 +1456,13 @@ export function MocPartsList({
   onSheetRowMutated,
   pickMode = false,
   onPickUnit,
+  qtyAdjustMode = false,
+  canIncrementUnit,
+  onAdjustUnit,
   textSearch: textSearchProp,
 }: Props) {
   const router = useRouter();
-  const textSearchEnabled = textSearchProp ?? pickMode;
+  const textSearchEnabled = textSearchProp ?? (pickMode || qtyAdjustMode);
   const fulfillmentSortEnabled = sheetRowReplaceContext?.branch === "fulfillment";
   const [sheetListFilter, setSheetListFilter] = useState<SheetListFilter>("all");
   const [shortageReasonFilter, setShortageReasonFilter] = useState<ShortageReasonFilterId>("all");
@@ -1543,6 +1712,7 @@ export function MocPartsList({
             const tileClass = [
               PART_GRID_TILE_CLASS_BASE,
               sheetRowModified ? PART_GRID_TILE_SHEET_ROW_MODIFIED : "",
+              qtyAdjustMode ? "!cursor-default hover:!translate-y-0" : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -1622,20 +1792,48 @@ export function MocPartsList({
             const title = `${r.quantity} × ${r.partNum}${r.colorName ? ` · ${r.colorName}` : ""}${
               showUnitInTile ? (unitGrid ? ` · 单价 ${unitGrid} 元` : " · 单价 —") : ""
             }${reasonLine ? ` · ${reasonLine}` : ""}`;
+            const canPlus = Boolean(canIncrementUnit?.(r));
+            const openDetail = () => {
+              setDetailModalTab("detail");
+              setDetailItem(r);
+            };
+
+            if (qtyAdjustMode) {
+              return (
+                <QtyAdjustPartTile
+                  key={key}
+                  item={r}
+                  tileClass={tileClass}
+                  title={title}
+                  inner={inner}
+                  canPlus={canPlus}
+                  onAdjust={(delta) => onAdjustUnit?.(r, delta)}
+                  onOpenDetail={openDetail}
+                />
+              );
+            }
+
+            if (pickMode) {
+              return (
+                <SplitPickPartTile
+                  key={key}
+                  item={r}
+                  tileClass={tileClass}
+                  title={title}
+                  inner={inner}
+                  onPick={() => onPickUnit?.(r)}
+                  onOpenDetail={openDetail}
+                />
+              );
+            }
+
             return (
               <button
                 key={key}
                 type="button"
-                title={pickMode ? `${title} · 点击移 1 件` : title}
+                title={title}
                 className={tileClass}
-                onClick={() => {
-                  if (pickMode) {
-                    onPickUnit?.(r);
-                    return;
-                  }
-                  setDetailModalTab("detail");
-                  setDetailItem(r);
-                }}
+                onClick={openDetail}
               >
                 {inner}
               </button>

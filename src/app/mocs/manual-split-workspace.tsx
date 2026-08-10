@@ -19,6 +19,7 @@ import {
 } from "@/app/mocs/manual-split-actions";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import {
+  aggregateByLineKey,
   manualSplitLineKey,
   moveOneUnit,
   nextManualBagClientKey,
@@ -190,11 +191,6 @@ export function ManualSplitWorkspace({ plan }: Props) {
   const [bagReceiveKey, setBagReceiveKey] = useState(
     () => plan.manualBags[0]?.clientKey ?? "bag-1"
   );
-  /**
-   * 在「分包」视图下的接收目标；进入分包时默认「剩余」。
-   * 也可改为其它分包以便包间转移。
-   */
-  const [bagViewReceive, setBagViewReceive] = useState<ReceiveTarget>({ kind: "remainder" });
   const [view, setView] = useState<ViewTarget>({ kind: "remainder" });
   const [error, setError] = useState<string | null>(null);
   const [savedHint, setSavedHint] = useState<string | null>(null);
@@ -214,10 +210,11 @@ export function ManualSplitWorkspace({ plan }: Props) {
   const bagReceive =
     manualBags.find((b) => b.clientKey === bagReceiveKey) ?? manualBags[0] ?? null;
 
+  /** 剩余池：接收为所选分包；分包内编辑：用 ± 与剩余调拨 */
   const receive: ReceiveTarget =
     view.kind === "remainder"
       ? { kind: "bag", clientKey: bagReceive?.clientKey ?? bagReceiveKey }
-      : bagViewReceive;
+      : { kind: "remainder" };
 
   const receiveLabel =
     receive.kind === "remainder"
@@ -228,6 +225,60 @@ export function ManualSplitWorkspace({ plan }: Props) {
     if (view.kind === "remainder") return remainder;
     return manualBags.find((b) => b.clientKey === view.clientKey) ?? remainder;
   }, [view, manualBags, remainder]);
+
+  const remainderByKey = useMemo(
+    () => aggregateByLineKey(remainderItems),
+    [remainderItems]
+  );
+
+  const canIncrementFromRemainder = useCallback(
+    (item: ShortageResolveItem) => {
+      const key = manualSplitLineKey(item);
+      if (!key) return false;
+      const row = remainderByKey.get(key);
+      return Boolean(row && Math.trunc(row.quantity) > 0);
+    },
+    [remainderByKey]
+  );
+
+  const onAdjustBagUnit = useCallback(
+    (item: ShortageResolveItem, delta: 1 | -1) => {
+      if (view.kind !== "manual") return;
+      const key = manualSplitLineKey(item);
+      if (!key) return;
+      const bagKey = view.clientKey;
+      const bag = manualBags.find((b) => b.clientKey === bagKey);
+      if (!bag) return;
+      setSavedHint(null);
+      setError(null);
+
+      if (delta === 1) {
+        const moved = moveOneUnit({
+          from: remainderItems,
+          to: bag.items,
+          lineKey: key,
+        });
+        if (!moved.moved) return;
+        setRemainderItems(moved.from);
+        setManualBags((prev) =>
+          prev.map((b) => (b.clientKey === bagKey ? { ...b, items: moved.to } : b))
+        );
+        return;
+      }
+
+      const moved = moveOneUnit({
+        from: bag.items,
+        to: remainderItems,
+        lineKey: key,
+      });
+      if (!moved.moved) return;
+      setManualBags((prev) =>
+        prev.map((b) => (b.clientKey === bagKey ? { ...b, items: moved.from } : b))
+      );
+      setRemainderItems(moved.to);
+    },
+    [view, manualBags, remainderItems]
+  );
 
   const onPickUnit = useCallback(
     (item: ShortageResolveItem) => {
@@ -318,8 +369,6 @@ export function ManualSplitWorkspace({ plan }: Props) {
     };
     setManualBags((prev) => [...prev, next]);
     setBagReceiveKey(clientKey);
-    // 进入新包编辑：默认接收为剩余
-    setBagViewReceive({ kind: "remainder" });
     setView({ kind: "manual", clientKey });
   }, [manualBags]);
 
@@ -328,8 +377,6 @@ export function ManualSplitWorkspace({ plan }: Props) {
       setView({ kind: "remainder" });
       return;
     }
-    // 进入分包编辑：默认接收为剩余（区别于剩余池→分包逻辑）
-    setBagViewReceive({ kind: "remainder" });
     setView({ kind: "manual", clientKey: bag.clientKey });
   }, []);
 
@@ -355,11 +402,6 @@ export function ManualSplitWorkspace({ plan }: Props) {
       setManualBags(next);
       setRemainderItems(recomputeRemainder(plan.source.items, next));
       setBagReceiveKey((cur) => (cur === clientKey ? fallback.clientKey : cur));
-      setBagViewReceive((cur) =>
-        cur.kind === "bag" && cur.clientKey === clientKey
-          ? { kind: "remainder" }
-          : cur
-      );
       setView((cur) =>
         cur.kind === "manual" && cur.clientKey === clientKey
           ? { kind: "manual", clientKey: fallback.clientKey }
@@ -404,10 +446,10 @@ export function ManualSplitWorkspace({ plan }: Props) {
 
   const sourceMeta = `源：${plan.sourceKind === "official" ? "官方清单" : "完整零件表"} · ${totalPartQty(plan.source.items)} 片`;
 
-  const listHint = `点击零件移入「${receiveLabel}」（每次 1 件）`;
-
-  const receiveSelectValue =
-    receive.kind === "remainder" ? "remainder" : receive.clientKey;
+  const listHint =
+    view.kind === "remainder"
+      ? `点击零件移入「${receiveLabel}」· 悬停看摘要 · 详情`
+      : "− / + 与剩余调拨 · 悬停看摘要 · 详情";
 
   return (
     <div className="page-stack">
@@ -507,10 +549,10 @@ export function ManualSplitWorkspace({ plan }: Props) {
                 {totalPartQty(viewedBag.items)} 片 · {viewedBag.items.length} 行
               </span>
             </h2>
-            <label className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-              <span className="shrink-0">接收</span>
-              {view.kind === "remainder" ? (
-                manualBags.length > 1 ? (
+            {view.kind === "remainder" ? (
+              <label className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                <span className="shrink-0">接收</span>
+                {manualBags.length > 1 ? (
                   <select
                     value={bagReceive?.clientKey ?? bagReceiveKey}
                     onChange={(e) => {
@@ -530,39 +572,19 @@ export function ManualSplitWorkspace({ plan }: Props) {
                   <span className="font-medium text-[var(--text)]">
                     {bagReceive?.label ?? "分包"}
                   </span>
-                )
-              ) : (
-                <select
-                  value={receiveSelectValue}
-                  onChange={(e) => {
-                    setSavedHint(null);
-                    const v = e.target.value;
-                    setBagViewReceive(
-                      v === "remainder"
-                        ? { kind: "remainder" }
-                        : { kind: "bag", clientKey: v }
-                    );
-                  }}
-                  aria-label="选择接收目标"
-                  className="max-w-[10rem] rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)] px-2 py-1 text-xs font-medium text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                >
-                  <option value="remainder">剩余</option>
-                  {manualBags
-                    .filter((b) => b.clientKey !== view.clientKey)
-                    .map((b) => (
-                      <option key={b.clientKey} value={b.clientKey}>
-                        {b.label}
-                      </option>
-                    ))}
-                </select>
-              )}
-            </label>
+                )}
+              </label>
+            ) : (
+              <p className="text-xs text-[var(--muted)]">
+                与<strong className="mx-0.5 font-medium text-[var(--text)]">剩余</strong>调拨
+              </p>
+            )}
           </div>
           {viewedBag.items.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">
               {view.kind === "remainder" ? "剩余池已空。" : "此包尚无零件，可在「剩余」中点选移入。"}
             </p>
-          ) : (
+          ) : view.kind === "remainder" ? (
             <MocPartsList
               items={viewedBag.items}
               skippedHeader={plan.source.skippedHeader}
@@ -570,6 +592,16 @@ export function ManualSplitWorkspace({ plan }: Props) {
               sourceMetaLine={listHint}
               pickMode
               onPickUnit={onPickUnit}
+            />
+          ) : (
+            <MocPartsList
+              items={viewedBag.items}
+              skippedHeader={plan.source.skippedHeader}
+              savedAt={plan.updatedAt}
+              sourceMetaLine={listHint}
+              qtyAdjustMode
+              canIncrementUnit={canIncrementFromRemainder}
+              onAdjustUnit={onAdjustBagUnit}
             />
           )}
         </div>
