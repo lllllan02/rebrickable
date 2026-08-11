@@ -58,7 +58,7 @@ function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
 export default async function OwnedPartsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  const navMode = parsePartsNavMode(sp.by);
+  const navMode = parsePartsNavMode(sp.by, "group");
   const catFilter =
     navMode === "cat" ? parseCatFilter(sp.cat) : ("all" as const);
   const view = parseOwnedViewParam(sp.view);

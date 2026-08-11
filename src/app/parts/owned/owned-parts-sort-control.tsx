@@ -56,7 +56,7 @@ export function OwnedPartsSortControl({
   view,
   cat,
   sortState,
-  by = "cat",
+  by = "group",
   group = "all",
 }: {
   view: OwnedViewMode;

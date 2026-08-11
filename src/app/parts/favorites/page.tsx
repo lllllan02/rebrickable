@@ -59,12 +59,12 @@ function favoritesHref(opts: {
   page?: number;
 }): string {
   const u = new URLSearchParams();
-  const by = opts.by ?? "cat";
+  const by = opts.by ?? "group";
   if (by === "group") {
-    u.set("by", "group");
     const group = opts.group ?? "all";
     if (group !== "all") u.set("group", partGroupFilterQueryValue(group));
   } else {
+    u.set("by", "cat");
     const cat = opts.cat ?? "all";
     if (cat !== "all") u.set("cat", ownedCategoryQueryValue(cat));
   }
@@ -76,7 +76,7 @@ function favoritesHref(opts: {
 export default async function FavoritePartsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  const navMode = parsePartsNavMode(sp.by);
+  const navMode = parsePartsNavMode(sp.by, "group");
   const catFilter =
     navMode === "cat" ? parseCatFilter(sp.cat) : ("all" as const);
 

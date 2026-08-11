@@ -7,8 +7,8 @@ import {
 } from "@/lib/owned-parts-category";
 
 function catHref(filter: OwnedCategoryFilter): string {
-  if (filter === "all") return "/parts/favorites";
-  return `/parts/favorites?cat=${encodeURIComponent(ownedCategoryQueryValue(filter))}`;
+  if (filter === "all") return "/parts/favorites?by=cat";
+  return `/parts/favorites?by=cat&cat=${encodeURIComponent(ownedCategoryQueryValue(filter))}`;
 }
 
 function NavRow({

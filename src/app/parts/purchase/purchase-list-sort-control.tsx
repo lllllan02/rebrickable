@@ -56,7 +56,7 @@ export function PurchaseListSortControl({
   view,
   cat,
   sortState,
-  by = "cat",
+  by = "group",
   group = "all",
 }: {
   view: PurchaseViewMode;

@@ -11,8 +11,14 @@ export type PartGroupNavRow = {
   count: number;
 };
 
-export function parsePartsNavMode(raw: string | undefined): PartsNavMode {
-  return (raw ?? "").trim().toLowerCase() === "group" ? "group" : "cat";
+export function parsePartsNavMode(
+  raw: string | undefined,
+  fallback: PartsNavMode = "cat"
+): PartsNavMode {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "group") return "group";
+  if (v === "cat") return "cat";
+  return fallback;
 }
 
 export function parsePartGroupFilter(

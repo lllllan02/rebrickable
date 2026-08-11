@@ -24,19 +24,21 @@ export function ownedPartsHref(opts: {
 }): string {
   const u = new URLSearchParams();
   const view = opts.view ?? "part";
-  const by = opts.by ?? "cat";
+  const by = opts.by ?? "group";
   const cat = opts.cat ?? "all";
   const sort = opts.sort ?? OWNED_DEFAULT_SORT;
   const page = opts.page ?? 1;
 
   if (by === "group") {
-    u.set("by", "group");
     const group = opts.group ?? "all";
     if (group !== "all") {
       u.set("group", partGroupFilterQueryValue(group));
     }
-  } else if (cat !== "all") {
-    u.set("cat", ownedCategoryQueryValue(cat));
+  } else {
+    u.set("by", "cat");
+    if (cat !== "all") {
+      u.set("cat", ownedCategoryQueryValue(cat));
+    }
   }
 
   if (view === "element") {
