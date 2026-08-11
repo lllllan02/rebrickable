@@ -531,3 +531,34 @@ export const buildBricktimeConfig = sqliteTable("build_bricktime_config", {
   apiKeyExpiresAt: text("api_key_expires_at"),
   updatedAt: text("updated_at").notNull(),
 });
+
+/** MOC 零件使用率排行报告（命名 + 结果缓存） */
+export const buildMocPartUsageReports = sqliteTable(
+  "build_moc_part_usage_reports",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    tagHint: text("tag_hint"),
+    resultsJson: text("results_json").notNull(),
+    analyzedAt: text("analyzed_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_moc_part_usage_reports_updated_idx").on(t.updatedAt)]
+);
+
+/** 排行报告中的作品成员（可编辑后重算） */
+export const buildMocPartUsageReportMocs = sqliteTable(
+  "build_moc_part_usage_report_mocs",
+  {
+    reportId: integer("report_id")
+      .notNull()
+      .references(() => buildMocPartUsageReports.id),
+    mocId: text("moc_id").notNull(),
+    addedAt: text("added_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.reportId, t.mocId] }),
+    index("build_moc_part_usage_report_mocs_moc_idx").on(t.mocId),
+  ]
+);

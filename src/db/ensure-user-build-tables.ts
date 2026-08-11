@@ -150,6 +150,27 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     CREATE INDEX IF NOT EXISTS build_part_group_members_part_idx ON build_part_group_members(part_num);
     CREATE INDEX IF NOT EXISTS build_part_group_members_group_idx ON build_part_group_members(group_id);
 
+    CREATE TABLE IF NOT EXISTS build_moc_part_usage_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      tag_hint TEXT,
+      results_json TEXT NOT NULL,
+      analyzed_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_moc_part_usage_reports_updated_idx
+      ON build_moc_part_usage_reports(updated_at);
+
+    CREATE TABLE IF NOT EXISTS build_moc_part_usage_report_mocs (
+      report_id INTEGER NOT NULL,
+      moc_id TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (report_id, moc_id)
+    );
+    CREATE INDEX IF NOT EXISTS build_moc_part_usage_report_mocs_moc_idx
+      ON build_moc_part_usage_report_mocs(moc_id);
+
     CREATE TABLE IF NOT EXISTS build_purchase_list_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       part_num TEXT NOT NULL,

@@ -11,7 +11,7 @@ import { ensureUserBuildTables } from "./ensure-user-build-tables";
 import { migrateLegacyBuildDataFromCatalogDb } from "./migrate-legacy-build-to-user-db";
 import { catalogSchema, userSchema } from "./schema-registry";
 
-const USER_SCHEMA_ENSURE_VERSION = "owned_parts_cleared_element_rewrite_v1";
+const USER_SCHEMA_ENSURE_VERSION = "moc_part_usage_reports_v1";
 
 function openCatalogSqlite(): Database.Database {
   const dbPath = catalogDbPath();

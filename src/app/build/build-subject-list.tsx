@@ -30,6 +30,7 @@ import {
   mocListOrderByFromState,
   type MocListSortState,
 } from "@/lib/moc-list-sort";
+import { mocPartUsageHref } from "@/lib/moc-part-usage-href";
 import { MOC_PROFILE_MAX_TAG_LEN, parseTagsJson } from "@/lib/moc-profile-parse";
 import { likeFragment } from "@/lib/search";
 
@@ -238,9 +239,22 @@ export async function BuildSubjectListPage({
       {officialCatalogSection == null ? (
         listHeroTitleOnly ? (
           <section className="space-y-4" aria-labelledby="mocs-saved-list-heading">
-            <h2 id="mocs-saved-list-heading" className="page-title text-xl sm:text-2xl">
-              MOC 目录
-            </h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 id="mocs-saved-list-heading" className="page-title text-xl sm:text-2xl">
+                MOC 目录
+              </h2>
+              <Link
+                href={mocPartUsageHref({
+                  q: safeQForHref || undefined,
+                  tag: hiddenTagValue || undefined,
+                  mark: listFilterMark !== "all" ? listFilterMark : undefined,
+                  premium: listFilterPremium,
+                })}
+                className="text-sm text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                零件使用率
+              </Link>
+            </div>
           </section>
         ) : (
           <section className="hero-panel">

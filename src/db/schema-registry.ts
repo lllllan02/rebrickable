@@ -35,4 +35,6 @@ export const userSchema = {
   buildPartUpgrades: schema.buildPartUpgrades,
   buildSetGoodPrices: schema.buildSetGoodPrices,
   buildBricktimeConfig: schema.buildBricktimeConfig,
+  buildMocPartUsageReports: schema.buildMocPartUsageReports,
+  buildMocPartUsageReportMocs: schema.buildMocPartUsageReportMocs,
 };
