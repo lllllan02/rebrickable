@@ -17,11 +17,11 @@ import {
   type SQL,
 } from "drizzle-orm";
 
-import { AutoSubmitSelect } from "@/components/auto-submit-select";
-import { PartGridTileLink } from "@/components/part-grid-tile-link";
-import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PartsCategoryNav } from "@/app/parts/parts-category-nav";
+import { PartsSearchPanel } from "@/app/parts/parts-search-panel";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
+import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { getCatalogDb } from "@/db/client";
 import {
   elements,
@@ -39,84 +39,6 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 40;
 
-function usableImgUrl(u: string | null | undefined): u is string {
-  return typeof u === "string" && u.trim().length > 0;
-}
-
-type PartCategoryPickerRow = { id: number; name: string };
-
-function PartsCategoryPickerGrid({
-  categories,
-  countById,
-  heroByCatId,
-}: {
-  categories: PartCategoryPickerRow[];
-  countById: Map<number, number>;
-  heroByCatId: Map<number, string | null>;
-}) {
-  const list = categories
-    .filter((c) => (countById.get(c.id) ?? 0) > 0)
-    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
-  if (list.length === 0) {
-    return (
-      <p className="text-sm text-[var(--muted)]">暂无带分类的零件数据。</p>
-    );
-  }
-
-  return (
-    <ul
-      className="list-cards-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
-      role="list"
-    >
-      {list.map((c) => {
-        const n = countById.get(c.id) ?? 0;
-        const href = `/parts?cat=${encodeURIComponent(String(c.id))}`;
-        const hero = heroByCatId.get(c.id) ?? null;
-        return (
-          <li
-            key={c.id}
-            className="result-card flex min-w-0 flex-col gap-0 overflow-hidden p-0"
-          >
-            <Link
-              href={href}
-              className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden border-b border-[var(--border)] bg-[var(--surface-3)]"
-              aria-label={`${c.name} 示意缩略图`}
-            >
-              {usableImgUrl(hero) ? (
-                <RemoteCoverImage
-                  src={hero.trim()}
-                  fill
-                  className="object-contain p-2 sm:p-3"
-                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1536px) 20vw, 16vw"
-                  alt=""
-                  fallbackLabel="无图"
-                />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center px-2 text-center text-sm text-[var(--muted)]">
-                  无预览图
-                </span>
-              )}
-            </Link>
-            <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3.5">
-              <div className="min-w-0">
-                <Link
-                  href={href}
-                  className="line-clamp-2 text-base font-semibold leading-snug text-[var(--text)] underline-offset-2 hover:underline"
-                >
-                  {c.name}
-                </Link>
-                <p className="mt-1 text-xs tabular-nums text-[var(--muted)]">
-                  {n.toLocaleString("zh-CN")} 条
-                </p>
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 type Props = {
   searchParams: Promise<{
     q?: string;
@@ -131,10 +53,9 @@ export default async function PartsPage({ searchParams }: Props) {
   const qRaw = sp.q ?? "";
   const q = likeFragment(qRaw);
   const catRaw = (sp.cat ?? "").trim();
-  const catIsAll = catRaw === "all";
+  const catIsAll = catRaw === "" || catRaw === "all";
   const catNum = Number.parseInt(catRaw, 10);
   const catNumericOk =
-    catRaw === "" ||
     catIsAll ||
     (Number.isFinite(catNum) && catNum > 0 && String(catNum) === catRaw);
   const invalidCatParam = catRaw.length > 0 && !catNumericOk;
@@ -147,128 +68,7 @@ export default async function PartsPage({ searchParams }: Props) {
 
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
-  const showCategoryPicker =
-    catRaw === "" && q.length === 0 && pieceFilter === null;
-
   const db = getCatalogDb();
-
-  if (showCategoryPicker) {
-    const [totalAllRow, categoryRows, countRows, heroRows] = await Promise.all([
-      db.select({ c: count() }).from(parts),
-      db
-        .select({ id: partCategories.id, name: partCategories.name })
-        .from(partCategories)
-        .orderBy(asc(partCategories.name)),
-      db
-        .select({ catId: parts.partCatId, c: count() })
-        .from(parts)
-        .where(isNotNull(parts.partCatId))
-        .groupBy(parts.partCatId),
-      db
-        .select({
-          catId: parts.partCatId,
-          thumb: min(inventoryParts.imgUrl),
-        })
-        .from(parts)
-        .innerJoin(inventoryParts, eq(parts.partNum, inventoryParts.partNum))
-        .where(
-          and(
-            isNotNull(parts.partCatId),
-            isNotNull(inventoryParts.imgUrl),
-            ne(inventoryParts.imgUrl, "")
-          )
-        )
-        .groupBy(parts.partCatId),
-    ]);
-
-    const totalAll = Number(totalAllRow[0]?.c ?? 0);
-    const countById = new Map<number, number>();
-    for (const r of countRows) {
-      if (r.catId != null) countById.set(r.catId, Number(r.c ?? 0));
-    }
-    const heroByCatId = new Map<number, string | null>();
-    for (const r of heroRows) {
-      if (r.catId != null && r.thumb?.trim()) {
-        heroByCatId.set(r.catId, r.thumb.trim());
-      }
-    }
-
-    return (
-      <div className="page-stack">
-        <section className="space-y-4" aria-labelledby="parts-catalog-heading">
-          <div>
-            <p className="page-kicker">Parts</p>
-            <h1 id="parts-catalog-heading" className="page-title">
-              零件
-            </h1>
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              请先选择零件类型（分类）以浏览该类下的列表；也可通过全库入口不按类型筛选，并配合关键词或普通/印刷筛选。卡片配图为该类型下清单中的零件示意图。
-            </p>
-          </div>
-          <form method="get" action="/parts" className="filter-bar">
-            <label className="sr-only" htmlFor="parts-q-picker">
-              搜索零件
-            </label>
-            <input
-              id="parts-q-picker"
-              name="q"
-              defaultValue=""
-              placeholder="名称、part_num 或 element_id…"
-              className="field min-w-[200px] flex-1 text-sm"
-            />
-            <button type="submit" className="button-primary text-sm">
-              搜索
-            </button>
-          </form>
-          <div className="table-shell p-4 sm:p-5">
-            <div className="mb-6 flex flex-wrap gap-3">
-              <Link
-                href="/parts?cat=all"
-                className="result-card inline-flex min-w-[min(100%,14rem)] flex-1 flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
-              >
-                <span className="text-sm font-semibold text-[var(--text)]">全库浏览</span>
-                <span className="text-xs text-[var(--muted)]">
-                  不按类型筛选，可配合关键词与普通/印刷筛选（共{" "}
-                  {totalAll.toLocaleString("zh-CN")} 条零件）
-                </span>
-              </Link>
-              <Link
-                href="/parts/favorites"
-                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
-              >
-                <span className="text-sm font-semibold text-[var(--text)]">收藏</span>
-                <span className="text-xs text-[var(--muted)]">已收藏的零件清单</span>
-              </Link>
-              <Link
-                href="/parts/purchase"
-                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
-              >
-                <span className="text-sm font-semibold text-[var(--text)]">购买清单</span>
-                <span className="text-xs text-[var(--muted)]">
-                  待购零件（填数量/颜色后再转入零件库）
-                </span>
-              </Link>
-              <Link
-                href="/parts/owned"
-                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
-              >
-                <span className="text-sm font-semibold text-[var(--text)]">零件库</span>
-                <span className="text-xs text-[var(--muted)]">
-                  已购入的零件库存（可按元素编辑数量）
-                </span>
-              </Link>
-            </div>
-            <h2 className="mb-3 text-sm font-semibold text-[var(--text)]">按分类浏览</h2>
-            <PartsCategoryPickerGrid
-              categories={categoryRows}
-              countById={countById}
-              heroByCatId={heroByCatId}
-            />
-          </div>
-        </section>
-      </div>
-    );
-  }
 
   const clauses: SQL[] = [];
   if (invalidCatParam) clauses.push(sql`0=1`);
@@ -322,27 +122,48 @@ export default async function PartsPage({ searchParams }: Props) {
   }
   const where = clauses.length > 0 ? and(...clauses) : undefined;
 
-  const [totalRow, categoryOptions] = await Promise.all([
+  const [totalRow, totalAllRow, categoryRows, countRows] = await Promise.all([
     db.select({ c: count() }).from(parts).where(where),
+    db.select({ c: count() }).from(parts),
     db
       .select({ id: partCategories.id, name: partCategories.name })
       .from(partCategories)
       .orderBy(asc(partCategories.name)),
+    db
+      .select({ catId: parts.partCatId, c: count() })
+      .from(parts)
+      .where(isNotNull(parts.partCatId))
+      .groupBy(parts.partCatId),
   ]);
 
   const total = Number(totalRow[0]?.c ?? 0);
+  const totalAll = Number(totalAllRow[0]?.c ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(totalPages, requestedPage);
   const offset = (page - 1) * PAGE_SIZE;
 
+  const countById = new Map<number, number>();
+  for (const r of countRows) {
+    if (r.catId != null) countById.set(r.catId, Number(r.c ?? 0));
+  }
+  const navCategories = categoryRows
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      count: countById.get(c.id) ?? 0,
+    }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+
   const filteredCatLabel = invalidCatParam
     ? null
-    : catIsAll
-      ? "全库"
-      : catIdFilter !== null
-        ? (categoryOptions.find((c) => c.id === catIdFilter)?.name ?? "").trim() ||
-          `类型 ${catIdFilter}`
-        : null;
+    : catIdFilter !== null
+      ? (categoryRows.find((c) => c.id === catIdFilter)?.name ?? "").trim() ||
+        `类型 ${catIdFilter}`
+      : null;
+
+  const activeCat: "all" | number =
+    !invalidCatParam && catIdFilter !== null ? catIdFilter : "all";
 
   const rows = await db
     .select({
@@ -366,7 +187,7 @@ export default async function PartsPage({ searchParams }: Props) {
   let favoritePartNums = new Set<string>();
   let purchasePartNums = new Set<string>();
   if (partNums.length > 0) {
-    const [thumbRows, countRows, colorRows, printedRows, matchRows, favSet, purchaseSet] =
+    const [thumbRows, elemRows, colorRows, printedRows, matchRows, favSet, purchaseSet] =
       await Promise.all([
         db
           .select({
@@ -434,7 +255,7 @@ export default async function PartsPage({ searchParams }: Props) {
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
-    for (const c of countRows) {
+    for (const c of elemRows) {
       elemCountByPart.set(c.partNum, Number(c.n));
     }
     for (const c of colorRows) {
@@ -457,8 +278,8 @@ export default async function PartsPage({ searchParams }: Props) {
   const qs = (p: number) => {
     const u = new URLSearchParams();
     if (qRaw.trim()) u.set("q", qRaw.trim());
-    if (catIsAll) u.set("cat", "all");
-    else if (catIdFilter !== null) u.set("cat", String(catIdFilter));
+    if (catIdFilter !== null) u.set("cat", String(catIdFilter));
+    else if (catRaw === "all") u.set("cat", "all");
     if (pieceFilter) u.set("piece", pieceFilter);
     if (p > 1) u.set("page", String(p));
     const s = u.toString();
@@ -467,277 +288,251 @@ export default async function PartsPage({ searchParams }: Props) {
 
   return (
     <div className="page-stack">
-      <section className="hero-panel">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="page-kicker">Parts</p>
-            <h1 className="page-title">零件</h1>
-            {filteredCatLabel != null ? (
-              <p className="mt-1 text-base font-normal text-[var(--muted)]">
-                {filteredCatLabel}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-3 text-sm">
-            <Link
-              href="/parts/favorites"
-              className="text-[var(--accent)] underline-offset-2 hover:underline"
-            >
-              收藏
-            </Link>
-            <Link
-              href="/parts/purchase"
-              className="text-[var(--accent)] underline-offset-2 hover:underline"
-            >
-              购买清单
-            </Link>
-            <Link
-              href="/parts"
-              className="text-[var(--accent)] underline-offset-2 hover:underline"
-            >
-              ← 选择分类
-            </Link>
-          </div>
-        </div>
-        <p className="page-description mt-3">
-          当前列表共 {total.toLocaleString("zh-CN")}{" "}
-          条；类型与普通/印刷筛选变更会立即生效。印刷件指在零件关系表中作为子件且 rel_type 为 P
-          的条目（印于基件）。关键词支持名称、part_num 或 element_id。
-        </p>
-      </section>
-      {invalidCatParam ? (
-        <p className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
-          类型参数无效，请从{" "}
-          <Link href="/parts" className="text-[var(--accent)] underline-offset-2 hover:underline">
-            分类列表
-          </Link>{" "}
-          重新选择。
-        </p>
-      ) : null}
-      <form method="get" className="filter-bar">
-        <label className="sr-only" htmlFor="parts-cat">
-          零件类型
-        </label>
-        <AutoSubmitSelect
-          id="parts-cat"
-          name="cat"
-          defaultValue={catIdFilter !== null ? String(catIdFilter) : "all"}
-          className="field max-w-full text-sm sm:max-w-[220px]"
-        >
-          <option value="all">全部分类</option>
-          {categoryOptions.map((c) => (
-            <option key={c.id} value={String(c.id)}>
-              {c.name}
-            </option>
-          ))}
-        </AutoSubmitSelect>
-        <label className="sr-only" htmlFor="parts-piece">
-          普通或印刷
-        </label>
-        <AutoSubmitSelect
-          id="parts-piece"
-          name="piece"
-          defaultValue={pieceFilter ?? ""}
-          className="field max-w-full text-sm sm:max-w-[160px]"
-        >
-          <option value="">全部零件</option>
-          <option value="plain">普通零件</option>
-          <option value="printed">印刷件</option>
-        </AutoSubmitSelect>
-        <input
-          name="q"
-          defaultValue={qRaw}
-          placeholder="名称、part_num 或 element_id…"
-          className="field min-w-[200px] flex-1 text-sm"
-        />
-        <button type="submit" className="button-primary text-sm">
-          搜索
-        </button>
-      </form>
-      <ul className="tiles-grid" role="list">
-        {rows.map((r) => {
-          const thumb = thumbByPart.get(r.partNum);
-          const elemCount = elemCountByPart.get(r.partNum) ?? 0;
-          const colorCount = colorCountByPart.get(r.partNum) ?? 0;
-          const isPrinted = printedPartNums.has(r.partNum);
-          const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
-          const title = [
-            r.partNum,
-            r.name,
-            isPrinted ? "印刷件" : "普通零件",
-            colorCount > 0 ? `${colorCount} 色` : null,
-            elemCount > 0 ? `${elemCount} 元素` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ");
-          return (
-            <li key={r.partNum} className="min-w-0">
-              <PartGridTileLink
-                href={`/parts/${encodeURIComponent(r.partNum)}`}
-                titleAttr={title}
-                partNum={r.partNum}
-                thumbUrl={thumb}
-                isPrinted={isPrinted}
-                topRight={
-                  <>
-                    <span className="absolute left-0.5 top-0.5 z-[2]">
-                      <PurchaseListAddToggle
-                        partNum={r.partNum}
-                        initialInList={purchasePartNums.has(r.partNum)}
-                        compact
-                      />
-                    </span>
-                    <span className="absolute right-0.5 top-0.5 z-[2]">
-                      <PartFavoriteToggle
-                        partNum={r.partNum}
-                        initialFavorite={favoritePartNums.has(r.partNum)}
-                        compact
-                      />
-                    </span>
-                  </>
-                }
-              >
-                {colorCount > 0 || elemCount > 0 ? (
-                  <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">
-                    {colorCount > 0 ? `${colorCount} 色` : null}
-                    {colorCount > 0 && elemCount > 0 ? " · " : null}
-                    {elemCount > 0 ? `${elemCount} 元素` : null}
-                  </p>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-start">
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-[var(--text)] sm:text-lg">
+                零件
+                {totalAll > 0 ? (
+                  <span className="ml-2 text-sm font-normal tabular-nums text-[var(--muted)]">
+                    · {totalAll.toLocaleString("zh-CN")}
+                    {(catIdFilter !== null || q.length > 0 || pieceFilter) &&
+                    total !== totalAll
+                      ? ` / 当前 ${total.toLocaleString("zh-CN")}`
+                      : null}
+                  </span>
                 ) : null}
-                {matchedElems.length > 0 ? (
-                  <p className="mt-0.5 line-clamp-2 px-0.5 text-center font-mono text-[8px] leading-tight text-[var(--accent)]">
-                    {matchedElems.join(" ")}
-                    {elementMatchTruncated.has(r.partNum) ? " …" : null}
-                  </p>
-                ) : null}
-              </PartGridTileLink>
-            </li>
-          );
-        })}
-        {rows.length === 0 ? (
-          <li className="empty-state col-span-full list-none text-sm">
-            没有匹配的零件。
-          </li>
-        ) : null}
-      </ul>
-      {totalPages > 1 ? (
-        <div className="flex justify-end">
-          <nav
-            aria-label="分页"
-            className="pagination-shell"
-          >
-            {page > 1 ? (
-              <Link
-                href={`/parts${qs(page - 1)}`}
-                className="pager-link shrink-0"
-              >
-                上一页
-              </Link>
-            ) : (
-              <span className="pager-disabled shrink-0">
-                上一页
-              </span>
-            )}
-            <div className="flex flex-wrap items-center gap-0.5">
-              {(() => {
-                const seq = pageNavSequence(page, totalPages, 4);
-                const mid = Math.floor(seq.length / 2);
-                const renderChunk = (
-                  chunk: (number | "gap")[],
-                  keyBase: number
-                ) =>
-                  chunk.map((item, i) => {
-                    const k = keyBase + i;
-                    return item === "gap" ? (
-                      <span
-                        key={`g-${k}`}
-                        className="px-0.5 text-[var(--muted)]"
-                        aria-hidden
-                      >
-                        …
-                      </span>
-                    ) : item === page ? (
-                      <span
-                        key={`p-${item}-${k}`}
-                        className="pager-current inline-flex min-w-[1.75rem] justify-center"
-                        aria-current="page"
-                      >
-                        {item}
-                      </span>
-                    ) : (
-                      <Link
-                        key={`p-${item}-${k}`}
-                        href={`/parts${qs(item)}`}
-                        className="pager-link inline-flex min-w-[1.75rem] justify-center"
-                      >
-                        {item}
-                      </Link>
-                    );
-                  });
-                return (
-                  <>
-                    {renderChunk(seq.slice(0, mid), 0)}
-                    <form
-                      method="get"
-                      action="/parts"
-                      className="mx-0.5 inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-full border border-[var(--border)] bg-[var(--bg)] outline-none ring-[var(--accent)] focus-within:ring-2"
-                      title="输入页码后按回车跳转"
-                    >
-                      {qRaw.trim() ? (
-                        <input type="hidden" name="q" value={qRaw.trim()} />
-                      ) : null}
-                      {catIsAll ? (
-                        <input type="hidden" name="cat" value="all" />
-                      ) : catIdFilter !== null ? (
-                        <input
-                          type="hidden"
-                          name="cat"
-                          value={String(catIdFilter)}
-                        />
-                      ) : null}
-                      {pieceFilter ? (
-                        <input type="hidden" name="piece" value={pieceFilter} />
-                      ) : null}
-                      <input
-                        type="number"
-                        name="page"
-                        min={1}
-                        max={totalPages}
-                        defaultValue={page}
-                        required
-                        aria-label={`跳转到页码，范围 1–${totalPages}，回车确认`}
-                        className="h-full min-w-[1.75rem] max-w-[3.25rem] border-0 bg-transparent px-0.5 text-center font-mono text-xs text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                      />
-                      <button
-                        type="submit"
-                        className="sr-only"
-                      >
-                        跳转
-                      </button>
-                    </form>
-                    {renderChunk(seq.slice(mid), mid)}
-                  </>
-                );
-              })()}
+              </h1>
+              {filteredCatLabel ? (
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {filteredCatLabel}
+                </p>
+              ) : null}
             </div>
-            {page < totalPages ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-3 text-xs">
               <Link
-                href={`/parts${qs(page + 1)}`}
-                className="pager-link shrink-0"
+                href="/parts/favorites"
+                className="text-[var(--accent)] underline-offset-2 hover:underline"
               >
-                下一页
+                收藏
               </Link>
-            ) : (
-              <span className="pager-disabled shrink-0">
-                下一页
-              </span>
-            )}
-            <span className="text-[11px] text-[var(--muted)]">
-              第 {page}/{totalPages} 页
-            </span>
-          </nav>
+              <Link
+                href="/parts/purchase"
+                className="text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                购买清单
+              </Link>
+              <Link
+                href="/parts/owned"
+                className="text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                零件库
+              </Link>
+            </div>
+          </div>
+
+          {invalidCatParam ? (
+            <p className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
+              类型参数无效，请从侧栏重新选择分类。
+            </p>
+          ) : null}
+
+          <ul className="tiles-grid" role="list">
+            {rows.map((r) => {
+              const thumb = thumbByPart.get(r.partNum);
+              const elemCount = elemCountByPart.get(r.partNum) ?? 0;
+              const colorCount = colorCountByPart.get(r.partNum) ?? 0;
+              const isPrinted = printedPartNums.has(r.partNum);
+              const matchedElems = matchedElementsByPart.get(r.partNum) ?? [];
+              const title = [
+                r.partNum,
+                r.name,
+                isPrinted ? "印刷件" : "普通零件",
+                colorCount > 0 ? `${colorCount} 色` : null,
+                elemCount > 0 ? `${elemCount} 元素` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li key={r.partNum} className="min-w-0">
+                  <PartGridTileLink
+                    href={`/parts/${encodeURIComponent(r.partNum)}`}
+                    titleAttr={title}
+                    partNum={r.partNum}
+                    thumbUrl={thumb}
+                    isPrinted={isPrinted}
+                    topRight={
+                      <>
+                        <span className="absolute left-0.5 top-0.5 z-[2]">
+                          <PurchaseListAddToggle
+                            partNum={r.partNum}
+                            initialInList={purchasePartNums.has(r.partNum)}
+                            compact
+                          />
+                        </span>
+                        <span className="absolute right-0.5 top-0.5 z-[2]">
+                          <PartFavoriteToggle
+                            partNum={r.partNum}
+                            initialFavorite={favoritePartNums.has(r.partNum)}
+                            compact
+                          />
+                        </span>
+                      </>
+                    }
+                  >
+                    {colorCount > 0 || elemCount > 0 ? (
+                      <p className="mt-0.5 truncate px-0.5 text-center text-[9px] tabular-nums text-[var(--muted-2)]">
+                        {colorCount > 0 ? `${colorCount} 色` : null}
+                        {colorCount > 0 && elemCount > 0 ? " · " : null}
+                        {elemCount > 0 ? `${elemCount} 元素` : null}
+                      </p>
+                    ) : null}
+                    {matchedElems.length > 0 ? (
+                      <p className="mt-0.5 line-clamp-2 px-0.5 text-center font-mono text-[8px] leading-tight text-[var(--accent)]">
+                        {matchedElems.join(" ")}
+                        {elementMatchTruncated.has(r.partNum) ? " …" : null}
+                      </p>
+                    ) : null}
+                  </PartGridTileLink>
+                </li>
+              );
+            })}
+            {rows.length === 0 ? (
+              <li className="empty-state col-span-full list-none text-sm">
+                没有匹配的零件。
+              </li>
+            ) : null}
+          </ul>
+          {totalPages > 1 ? (
+            <div className="flex justify-end">
+              <nav aria-label="分页" className="pagination-shell">
+                {page > 1 ? (
+                  <Link
+                    href={`/parts${qs(page - 1)}`}
+                    className="pager-link shrink-0"
+                  >
+                    上一页
+                  </Link>
+                ) : (
+                  <span className="pager-disabled shrink-0">上一页</span>
+                )}
+                <div className="flex flex-wrap items-center gap-0.5">
+                  {(() => {
+                    const seq = pageNavSequence(page, totalPages, 4);
+                    const mid = Math.floor(seq.length / 2);
+                    const renderChunk = (
+                      chunk: (number | "gap")[],
+                      keyBase: number
+                    ) =>
+                      chunk.map((item, i) => {
+                        const k = keyBase + i;
+                        return item === "gap" ? (
+                          <span
+                            key={`g-${k}`}
+                            className="px-0.5 text-[var(--muted)]"
+                            aria-hidden
+                          >
+                            …
+                          </span>
+                        ) : item === page ? (
+                          <span
+                            key={`p-${item}-${k}`}
+                            className="pager-current inline-flex min-w-[1.75rem] justify-center"
+                            aria-current="page"
+                          >
+                            {item}
+                          </span>
+                        ) : (
+                          <Link
+                            key={`p-${item}-${k}`}
+                            href={`/parts${qs(item)}`}
+                            className="pager-link inline-flex min-w-[1.75rem] justify-center"
+                          >
+                            {item}
+                          </Link>
+                        );
+                      });
+                    return (
+                      <>
+                        {renderChunk(seq.slice(0, mid), 0)}
+                        <form
+                          method="get"
+                          action="/parts"
+                          className="mx-0.5 inline-flex h-7 shrink-0 items-stretch overflow-hidden rounded-full border border-[var(--border)] bg-[var(--bg)] outline-none ring-[var(--accent)] focus-within:ring-2"
+                          title="输入页码后按回车跳转"
+                        >
+                          {qRaw.trim() ? (
+                            <input type="hidden" name="q" value={qRaw.trim()} />
+                          ) : null}
+                          {catIdFilter !== null ? (
+                            <input
+                              type="hidden"
+                              name="cat"
+                              value={String(catIdFilter)}
+                            />
+                          ) : catRaw === "all" ? (
+                            <input type="hidden" name="cat" value="all" />
+                          ) : null}
+                          {pieceFilter ? (
+                            <input
+                              type="hidden"
+                              name="piece"
+                              value={pieceFilter}
+                            />
+                          ) : null}
+                          <input
+                            type="number"
+                            name="page"
+                            min={1}
+                            max={totalPages}
+                            defaultValue={page}
+                            required
+                            aria-label={`跳转到页码，范围 1–${totalPages}，回车确认`}
+                            className="h-full min-w-[1.75rem] max-w-[3.25rem] border-0 bg-transparent px-0.5 text-center font-mono text-xs text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                          <button type="submit" className="sr-only">
+                            跳转
+                          </button>
+                        </form>
+                        {renderChunk(seq.slice(mid), mid)}
+                      </>
+                    );
+                  })()}
+                </div>
+                {page < totalPages ? (
+                  <Link
+                    href={`/parts${qs(page + 1)}`}
+                    className="pager-link shrink-0"
+                  >
+                    下一页
+                  </Link>
+                ) : (
+                  <span className="pager-disabled shrink-0">下一页</span>
+                )}
+                <span className="text-[11px] text-[var(--muted)]">
+                  第 {page}/{totalPages} 页
+                </span>
+              </nav>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+
+        <aside className="space-y-3 lg:sticky lg:top-20">
+          <PartsSearchPanel
+            q={qRaw}
+            piece={pieceFilter}
+            catId={catIdFilter}
+          />
+          <PartsCategoryNav
+            total={totalAll}
+            categories={navCategories}
+            active={activeCat}
+            q={qRaw}
+            piece={pieceFilter}
+          />
+        </aside>
+      </div>
     </div>
   );
 }
