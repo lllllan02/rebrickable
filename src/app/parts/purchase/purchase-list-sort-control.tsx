@@ -56,10 +56,14 @@ export function PurchaseListSortControl({
   view,
   cat,
   sortState,
+  by = "cat",
+  group = "all",
 }: {
   view: PurchaseViewMode;
   cat: OwnedCategoryFilter;
   sortState: OwnedSortState;
+  by?: "cat" | "group";
+  group?: "all" | "ungrouped" | number;
 }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const kindLabel = ownedSortLabel(sortState.key, view);
@@ -71,6 +75,8 @@ export function PurchaseListSortControl({
       view,
       cat,
       sort: nextOwnedSortOnPickerClick(pick, sortState),
+      by,
+      group,
     });
 
   const closeMenu = () => {

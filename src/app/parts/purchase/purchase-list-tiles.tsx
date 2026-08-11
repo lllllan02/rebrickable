@@ -1,5 +1,6 @@
 "use client";
 
+import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { elementDomId } from "@/lib/dom-anchors";
 import type {
@@ -32,12 +33,14 @@ export function PurchaseListTiles({
   elementRows,
   selectedIds,
   onToggleSelect,
+  dragEnabled = false,
 }: {
   view: PurchaseViewMode;
   partRows: PurchasePartPageRow[];
   elementRows: PurchaseElementPageRow[];
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
+  dragEnabled?: boolean;
 }) {
   if (view === "part") {
     if (partRows.length === 0) {
@@ -46,7 +49,7 @@ export function PurchaseListTiles({
       );
     }
     return (
-      <ul className="tiles-grid" role="list">
+      <PartsDraggableGrid enabled={dragEnabled}>
         {partRows.map((r) => {
           const title = [
             r.partNum,
@@ -57,7 +60,11 @@ export function PurchaseListTiles({
             .filter(Boolean)
             .join(" · ");
           return (
-            <li key={r.partNum} className="min-w-0">
+            <li
+              key={r.partNum}
+              className="min-w-0"
+              data-part-num={r.partNum}
+            >
               <PartGridTileLink
                 href={`/parts/${encodeURIComponent(r.partNum)}`}
                 titleAttr={title}
@@ -78,7 +85,7 @@ export function PurchaseListTiles({
             </li>
           );
         })}
-      </ul>
+      </PartsDraggableGrid>
     );
   }
 

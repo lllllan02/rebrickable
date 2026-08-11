@@ -4,10 +4,14 @@ export function PartsSearchPanel({
   q,
   piece,
   catId,
+  by = "cat",
+  groupFilter = "all",
 }: {
   q: string;
   piece: "plain" | "printed" | null;
   catId: number | null;
+  by?: "cat" | "group";
+  groupFilter?: "all" | "ungrouped" | number;
 }) {
   return (
     <section
@@ -21,7 +25,22 @@ export function PartsSearchPanel({
         搜索
       </h2>
       <form method="get" action="/parts" className="mt-2 flex flex-col gap-2">
-        {catId !== null ? (
+        {by === "group" ? (
+          <>
+            <input type="hidden" name="by" value="group" />
+            {groupFilter !== "all" ? (
+              <input
+                type="hidden"
+                name="group"
+                value={
+                  typeof groupFilter === "number"
+                    ? String(groupFilter)
+                    : groupFilter
+                }
+              />
+            ) : null}
+          </>
+        ) : catId !== null ? (
           <input type="hidden" name="cat" value={String(catId)} />
         ) : null}
         <label className="sr-only" htmlFor="parts-q">

@@ -15,10 +15,12 @@ export function PurchaseListClient({
   view,
   partRows,
   elementRows,
+  dragEnabled = false,
 }: {
   view: PurchaseViewMode;
   partRows: PurchasePartPageRow[];
   elementRows: PurchaseElementPageRow[];
+  dragEnabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -129,6 +131,7 @@ export function PurchaseListClient({
         elementRows={elementRows}
         selectedIds={selectedIds}
         onToggleSelect={toggleSelect}
+        dragEnabled={dragEnabled}
       />
     </div>
   );

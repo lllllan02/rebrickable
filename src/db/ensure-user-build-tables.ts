@@ -132,6 +132,24 @@ export function ensureUserBuildTables(sqlite: Database.Database, cwd = process.c
     );
     CREATE INDEX IF NOT EXISTS build_favorite_parts_marked_idx ON build_favorite_parts(marked_at);
 
+    CREATE TABLE IF NOT EXISTS build_part_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS build_part_groups_sort_idx ON build_part_groups(sort_order);
+
+    CREATE TABLE IF NOT EXISTS build_part_group_members (
+      group_id INTEGER NOT NULL,
+      part_num TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (group_id, part_num)
+    );
+    CREATE INDEX IF NOT EXISTS build_part_group_members_part_idx ON build_part_group_members(part_num);
+    CREATE INDEX IF NOT EXISTS build_part_group_members_group_idx ON build_part_group_members(group_id);
+
     CREATE TABLE IF NOT EXISTS build_purchase_list_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       part_num TEXT NOT NULL,

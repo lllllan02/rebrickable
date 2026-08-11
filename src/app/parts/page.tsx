@@ -12,6 +12,7 @@ import {
   min,
   ne,
   notExists,
+  notInArray,
   or,
   sql,
   type SQL,
@@ -19,6 +20,9 @@ import {
 
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
 import { PartsCategoryNav } from "@/app/parts/parts-category-nav";
+import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
+import { PartsGroupNav } from "@/app/parts/parts-group-nav";
+import { PartsNavModeSwitch } from "@/app/parts/parts-nav-mode-switch";
 import { PartsSearchPanel } from "@/app/parts/parts-search-panel";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
@@ -32,6 +36,16 @@ import {
 } from "@/db/schema";
 import { loadFavoritePartNums } from "@/lib/load-favorite-parts";
 import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
+import {
+  isPartGroupFilterValid,
+  loadPartGroupById,
+  loadPartGroupNavSummary,
+  parsePartGroupFilter,
+  parsePartsNavMode,
+  partGroupFilterQueryValue,
+  resolveGroupPartNumConstraint,
+  type PartGroupFilter,
+} from "@/lib/part-groups";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 import { likeFragment } from "@/lib/search";
 
@@ -45,6 +59,8 @@ type Props = {
     page?: string;
     cat?: string;
     piece?: string;
+    group?: string;
+    by?: string;
   }>;
 };
 
@@ -52,26 +68,60 @@ export default async function PartsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const qRaw = sp.q ?? "";
   const q = likeFragment(qRaw);
+  const navMode = parsePartsNavMode(sp.by);
+
   const catRaw = (sp.cat ?? "").trim();
   const catIsAll = catRaw === "" || catRaw === "all";
   const catNum = Number.parseInt(catRaw, 10);
   const catNumericOk =
     catIsAll ||
     (Number.isFinite(catNum) && catNum > 0 && String(catNum) === catRaw);
-  const invalidCatParam = catRaw.length > 0 && !catNumericOk;
+  const invalidCatParam =
+    navMode === "cat" && catRaw.length > 0 && !catNumericOk;
   const catIdFilter =
-    catNumericOk && !catIsAll && catRaw !== "" ? catNum : null;
+    navMode === "cat" && catNumericOk && !catIsAll && catRaw !== ""
+      ? catNum
+      : null;
 
   const pieceRaw = (sp.piece ?? "").trim().toLowerCase();
   const pieceFilter =
     pieceRaw === "plain" || pieceRaw === "printed" ? pieceRaw : null;
 
+  const parsedGroup = parsePartGroupFilter(sp.group);
+  const groupFilter: PartGroupFilter =
+    navMode === "group" ? (parsedGroup ?? "all") : "all";
+  const invalidGroupParam =
+    navMode === "group" && parsedGroup == null && (sp.group ?? "").trim() !== "";
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+
+  const groupValid =
+    navMode !== "group" ||
+    invalidGroupParam ||
+    (await isPartGroupFilterValid(groupFilter));
+  const groupConstraint =
+    navMode === "group" && groupValid && !invalidGroupParam
+      ? await resolveGroupPartNumConstraint(groupFilter)
+      : { kind: "none" as const };
+  const groupMeta =
+    navMode === "group" && typeof groupFilter === "number"
+      ? await loadPartGroupById(groupFilter)
+      : null;
 
   const db = getCatalogDb();
 
   const clauses: SQL[] = [];
   if (invalidCatParam) clauses.push(sql`0=1`);
+  if (invalidGroupParam || (navMode === "group" && !groupValid)) {
+    clauses.push(sql`0=1`);
+  }
+  if (groupConstraint.kind === "include") {
+    if (groupConstraint.partNums.size === 0) clauses.push(sql`0=1`);
+    else clauses.push(inArray(parts.partNum, [...groupConstraint.partNums]));
+  } else if (groupConstraint.kind === "exclude") {
+    if (groupConstraint.partNums.size > 0) {
+      clauses.push(notInArray(parts.partNum, [...groupConstraint.partNums]));
+    }
+  }
   if (q.length > 0) {
     const textOr = or(
       like(parts.name, `%${q}%`),
@@ -90,7 +140,7 @@ export default async function PartsPage({ searchParams }: Props) {
     );
     if (textOr) clauses.push(textOr);
   }
-  if (catIdFilter !== null) {
+  if (navMode === "cat" && catIdFilter !== null) {
     clauses.push(eq(parts.partCatId, catIdFilter));
   }
   if (pieceFilter === "printed") {
@@ -187,8 +237,15 @@ export default async function PartsPage({ searchParams }: Props) {
   let favoritePartNums = new Set<string>();
   let purchasePartNums = new Set<string>();
   if (partNums.length > 0) {
-    const [thumbRows, elemRows, colorRows, printedRows, matchRows, favSet, purchaseSet] =
-      await Promise.all([
+    const [
+      thumbRows,
+      elemRows,
+      colorRows,
+      printedRows,
+      matchRows,
+      favSet,
+      purchaseSet,
+    ] = await Promise.all([
         db
           .select({
             partNum: inventoryParts.partNum,
@@ -275,16 +332,49 @@ export default async function PartsPage({ searchParams }: Props) {
     }
   }
 
-  const qs = (p: number) => {
+  const catalogHref = (opts: {
+    by?: "cat" | "group";
+    cat?: number | null;
+    group?: PartGroupFilter;
+    page?: number;
+  }) => {
     const u = new URLSearchParams();
     if (qRaw.trim()) u.set("q", qRaw.trim());
-    if (catIdFilter !== null) u.set("cat", String(catIdFilter));
-    else if (catRaw === "all") u.set("cat", "all");
     if (pieceFilter) u.set("piece", pieceFilter);
-    if (p > 1) u.set("page", String(p));
+    const by = opts.by ?? navMode;
+    if (by === "group") {
+      u.set("by", "group");
+      const g = opts.group ?? "all";
+      if (g !== "all") u.set("group", partGroupFilterQueryValue(g));
+    } else {
+      const cat = opts.cat !== undefined ? opts.cat : catIdFilter;
+      if (cat != null) u.set("cat", String(cat));
+    }
+    if (opts.page != null && opts.page > 1) u.set("page", String(opts.page));
     const s = u.toString();
-    return s ? `?${s}` : "";
+    return s ? `/parts?${s}` : "/parts";
   };
+
+  const qs = (p: number) => {
+    const href = catalogHref({
+      by: navMode,
+      group: groupFilter,
+      page: p,
+    });
+    const i = href.indexOf("?");
+    return i >= 0 ? href.slice(i) : "";
+  };
+
+  const groupNavSummary = await loadPartGroupNavSummary(null, totalAll);
+
+  const groupLabel =
+    navMode !== "group"
+      ? null
+      : groupFilter === "ungrouped"
+        ? "待分组"
+        : groupFilter === "all"
+          ? null
+          : groupMeta?.name.trim() || `分组 ${groupFilter}`;
 
   return (
     <div className="page-stack">
@@ -297,16 +387,19 @@ export default async function PartsPage({ searchParams }: Props) {
                 {totalAll > 0 ? (
                   <span className="ml-2 text-sm font-normal tabular-nums text-[var(--muted)]">
                     · {totalAll.toLocaleString("zh-CN")}
-                    {(catIdFilter !== null || q.length > 0 || pieceFilter) &&
+                    {(catIdFilter !== null ||
+                      q.length > 0 ||
+                      pieceFilter ||
+                      (navMode === "group" && groupFilter !== "all")) &&
                     total !== totalAll
                       ? ` / 当前 ${total.toLocaleString("zh-CN")}`
                       : null}
                   </span>
                 ) : null}
               </h1>
-              {filteredCatLabel ? (
+              {filteredCatLabel || groupLabel ? (
                 <p className="mt-0.5 text-xs text-[var(--muted)]">
-                  {filteredCatLabel}
+                  {[filteredCatLabel, groupLabel].filter(Boolean).join(" · ")}
                 </p>
               ) : null}
             </div>
@@ -337,8 +430,13 @@ export default async function PartsPage({ searchParams }: Props) {
               类型参数无效，请从侧栏重新选择分类。
             </p>
           ) : null}
+          {invalidGroupParam || (navMode === "group" && !groupValid) ? (
+            <p className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
+              分组不存在或已删除，请从侧栏重新选择。
+            </p>
+          ) : null}
 
-          <ul className="tiles-grid" role="list">
+          <PartsDraggableGrid enabled={navMode === "group"}>
             {rows.map((r) => {
               const thumb = thumbByPart.get(r.partNum);
               const elemCount = elemCountByPart.get(r.partNum) ?? 0;
@@ -355,7 +453,11 @@ export default async function PartsPage({ searchParams }: Props) {
                 .filter(Boolean)
                 .join(" · ");
               return (
-                <li key={r.partNum} className="min-w-0">
+                <li
+                  key={r.partNum}
+                  className="min-w-0"
+                  data-part-num={r.partNum}
+                >
                   <PartGridTileLink
                     href={`/parts/${encodeURIComponent(r.partNum)}`}
                     titleAttr={title}
@@ -403,7 +505,7 @@ export default async function PartsPage({ searchParams }: Props) {
                 没有匹配的零件。
               </li>
             ) : null}
-          </ul>
+          </PartsDraggableGrid>
           {totalPages > 1 ? (
             <div className="flex justify-end">
               <nav aria-label="分页" className="pagination-shell">
@@ -481,6 +583,18 @@ export default async function PartsPage({ searchParams }: Props) {
                               value={pieceFilter}
                             />
                           ) : null}
+                          {navMode === "group" ? (
+                            <>
+                              <input type="hidden" name="by" value="group" />
+                              {groupFilter !== "all" ? (
+                                <input
+                                  type="hidden"
+                                  name="group"
+                                  value={partGroupFilterQueryValue(groupFilter)}
+                                />
+                              ) : null}
+                            </>
+                          ) : null}
                           <input
                             type="number"
                             name="page"
@@ -523,14 +637,40 @@ export default async function PartsPage({ searchParams }: Props) {
             q={qRaw}
             piece={pieceFilter}
             catId={catIdFilter}
+            by={navMode}
+            groupFilter={groupFilter}
           />
-          <PartsCategoryNav
-            total={totalAll}
-            categories={navCategories}
-            active={activeCat}
-            q={qRaw}
-            piece={pieceFilter}
+          <PartsNavModeSwitch
+            mode={navMode}
+            hrefCat={catalogHref({ by: "cat", cat: null })}
+            hrefGroup={catalogHref({ by: "group", group: "all" })}
           />
+          {navMode === "group" ? (
+            <PartsGroupNav
+              groups={groupNavSummary.groups.map((g) => ({
+                ...g,
+                href: catalogHref({ by: "group", group: g.id }),
+              }))}
+              activeFilter={
+                invalidGroupParam || !groupValid ? "all" : groupFilter
+              }
+              hrefAll={catalogHref({ by: "group", group: "all" })}
+              hrefUngrouped={catalogHref({
+                by: "group",
+                group: "ungrouped",
+              })}
+              totalInScope={groupNavSummary.totalInScope}
+              ungroupedCount={groupNavSummary.ungroupedCount}
+            />
+          ) : (
+            <PartsCategoryNav
+              total={totalAll}
+              categories={navCategories}
+              active={activeCat}
+              q={qRaw}
+              piece={pieceFilter}
+            />
+          )}
         </aside>
       </div>
     </div>

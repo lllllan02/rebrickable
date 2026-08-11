@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { PartsGroupNav } from "@/app/parts/parts-group-nav";
+import { PartsNavModeSwitch } from "@/app/parts/parts-nav-mode-switch";
 import { PurchaseListCategoryNav } from "@/app/parts/purchase/purchase-list-category-nav";
 import { PurchaseListClient } from "@/app/parts/purchase/purchase-list-client";
 import { PurchaseListSortControl } from "@/app/parts/purchase/purchase-list-sort-control";
@@ -9,6 +11,7 @@ import {
   loadPurchaseCategoryLabel,
   loadPurchaseCategorySummary,
   loadPurchaseElementsPage,
+  loadPurchasePartNumList,
   loadPurchasePartsPage,
   parsePurchaseViewParam,
   type PurchaseElementPageRow,
@@ -19,6 +22,15 @@ import {
   type OwnedCategoryFilter,
 } from "@/lib/owned-parts-category";
 import { parseOwnedSortState } from "@/lib/owned-parts-sort";
+import {
+  isPartGroupFilterValid,
+  loadPartGroupById,
+  loadPartGroupNavSummary,
+  parsePartGroupFilter,
+  parsePartsNavMode,
+  resolveGroupPartNumConstraint,
+  type PartGroupFilter,
+} from "@/lib/part-groups";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +42,8 @@ type Props = {
     view?: string;
     sort?: string;
     dir?: string;
+    group?: string;
+    by?: string;
   }>;
 };
 
@@ -42,38 +56,97 @@ function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
 export default async function PurchaseListPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  const catFilter = parseCatFilter(sp.cat);
+  const navMode = parsePartsNavMode(sp.by);
+  const catFilter =
+    navMode === "cat" ? parseCatFilter(sp.cat) : ("all" as const);
   const view = parsePurchaseViewParam(sp.view);
   const sort = parseOwnedSortState(sp.sort, sp.dir);
 
-  const [summary, categoryLabel, partPage, elementPage] = await Promise.all([
+  const parsedGroup = parsePartGroupFilter(sp.group);
+  const invalidGroupParam =
+    navMode === "group" &&
+    parsedGroup == null &&
+    (sp.group ?? "").trim() !== "";
+  const groupFilter: PartGroupFilter =
+    navMode === "group" ? (parsedGroup ?? "all") : "all";
+  const groupValid =
+    navMode !== "group" ||
+    invalidGroupParam ||
+    (await isPartGroupFilterValid(groupFilter));
+
+  const groupConstraint =
+    navMode === "group" && groupValid && !invalidGroupParam
+      ? await resolveGroupPartNumConstraint(groupFilter)
+      : { kind: "none" as const };
+  const effectiveConstraint =
+    invalidGroupParam || (navMode === "group" && !groupValid)
+      ? ({ kind: "include", partNums: new Set<string>() } as const)
+      : groupConstraint;
+
+  const catForPage = navMode === "cat" ? catFilter : ("all" as const);
+
+  const [summary, purchasePartNums, groupMeta] = await Promise.all([
     loadPurchaseCategorySummary(),
-    loadPurchaseCategoryLabel(catFilter),
-    view === "part"
-      ? loadPurchasePartsPage(
-          requestedPage,
-          PURCHASE_LIST_PAGE_SIZE,
-          catFilter,
-          sort
-        )
-      : Promise.resolve({ total: 0, page: 1, rows: [] as PurchasePartPageRow[] }),
-    view === "element"
-      ? loadPurchaseElementsPage(
-          requestedPage,
-          PURCHASE_LIST_PAGE_SIZE,
-          catFilter,
-          sort
-        )
-      : Promise.resolve({
-          total: 0,
-          page: 1,
-          rows: [] as PurchaseElementPageRow[],
-        }),
+    loadPurchasePartNumList(),
+    navMode === "group" && typeof groupFilter === "number"
+      ? loadPartGroupById(groupFilter)
+      : Promise.resolve(null),
   ]);
+
+  const [categoryLabel, partPage, elementPage, groupNavSummary] =
+    await Promise.all([
+      navMode === "cat"
+        ? loadPurchaseCategoryLabel(catFilter)
+        : Promise.resolve(null),
+      view === "part"
+        ? loadPurchasePartsPage(
+            requestedPage,
+            PURCHASE_LIST_PAGE_SIZE,
+            catForPage,
+            sort,
+            effectiveConstraint
+          )
+        : Promise.resolve({
+            total: 0,
+            page: 1,
+            rows: [] as PurchasePartPageRow[],
+          }),
+      view === "element"
+        ? loadPurchaseElementsPage(
+            requestedPage,
+            PURCHASE_LIST_PAGE_SIZE,
+            catForPage,
+            sort,
+            effectiveConstraint
+          )
+        : Promise.resolve({
+            total: 0,
+            page: 1,
+            rows: [] as PurchaseElementPageRow[],
+          }),
+      loadPartGroupNavSummary(purchasePartNums),
+    ]);
 
   const total = view === "element" ? elementPage.total : partPage.total;
   const page = view === "element" ? elementPage.page : partPage.page;
   const totalPages = Math.max(1, Math.ceil(total / PURCHASE_LIST_PAGE_SIZE));
+
+  const groupLabel =
+    navMode !== "group"
+      ? null
+      : groupFilter === "ungrouped"
+        ? "待分组"
+        : groupFilter === "all"
+          ? null
+          : groupMeta?.name.trim() || `分组 ${groupFilter}`;
+
+  const hrefOpts = {
+    view,
+    cat: catFilter,
+    sort,
+    by: navMode,
+    group: groupFilter,
+  } as const;
 
   return (
     <div className="page-stack">
@@ -90,17 +163,22 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                       ? ` · ${summary.stats.totalQty.toLocaleString("zh-CN")} 粒`
                       : null}
                     {view === "element" && total > 0
-                      ? catFilter !== "all"
-                        ? ` / 本类 ${total.toLocaleString("zh-CN")} 行`
+                      ? (navMode === "cat" && catFilter !== "all") ||
+                        (navMode === "group" && groupFilter !== "all")
+                        ? ` / 当前 ${total.toLocaleString("zh-CN")} 行`
                         : ` · ${total.toLocaleString("zh-CN")} 行`
-                      : catFilter !== "all" && total !== summary.total
-                        ? ` / 本类 ${total.toLocaleString("zh-CN")}`
+                      : ((navMode === "cat" && catFilter !== "all") ||
+                            (navMode === "group" && groupFilter !== "all")) &&
+                          total !== summary.total
+                        ? ` / 当前 ${total.toLocaleString("zh-CN")}`
                         : null}
                   </span>
                 ) : null}
               </h1>
-              {categoryLabel ? (
-                <p className="mt-0.5 text-xs text-[var(--muted)]">{categoryLabel}</p>
+              {categoryLabel || groupLabel ? (
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {[categoryLabel, groupLabel].filter(Boolean).join(" · ")}
+                </p>
               ) : null}
             </div>
             <Link
@@ -111,6 +189,12 @@ export default async function PurchaseListPage({ searchParams }: Props) {
             </Link>
           </div>
 
+          {invalidGroupParam || (navMode === "group" && !groupValid) ? (
+            <p className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
+              分组不存在或已删除，请从侧栏重新选择。
+            </p>
+          ) : null}
+
           {summary.total > 0 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <div
@@ -119,7 +203,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                 aria-label="展示粒度"
               >
                 <Link
-                  href={purchaseListHref({ view: "part", cat: catFilter, sort })}
+                  href={purchaseListHref({ ...hrefOpts, view: "part" })}
                   aria-current={view === "part" ? "page" : undefined}
                   className={`rounded px-2.5 py-1 transition-colors ${
                     view === "part"
@@ -130,11 +214,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                   零件
                 </Link>
                 <Link
-                  href={purchaseListHref({
-                    view: "element",
-                    cat: catFilter,
-                    sort,
-                  })}
+                  href={purchaseListHref({ ...hrefOpts, view: "element" })}
                   aria-current={view === "element" ? "page" : undefined}
                   className={`rounded px-2.5 py-1 transition-colors ${
                     view === "element"
@@ -149,6 +229,8 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                 view={view}
                 cat={catFilter}
                 sortState={sort}
+                by={navMode}
+                group={groupFilter}
               />
             </div>
           ) : null}
@@ -161,9 +243,15 @@ export default async function PurchaseListPage({ searchParams }: Props) {
             <>
               {view === "part" && total === 0 ? (
                 <p className="text-sm text-[var(--muted)]">
-                  当前分类下没有购买清单记录。
+                  当前筛选下没有购买清单记录。
                   <Link
-                    href={purchaseListHref({ view, cat: "all", sort })}
+                    href={purchaseListHref({
+                      view,
+                      cat: "all",
+                      sort,
+                      by: navMode,
+                      group: "all",
+                    })}
                     className="ml-1 text-[var(--accent)] underline underline-offset-2"
                   >
                     查看全部
@@ -174,6 +262,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                   view={view}
                   partRows={partPage.rows}
                   elementRows={elementPage.rows}
+                  dragEnabled={navMode === "group"}
                 />
               )}
               {totalPages > 1 ? (
@@ -182,9 +271,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                     {page > 1 ? (
                       <Link
                         href={purchaseListHref({
-                          view,
-                          cat: catFilter,
-                          sort,
+                          ...hrefOpts,
                           page: page - 1,
                         })}
                         className="pager-link shrink-0"
@@ -216,9 +303,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                           <Link
                             key={`p-${item}`}
                             href={purchaseListHref({
-                              view,
-                              cat: catFilter,
-                              sort,
+                              ...hrefOpts,
                               page: item,
                             })}
                             className="pager-link inline-flex min-w-[1.75rem] justify-center"
@@ -231,9 +316,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                     {page < totalPages ? (
                       <Link
                         href={purchaseListHref({
-                          view,
-                          cat: catFilter,
-                          sort,
+                          ...hrefOpts,
                           page: page + 1,
                         })}
                         className="pager-link shrink-0"
@@ -251,7 +334,51 @@ export default async function PurchaseListPage({ searchParams }: Props) {
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-20">
-          {summary.total > 0 ? (
+          <PartsNavModeSwitch
+            mode={navMode}
+            hrefCat={purchaseListHref({
+              view,
+              cat: "all",
+              sort,
+              by: "cat",
+            })}
+            hrefGroup={purchaseListHref({
+              view,
+              sort,
+              by: "group",
+              group: "all",
+            })}
+          />
+          {navMode === "group" ? (
+            <PartsGroupNav
+              groups={groupNavSummary.groups.map((g) => ({
+                ...g,
+                href: purchaseListHref({
+                  view,
+                  sort,
+                  by: "group",
+                  group: g.id,
+                }),
+              }))}
+              activeFilter={
+                invalidGroupParam || !groupValid ? "all" : groupFilter
+              }
+              hrefAll={purchaseListHref({
+                view,
+                sort,
+                by: "group",
+                group: "all",
+              })}
+              hrefUngrouped={purchaseListHref({
+                view,
+                sort,
+                by: "group",
+                group: "ungrouped",
+              })}
+              totalInScope={groupNavSummary.totalInScope}
+              ungroupedCount={groupNavSummary.ungroupedCount}
+            />
+          ) : summary.total > 0 ? (
             <PurchaseListCategoryNav
               total={summary.total}
               categories={summary.categories}

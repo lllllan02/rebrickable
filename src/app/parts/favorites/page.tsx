@@ -3,12 +3,16 @@ import Link from "next/link";
 import { FavoritePartsCategoryNav } from "@/app/parts/favorites/favorite-parts-category-nav";
 import { FavoritePartsQuickAdd } from "@/app/parts/favorites/favorite-parts-quick-add";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
+import { PartsGroupNav } from "@/app/parts/parts-group-nav";
+import { PartsNavModeSwitch } from "@/app/parts/parts-nav-mode-switch";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import {
   FAVORITE_PARTS_PAGE_SIZE,
   loadFavoriteCategoryLabel,
   loadFavoriteCategorySummary,
+  loadFavoritePartNumList,
   loadFavoritePartsPage,
 } from "@/lib/load-favorite-parts";
 import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
@@ -17,12 +21,27 @@ import {
   parseOwnedCategoryParam,
   type OwnedCategoryFilter,
 } from "@/lib/owned-parts-category";
+import {
+  isPartGroupFilterValid,
+  loadPartGroupById,
+  loadPartGroupNavSummary,
+  parsePartGroupFilter,
+  parsePartsNavMode,
+  partGroupFilterQueryValue,
+  resolveGroupPartNumConstraint,
+  type PartGroupFilter,
+} from "@/lib/part-groups";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
-  searchParams: Promise<{ page?: string; cat?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    cat?: string;
+    group?: string;
+    by?: string;
+  }>;
 };
 
 function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
@@ -31,15 +50,77 @@ function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
   return parsed;
 }
 
+function favoritesHref(opts: {
+  by?: "cat" | "group";
+  cat?: OwnedCategoryFilter;
+  group?: PartGroupFilter;
+  page?: number;
+}): string {
+  const u = new URLSearchParams();
+  const by = opts.by ?? "cat";
+  if (by === "group") {
+    u.set("by", "group");
+    const group = opts.group ?? "all";
+    if (group !== "all") u.set("group", partGroupFilterQueryValue(group));
+  } else {
+    const cat = opts.cat ?? "all";
+    if (cat !== "all") u.set("cat", ownedCategoryQueryValue(cat));
+  }
+  if (opts.page != null && opts.page > 1) u.set("page", String(opts.page));
+  const s = u.toString();
+  return s ? `/parts/favorites?${s}` : "/parts/favorites";
+}
+
 export default async function FavoritePartsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  const catFilter = parseCatFilter(sp.cat);
+  const navMode = parsePartsNavMode(sp.by);
+  const catFilter =
+    navMode === "cat" ? parseCatFilter(sp.cat) : ("all" as const);
 
-  const [summary, pageResult, categoryLabel] = await Promise.all([
+  const parsedGroup = parsePartGroupFilter(sp.group);
+  const invalidGroupParam =
+    navMode === "group" &&
+    parsedGroup == null &&
+    (sp.group ?? "").trim() !== "";
+  const groupFilter: PartGroupFilter =
+    navMode === "group" ? (parsedGroup ?? "all") : "all";
+  const groupValid =
+    navMode !== "group" ||
+    invalidGroupParam ||
+    (await isPartGroupFilterValid(groupFilter));
+
+  const groupConstraint =
+    navMode === "group" && groupValid && !invalidGroupParam
+      ? await resolveGroupPartNumConstraint(groupFilter)
+      : { kind: "none" as const };
+
+  const effectiveConstraint =
+    invalidGroupParam || (navMode === "group" && !groupValid)
+      ? ({ kind: "include", partNums: new Set<string>() } as const)
+      : groupConstraint;
+
+  const catForPage = navMode === "cat" ? catFilter : ("all" as const);
+
+  const [summary, favPartNums, groupMeta] = await Promise.all([
     loadFavoriteCategorySummary(),
-    loadFavoritePartsPage(requestedPage, FAVORITE_PARTS_PAGE_SIZE, catFilter),
-    loadFavoriteCategoryLabel(catFilter),
+    loadFavoritePartNumList(),
+    navMode === "group" && typeof groupFilter === "number"
+      ? loadPartGroupById(groupFilter)
+      : Promise.resolve(null),
+  ]);
+
+  const [pageResult, categoryLabel, groupNavSummary] = await Promise.all([
+    loadFavoritePartsPage(
+      requestedPage,
+      FAVORITE_PARTS_PAGE_SIZE,
+      catForPage,
+      effectiveConstraint
+    ),
+    navMode === "cat"
+      ? loadFavoriteCategoryLabel(catFilter)
+      : Promise.resolve(null),
+    loadPartGroupNavSummary(favPartNums),
   ]);
 
   const { total, page, rows } = pageResult;
@@ -48,14 +129,24 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
     rows.map((r) => r.partNum)
   );
 
+  const groupLabel =
+    navMode !== "group"
+      ? null
+      : groupFilter === "ungrouped"
+        ? "待分组"
+        : groupFilter === "all"
+          ? null
+          : groupMeta?.name.trim() || `分组 ${groupFilter}`;
+
   const qs = (p: number) => {
-    const u = new URLSearchParams();
-    if (catFilter !== "all") {
-      u.set("cat", ownedCategoryQueryValue(catFilter));
-    }
-    if (p > 1) u.set("page", String(p));
-    const s = u.toString();
-    return s ? `?${s}` : "";
+    const href = favoritesHref({
+      by: navMode,
+      cat: catFilter,
+      group: groupFilter,
+      page: p,
+    });
+    const i = href.indexOf("?");
+    return i >= 0 ? href.slice(i) : "";
   };
 
   return (
@@ -69,14 +160,18 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
                 {summary.total > 0 ? (
                   <span className="ml-2 text-sm font-normal tabular-nums text-[var(--muted)]">
                     · {summary.total.toLocaleString("zh-CN")}
-                    {catFilter !== "all" && total !== summary.total
-                      ? ` / 本类 ${total.toLocaleString("zh-CN")}`
+                    {((navMode === "cat" && catFilter !== "all") ||
+                      (navMode === "group" && groupFilter !== "all")) &&
+                    total !== summary.total
+                      ? ` / 当前 ${total.toLocaleString("zh-CN")}`
                       : null}
                   </span>
                 ) : null}
               </h1>
-              {categoryLabel ? (
-                <p className="mt-0.5 text-xs text-[var(--muted)]">{categoryLabel}</p>
+              {categoryLabel || groupLabel ? (
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {[categoryLabel, groupLabel].filter(Boolean).join(" · ")}
+                </p>
               ) : null}
             </div>
             <Link
@@ -86,6 +181,12 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
               ← 零件目录
             </Link>
           </div>
+
+          {invalidGroupParam || (navMode === "group" && !groupValid) ? (
+            <p className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
+              分组不存在或已删除，请从侧栏重新选择。
+            </p>
+          ) : null}
 
           {summary.total === 0 ? (
             <p className="text-sm text-[var(--muted)]">
@@ -100,9 +201,9 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
             </p>
           ) : total === 0 ? (
             <p className="text-sm text-[var(--muted)]">
-              当前分类下没有收藏零件。
+              当前筛选下没有收藏零件。
               <Link
-                href="/parts/favorites"
+                href={favoritesHref({ by: navMode, cat: "all", group: "all" })}
                 className="ml-1 text-[var(--accent)] underline underline-offset-2"
               >
                 查看全部
@@ -110,7 +211,7 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
             </p>
           ) : (
             <>
-              <ul className="tiles-grid" role="list">
+              <PartsDraggableGrid enabled={navMode === "group"}>
                 {rows.map((r) => {
                   const title = [
                     r.partNum,
@@ -118,7 +219,11 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
                     r.isPrinted ? "印刷件" : "普通零件",
                   ].join(" · ");
                   return (
-                    <li key={r.partNum} className="min-w-0">
+                    <li
+                      key={r.partNum}
+                      className="min-w-0"
+                      data-part-num={r.partNum}
+                    >
                       <PartGridTileLink
                         href={`/parts/${encodeURIComponent(r.partNum)}`}
                         titleAttr={title}
@@ -151,7 +256,7 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
                     </li>
                   );
                 })}
-              </ul>
+              </PartsDraggableGrid>
               {totalPages > 1 ? (
                 <div className="flex justify-end">
                   <nav aria-label="分页" className="pagination-shell">
@@ -213,7 +318,29 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
 
         <aside className="space-y-3 lg:sticky lg:top-20">
           <FavoritePartsQuickAdd />
-          {summary.total > 0 ? (
+          <PartsNavModeSwitch
+            mode={navMode}
+            hrefCat={favoritesHref({ by: "cat", cat: "all" })}
+            hrefGroup={favoritesHref({ by: "group", group: "all" })}
+          />
+          {navMode === "group" ? (
+            <PartsGroupNav
+              groups={groupNavSummary.groups.map((g) => ({
+                ...g,
+                href: favoritesHref({ by: "group", group: g.id }),
+              }))}
+              activeFilter={
+                invalidGroupParam || !groupValid ? "all" : groupFilter
+              }
+              hrefAll={favoritesHref({ by: "group", group: "all" })}
+              hrefUngrouped={favoritesHref({
+                by: "group",
+                group: "ungrouped",
+              })}
+              totalInScope={groupNavSummary.totalInScope}
+              ungroupedCount={groupNavSummary.ungroupedCount}
+            />
+          ) : summary.total > 0 ? (
             <FavoritePartsCategoryNav
               total={summary.total}
               categories={summary.categories}

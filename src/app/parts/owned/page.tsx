@@ -3,12 +3,15 @@ import Link from "next/link";
 import { OwnedPartsCategoryNav } from "@/app/parts/owned/owned-parts-category-nav";
 import { OwnedPartsSortControl } from "@/app/parts/owned/owned-parts-sort-control";
 import { OwnedPartsTiles } from "@/app/parts/owned/owned-parts-tiles";
+import { PartsGroupNav } from "@/app/parts/parts-group-nav";
+import { PartsNavModeSwitch } from "@/app/parts/parts-nav-mode-switch";
 import { ownedPartsHref } from "@/lib/owned-parts-href";
 import {
   OWNED_PARTS_PAGE_SIZE,
   loadOwnedCategoryLabel,
   loadOwnedCategorySummary,
   loadOwnedElementsPage,
+  loadOwnedPartNumList,
   loadOwnedPartsPage,
   parseOwnedSortState,
   parseOwnedViewParam,
@@ -20,6 +23,15 @@ import {
   parseOwnedCategoryParam,
   type OwnedCategoryFilter,
 } from "@/lib/owned-parts-category";
+import {
+  isPartGroupFilterValid,
+  loadPartGroupById,
+  loadPartGroupNavSummary,
+  parsePartGroupFilter,
+  parsePartsNavMode,
+  resolveGroupPartNumConstraint,
+  type PartGroupFilter,
+} from "@/lib/part-groups";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +43,8 @@ type Props = {
     view?: string;
     sort?: string;
     dir?: string;
+    group?: string;
+    by?: string;
   }>;
 };
 
@@ -43,34 +57,72 @@ function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
 export default async function OwnedPartsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
-  const catFilter = parseCatFilter(sp.cat);
+  const navMode = parsePartsNavMode(sp.by);
+  const catFilter =
+    navMode === "cat" ? parseCatFilter(sp.cat) : ("all" as const);
   const view = parseOwnedViewParam(sp.view);
   const sort = parseOwnedSortState(sp.sort, sp.dir);
 
-  const [summary, categoryLabel, partPage, elementPage] = await Promise.all([
+  const parsedGroup = parsePartGroupFilter(sp.group);
+  const invalidGroupParam =
+    navMode === "group" &&
+    parsedGroup == null &&
+    (sp.group ?? "").trim() !== "";
+  const groupFilter: PartGroupFilter =
+    navMode === "group" ? (parsedGroup ?? "all") : "all";
+  const groupValid =
+    navMode !== "group" ||
+    invalidGroupParam ||
+    (await isPartGroupFilterValid(groupFilter));
+
+  const groupConstraint =
+    navMode === "group" && groupValid && !invalidGroupParam
+      ? await resolveGroupPartNumConstraint(groupFilter)
+      : { kind: "none" as const };
+  const effectiveConstraint =
+    invalidGroupParam || (navMode === "group" && !groupValid)
+      ? ({ kind: "include", partNums: new Set<string>() } as const)
+      : groupConstraint;
+
+  const catForPage = navMode === "cat" ? catFilter : ("all" as const);
+
+  const [summary, ownedPartNums, groupMeta] = await Promise.all([
     loadOwnedCategorySummary(),
-    loadOwnedCategoryLabel(catFilter),
-    view === "part"
-      ? loadOwnedPartsPage(
-          requestedPage,
-          OWNED_PARTS_PAGE_SIZE,
-          catFilter,
-          sort
-        )
-      : Promise.resolve({ total: 0, page: 1, rows: [] as OwnedPartPageRow[] }),
-    view === "element"
-      ? loadOwnedElementsPage(
-          requestedPage,
-          OWNED_PARTS_PAGE_SIZE,
-          catFilter,
-          sort
-        )
-      : Promise.resolve({
-          total: 0,
-          page: 1,
-          rows: [] as OwnedElementPageRow[],
-        }),
+    loadOwnedPartNumList(),
+    navMode === "group" && typeof groupFilter === "number"
+      ? loadPartGroupById(groupFilter)
+      : Promise.resolve(null),
   ]);
+
+  const [categoryLabel, partPage, elementPage, groupNavSummary] =
+    await Promise.all([
+      navMode === "cat"
+        ? loadOwnedCategoryLabel(catFilter)
+        : Promise.resolve(null),
+      view === "part"
+        ? loadOwnedPartsPage(
+            requestedPage,
+            OWNED_PARTS_PAGE_SIZE,
+            catForPage,
+            sort,
+            effectiveConstraint
+          )
+        : Promise.resolve({ total: 0, page: 1, rows: [] as OwnedPartPageRow[] }),
+      view === "element"
+        ? loadOwnedElementsPage(
+            requestedPage,
+            OWNED_PARTS_PAGE_SIZE,
+            catForPage,
+            sort,
+            effectiveConstraint
+          )
+        : Promise.resolve({
+            total: 0,
+            page: 1,
+            rows: [] as OwnedElementPageRow[],
+          }),
+      loadPartGroupNavSummary(ownedPartNums),
+    ]);
 
   const total = view === "element" ? elementPage.total : partPage.total;
   const page = view === "element" ? elementPage.page : partPage.page;
@@ -79,6 +131,23 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
     view === "part"
       ? await loadPurchaseListPartNums(partPage.rows.map((r) => r.partNum))
       : new Set<string>();
+
+  const groupLabel =
+    navMode !== "group"
+      ? null
+      : groupFilter === "ungrouped"
+        ? "待分组"
+        : groupFilter === "all"
+          ? null
+          : groupMeta?.name.trim() || `分组 ${groupFilter}`;
+
+  const hrefOpts = {
+    view,
+    cat: catFilter,
+    sort,
+    by: navMode,
+    group: groupFilter,
+  } as const;
 
   return (
     <div className="page-stack">
@@ -95,17 +164,22 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                       ? ` · ${summary.stats.totalQty.toLocaleString("zh-CN")} 粒`
                       : null}
                     {view === "element" && total > 0
-                      ? catFilter !== "all"
-                        ? ` / 本类 ${total.toLocaleString("zh-CN")} 元素`
+                      ? (navMode === "cat" && catFilter !== "all") ||
+                        (navMode === "group" && groupFilter !== "all")
+                        ? ` / 当前 ${total.toLocaleString("zh-CN")} 元素`
                         : ` · ${total.toLocaleString("zh-CN")} 元素`
-                      : catFilter !== "all" && total !== summary.total
-                        ? ` / 本类 ${total.toLocaleString("zh-CN")}`
+                      : ((navMode === "cat" && catFilter !== "all") ||
+                            (navMode === "group" && groupFilter !== "all")) &&
+                          total !== summary.total
+                        ? ` / 当前 ${total.toLocaleString("zh-CN")}`
                         : null}
                   </span>
                 ) : null}
               </h1>
-              {categoryLabel ? (
-                <p className="mt-0.5 text-xs text-[var(--muted)]">{categoryLabel}</p>
+              {categoryLabel || groupLabel ? (
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {[categoryLabel, groupLabel].filter(Boolean).join(" · ")}
+                </p>
               ) : null}
             </div>
             <Link
@@ -116,6 +190,12 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
             </Link>
           </div>
 
+          {invalidGroupParam || (navMode === "group" && !groupValid) ? (
+            <p className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)]">
+              分组不存在或已删除，请从侧栏重新选择。
+            </p>
+          ) : null}
+
           {summary.total > 0 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <div
@@ -124,7 +204,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                 aria-label="展示粒度"
               >
                 <Link
-                  href={ownedPartsHref({ view: "part", cat: catFilter, sort })}
+                  href={ownedPartsHref({ ...hrefOpts, view: "part" })}
                   aria-current={view === "part" ? "page" : undefined}
                   className={`rounded px-2.5 py-1 transition-colors ${
                     view === "part"
@@ -135,11 +215,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                   零件
                 </Link>
                 <Link
-                  href={ownedPartsHref({
-                    view: "element",
-                    cat: catFilter,
-                    sort,
-                  })}
+                  href={ownedPartsHref({ ...hrefOpts, view: "element" })}
                   aria-current={view === "element" ? "page" : undefined}
                   className={`rounded px-2.5 py-1 transition-colors ${
                     view === "element"
@@ -154,6 +230,8 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                 view={view}
                 cat={catFilter}
                 sortState={sort}
+                by={navMode}
+                group={groupFilter}
               />
             </div>
           ) : null}
@@ -171,9 +249,15 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
             </p>
           ) : total === 0 ? (
             <p className="text-sm text-[var(--muted)]">
-              当前分类下没有零件库记录。
+              当前筛选下没有零件库记录。
               <Link
-                href={ownedPartsHref({ view, cat: "all", sort })}
+                href={ownedPartsHref({
+                  view,
+                  cat: "all",
+                  sort,
+                  by: navMode,
+                  group: "all",
+                })}
                 className="ml-1 text-[var(--accent)] underline underline-offset-2"
               >
                 查看全部
@@ -186,6 +270,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                 partRows={partPage.rows}
                 elementRows={elementPage.rows}
                 purchasePartNums={purchasePartNums}
+                dragEnabled={navMode === "group"}
               />
               {totalPages > 1 ? (
                 <div className="flex justify-end">
@@ -193,9 +278,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                     {page > 1 ? (
                       <Link
                         href={ownedPartsHref({
-                          view,
-                          cat: catFilter,
-                          sort,
+                          ...hrefOpts,
                           page: page - 1,
                         })}
                         className="pager-link shrink-0"
@@ -227,9 +310,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                           <Link
                             key={`p-${item}`}
                             href={ownedPartsHref({
-                              view,
-                              cat: catFilter,
-                              sort,
+                              ...hrefOpts,
                               page: item,
                             })}
                             className="pager-link inline-flex min-w-[1.75rem] justify-center"
@@ -242,9 +323,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                     {page < totalPages ? (
                       <Link
                         href={ownedPartsHref({
-                          view,
-                          cat: catFilter,
-                          sort,
+                          ...hrefOpts,
                           page: page + 1,
                         })}
                         className="pager-link shrink-0"
@@ -262,7 +341,51 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-20">
-          {summary.total > 0 ? (
+          <PartsNavModeSwitch
+            mode={navMode}
+            hrefCat={ownedPartsHref({
+              view,
+              cat: "all",
+              sort,
+              by: "cat",
+            })}
+            hrefGroup={ownedPartsHref({
+              view,
+              sort,
+              by: "group",
+              group: "all",
+            })}
+          />
+          {navMode === "group" ? (
+            <PartsGroupNav
+              groups={groupNavSummary.groups.map((g) => ({
+                ...g,
+                href: ownedPartsHref({
+                  view,
+                  sort,
+                  by: "group",
+                  group: g.id,
+                }),
+              }))}
+              activeFilter={
+                invalidGroupParam || !groupValid ? "all" : groupFilter
+              }
+              hrefAll={ownedPartsHref({
+                view,
+                sort,
+                by: "group",
+                group: "all",
+              })}
+              hrefUngrouped={ownedPartsHref({
+                view,
+                sort,
+                by: "group",
+                group: "ungrouped",
+              })}
+              totalInScope={groupNavSummary.totalInScope}
+              ungroupedCount={groupNavSummary.ungroupedCount}
+            />
+          ) : summary.total > 0 ? (
             <OwnedPartsCategoryNav
               total={summary.total}
               categories={summary.categories}

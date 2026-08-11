@@ -8,22 +8,37 @@ import {
   type OwnedSortState,
 } from "@/lib/owned-parts-sort";
 import type { PurchaseViewMode } from "@/lib/load-purchase-list";
+import {
+  partGroupFilterQueryValue,
+  type PartGroupFilter,
+  type PartsNavMode,
+} from "@/lib/part-groups-shared";
 
 export function purchaseListHref(opts: {
   view?: PurchaseViewMode;
   cat?: OwnedCategoryFilter;
   sort?: OwnedSortState;
   page?: number;
+  by?: PartsNavMode;
+  group?: PartGroupFilter | null;
 }): string {
   const u = new URLSearchParams();
   const view = opts.view ?? "part";
+  const by = opts.by ?? "cat";
   const cat = opts.cat ?? "all";
   const sort = opts.sort ?? OWNED_DEFAULT_SORT;
   const page = opts.page ?? 1;
 
-  if (cat !== "all") {
+  if (by === "group") {
+    u.set("by", "group");
+    const group = opts.group ?? "all";
+    if (group !== "all") {
+      u.set("group", partGroupFilterQueryValue(group));
+    }
+  } else if (cat !== "all") {
     u.set("cat", ownedCategoryQueryValue(cat));
   }
+
   if (view === "element") {
     u.set("view", "element");
   }

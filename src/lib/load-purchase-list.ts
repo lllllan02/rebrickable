@@ -27,6 +27,10 @@ import {
 import type { OwnedCategoryFilter } from "@/lib/owned-parts-category";
 import type { OwnedSortDir, OwnedSortState } from "@/lib/owned-parts-sort";
 import { OWNED_DEFAULT_SORT } from "@/lib/owned-parts-sort";
+import {
+  filterRowsByGroupConstraint,
+  type GroupPartNumConstraint,
+} from "@/lib/part-groups";
 
 export const PURCHASE_LIST_PAGE_SIZE = 40;
 
@@ -179,6 +183,12 @@ async function loadPurchasePartCatByNum(
 
   for (const r of partCatRows) catByPart.set(r.partNum, r.partCatId ?? null);
   return catByPart;
+}
+
+/** 购买清单全部零件号（供自定义分组侧栏计数） */
+export async function loadPurchasePartNumList(): Promise<string[]> {
+  const aggs = await loadAllPurchasePartAggs();
+  return aggs.map((r) => r.partNum);
 }
 
 async function loadAllPurchasePartAggs(): Promise<PurchasePartAgg[]> {
@@ -415,7 +425,8 @@ export async function loadPurchasePartsPage(
   page: number,
   pageSize = PURCHASE_LIST_PAGE_SIZE,
   catFilter: OwnedCategoryFilter = "all",
-  sort: OwnedSortState = OWNED_DEFAULT_SORT
+  sort: OwnedSortState = OWNED_DEFAULT_SORT,
+  groupConstraint: GroupPartNumConstraint = { kind: "none" }
 ): Promise<{ total: number; page: number; rows: PurchasePartPageRow[] }> {
   const allAggs = await loadAllPurchasePartAggs();
   if (allAggs.length === 0) {
@@ -428,7 +439,10 @@ export async function loadPurchasePartsPage(
     ? await loadPurchasePartCatByNum(allPartNums)
     : new Map<string, number | null>();
 
-  const filtered = filterAggsByCat(allAggs, catByPart, catFilter);
+  const filtered = filterRowsByGroupConstraint(
+    filterAggsByCat(allAggs, catByPart, catFilter),
+    groupConstraint
+  );
   if (filtered.length === 0) {
     return { total: 0, page: 1, rows: [] };
   }
@@ -518,7 +532,8 @@ export async function loadPurchaseElementsPage(
   page: number,
   pageSize = PURCHASE_LIST_PAGE_SIZE,
   catFilter: OwnedCategoryFilter = "all",
-  sort: OwnedSortState = OWNED_DEFAULT_SORT
+  sort: OwnedSortState = OWNED_DEFAULT_SORT,
+  groupConstraint: GroupPartNumConstraint = { kind: "none" }
 ): Promise<{ total: number; page: number; rows: PurchaseElementPageRow[] }> {
   const userDb = getUserDb();
   const allRows = await userDb
@@ -552,7 +567,10 @@ export async function loadPurchaseElementsPage(
     ? await loadPurchasePartCatByNum(partNumsAll)
     : new Map<string, number | null>();
 
-  const filtered = filterRowsByCat(baseRows, catByPart, catFilter);
+  const filtered = filterRowsByGroupConstraint(
+    filterRowsByCat(baseRows, catByPart, catFilter),
+    groupConstraint
+  );
   if (filtered.length === 0) {
     return { total: 0, page: 1, rows: [] };
   }

@@ -1,4 +1,5 @@
 import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
+import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { elementDomId } from "@/lib/dom-anchors";
@@ -21,11 +22,13 @@ export function OwnedPartsTiles({
   partRows,
   elementRows,
   purchasePartNums,
+  dragEnabled = false,
 }: {
   view: OwnedViewMode;
   partRows: OwnedPartPageRow[];
   elementRows: OwnedElementPageRow[];
   purchasePartNums?: Set<string>;
+  dragEnabled?: boolean;
 }) {
   if (view === "part") {
     if (partRows.length === 0) {
@@ -34,7 +37,7 @@ export function OwnedPartsTiles({
       );
     }
     return (
-      <ul className="tiles-grid" role="list">
+      <PartsDraggableGrid enabled={dragEnabled}>
         {partRows.map((r) => {
           const title = [
             r.partNum,
@@ -43,7 +46,11 @@ export function OwnedPartsTiles({
             r.isPrinted ? "印刷件" : "普通零件",
           ].join(" · ");
           return (
-            <li key={r.partNum} className="min-w-0">
+            <li
+              key={r.partNum}
+              className="min-w-0"
+              data-part-num={r.partNum}
+            >
               <PartGridTileLink
                 href={`/parts/${encodeURIComponent(r.partNum)}`}
                 titleAttr={title}
@@ -72,7 +79,7 @@ export function OwnedPartsTiles({
             </li>
           );
         })}
-      </ul>
+      </PartsDraggableGrid>
     );
   }
 
@@ -117,7 +124,6 @@ export function OwnedPartsTiles({
                 {r.colorName}
               </p>
             </PartGridTileLink>
-            {/* 放在 Link 外，避免点击输入框触发详情跳转 */}
             <div className="absolute right-0.5 top-0.5 z-[3]">
               <OwnedElementQtyInput
                 partNum={r.partNum}

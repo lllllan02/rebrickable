@@ -6,6 +6,7 @@ import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 import { CopyableId } from "@/components/copyable-id";
 import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PartGroupAssign } from "@/app/parts/part-group-assign";
 import { PurchaseColorQtyInput } from "@/app/parts/purchase/purchase-color-qty-input";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { getCatalogDb } from "@/db/client";
@@ -19,6 +20,7 @@ import {
   isPartInPurchaseList,
   loadPurchaseQtyByColorForPart,
 } from "@/lib/load-purchase-list";
+import { loadGroupIdsForPart } from "@/lib/part-groups";
 import {
   colors,
   elements,
@@ -71,6 +73,7 @@ export default async function PartDetailPage({ params }: Props) {
     favorite,
     inPurchaseList,
     purchaseQtyByColor,
+    partGroupIds,
   ] = await Promise.all([
       catalogDb
         .select({
@@ -136,6 +139,7 @@ export default async function PartDetailPage({ params }: Props) {
       isPartFavorite(partNum),
       isPartInPurchaseList(partNum),
       loadPurchaseQtyByColorForPart(partNum),
+      loadGroupIdsForPart(partNum),
     ]);
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
@@ -231,6 +235,10 @@ export default async function PartDetailPage({ params }: Props) {
                   />
                 </div>
                 <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5">
+                  <PartGroupAssign
+                    partNum={row.partNum}
+                    initialGroupIds={partGroupIds}
+                  />
                   {inPurchaseList ? (
                     <Link
                       href="/parts/purchase"

@@ -27,6 +27,10 @@ import {
 import type { OwnedCategoryFilter } from "@/lib/owned-parts-category";
 import type { OwnedSortDir, OwnedSortKey, OwnedSortState } from "@/lib/owned-parts-sort";
 import { OWNED_DEFAULT_SORT } from "@/lib/owned-parts-sort";
+import {
+  filterRowsByGroupConstraint,
+  type GroupPartNumConstraint,
+} from "@/lib/part-groups";
 
 export const OWNED_PARTS_PAGE_SIZE = 40;
 
@@ -114,6 +118,12 @@ async function loadOwnedPartCatByNum(
 
   for (const r of partCatRows) catByPart.set(r.partNum, r.partCatId ?? null);
   return catByPart;
+}
+
+/** 零件库全部零件号（供自定义分组侧栏计数） */
+export async function loadOwnedPartNumList(): Promise<string[]> {
+  const aggs = await loadAllOwnedPartAggs();
+  return aggs.map((r) => r.partNum);
 }
 
 async function loadAllOwnedPartAggs(): Promise<OwnedPartAgg[]> {
@@ -355,7 +365,8 @@ export async function loadOwnedPartsPage(
   page: number,
   pageSize = OWNED_PARTS_PAGE_SIZE,
   catFilter: OwnedCategoryFilter = "all",
-  sort: OwnedSortState = OWNED_DEFAULT_SORT
+  sort: OwnedSortState = OWNED_DEFAULT_SORT,
+  groupConstraint: GroupPartNumConstraint = { kind: "none" }
 ): Promise<{ total: number; page: number; rows: OwnedPartPageRow[] }> {
   const allAggs = await loadAllOwnedPartAggs();
   if (allAggs.length === 0) {
@@ -368,7 +379,10 @@ export async function loadOwnedPartsPage(
     ? (await loadOwnedPartCatByNum(allPartNums))
     : new Map<string, number | null>();
 
-  const filtered = filterOwnedAggsByCat(allAggs, catByPart, catFilter);
+  const filtered = filterRowsByGroupConstraint(
+    filterOwnedAggsByCat(allAggs, catByPart, catFilter),
+    groupConstraint
+  );
   if (filtered.length === 0) {
     return { total: 0, page: 1, rows: [] };
   }
@@ -456,7 +470,8 @@ export async function loadOwnedElementsPage(
   page: number,
   pageSize = OWNED_PARTS_PAGE_SIZE,
   catFilter: OwnedCategoryFilter = "all",
-  sort: OwnedSortState = OWNED_DEFAULT_SORT
+  sort: OwnedSortState = OWNED_DEFAULT_SORT,
+  groupConstraint: GroupPartNumConstraint = { kind: "none" }
 ): Promise<{ total: number; page: number; rows: OwnedElementPageRow[] }> {
   const userDb = getUserDb();
   const allRows = await userDb
@@ -487,7 +502,10 @@ export async function loadOwnedElementsPage(
     ? await loadOwnedPartCatByNum(partNumsAll)
     : new Map<string, number | null>();
 
-  const filtered = filterOwnedColorRowsByCat(baseRows, catByPart, catFilter);
+  const filtered = filterRowsByGroupConstraint(
+    filterOwnedColorRowsByCat(baseRows, catByPart, catFilter),
+    groupConstraint
+  );
   if (filtered.length === 0) {
     return { total: 0, page: 1, rows: [] };
   }

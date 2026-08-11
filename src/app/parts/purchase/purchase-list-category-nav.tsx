@@ -60,14 +60,19 @@ export function PurchaseListCategoryNav({
       <h2 className="text-xs font-semibold text-[var(--text)]">分类</h2>
       <div className="mt-2 max-h-[min(28rem,55vh)] space-y-0.5 overflow-y-auto pr-0.5">
         <NavRow
-          href={purchaseListHref({ view, cat: "all", sort })}
+          href={purchaseListHref({ view, cat: "all", sort, by: "cat" })}
           label="全部"
           count={total}
           active={active === "all"}
         />
         {uncategorizedCount > 0 ? (
           <NavRow
-            href={purchaseListHref({ view, cat: "uncategorized", sort })}
+            href={purchaseListHref({
+              view,
+              cat: "uncategorized",
+              sort,
+              by: "cat",
+            })}
             label="未分类"
             count={uncategorizedCount}
             active={active === "uncategorized"}
@@ -76,7 +81,7 @@ export function PurchaseListCategoryNav({
         {categories.map((c) => (
           <NavRow
             key={c.id}
-            href={purchaseListHref({ view, cat: c.id, sort })}
+            href={purchaseListHref({ view, cat: c.id, sort, by: "cat" })}
             label={c.name}
             count={c.count}
             active={active === c.id}

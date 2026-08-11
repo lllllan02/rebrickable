@@ -413,6 +413,36 @@ export const buildFavoriteParts = sqliteTable(
   (t) => [index("build_favorite_parts_marked_idx").on(t.markedAt)]
 );
 
+/** 用户自定义零件分组 */
+export const buildPartGroups = sqliteTable(
+  "build_part_groups",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_part_groups_sort_idx").on(t.sortOrder)]
+);
+
+/** 自定义分组中的零件成员（按零件号；多对多） */
+export const buildPartGroupMembers = sqliteTable(
+  "build_part_group_members",
+  {
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => buildPartGroups.id),
+    partNum: text("part_num").notNull(),
+    addedAt: text("added_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.partNum] }),
+    index("build_part_group_members_part_idx").on(t.partNum),
+    index("build_part_group_members_group_idx").on(t.groupId),
+  ]
+);
+
 /**
  * 购买清单：浏览时按零件号加入；清单页再填数量、可选颜色。
  * 同一 partNum 可有多行（拆色）；colorId 为 null 表示未选色。

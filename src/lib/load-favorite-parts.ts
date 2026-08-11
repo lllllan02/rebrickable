@@ -21,6 +21,10 @@ import {
   parts,
 } from "@/db/schema";
 import type { OwnedCategoryFilter } from "@/lib/owned-parts-category";
+import {
+  filterRowsByGroupConstraint,
+  type GroupPartNumConstraint,
+} from "@/lib/part-groups";
 
 export const FAVORITE_PARTS_PAGE_SIZE = 40;
 
@@ -81,6 +85,12 @@ async function loadAllFavoriteRows(): Promise<FavRow[]> {
     })
     .from(buildFavoriteParts)
     .orderBy(desc(buildFavoriteParts.markedAt), asc(buildFavoriteParts.partNum));
+}
+
+/** 全部收藏零件号（供自定义分组侧栏计数） */
+export async function loadFavoritePartNumList(): Promise<string[]> {
+  const rows = await loadAllFavoriteRows();
+  return rows.map((r) => r.partNum);
 }
 
 async function loadCatByPartNum(
@@ -178,7 +188,8 @@ export async function loadFavoriteCategoryLabel(
 export async function loadFavoritePartsPage(
   page: number,
   pageSize = FAVORITE_PARTS_PAGE_SIZE,
-  catFilter: OwnedCategoryFilter = "all"
+  catFilter: OwnedCategoryFilter = "all",
+  groupConstraint: GroupPartNumConstraint = { kind: "none" }
 ): Promise<{ total: number; page: number; rows: FavoritePartCardRow[] }> {
   const catalogDb = getCatalogDb();
   const allFavRows = await loadAllFavoriteRows();
@@ -192,7 +203,10 @@ export async function loadFavoritePartsPage(
       ? new Map<string, number | null>()
       : await loadCatByPartNum(allFavRows.map((r) => r.partNum));
 
-  const filtered = filterFavRowsByCat(allFavRows, catByPart, catFilter);
+  const filtered = filterRowsByGroupConstraint(
+    filterFavRowsByCat(allFavRows, catByPart, catFilter),
+    groupConstraint
+  );
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
   const safePage = Math.min(totalPages, Math.max(1, page));
