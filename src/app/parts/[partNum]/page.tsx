@@ -6,6 +6,8 @@ import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
 import { CopyableId } from "@/components/copyable-id";
 import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PurchaseColorQtyInput } from "@/app/parts/purchase/purchase-color-qty-input";
+import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { getCatalogDb } from "@/db/client";
 import { elementDomId } from "@/lib/dom-anchors";
 import { isPartFavorite } from "@/lib/load-favorite-parts";
@@ -13,6 +15,10 @@ import {
   loadOwnedQtyByColorForPart,
   loadOwnedQtyForPart,
 } from "@/lib/load-owned-parts";
+import {
+  isPartInPurchaseList,
+  loadPurchaseQtyByColorForPart,
+} from "@/lib/load-purchase-list";
 import {
   colors,
   elements,
@@ -63,6 +69,8 @@ export default async function PartDetailPage({ params }: Props) {
     ownedQty,
     ownedQtyByColor,
     favorite,
+    inPurchaseList,
+    purchaseQtyByColor,
   ] = await Promise.all([
       catalogDb
         .select({
@@ -126,12 +134,47 @@ export default async function PartDetailPage({ params }: Props) {
       loadOwnedQtyForPart(partNum),
       loadOwnedQtyByColorForPart(partNum),
       isPartFavorite(partNum),
+      isPartInPurchaseList(partNum),
+      loadPurchaseQtyByColorForPart(partNum),
     ]);
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
   const thumbByColor = new Map<number, string>();
   for (const t of colorThumbRows) {
     if (t.thumb) thumbByColor.set(t.colorId, t.thumb);
+  }
+
+  let purchaseQtyTotal = 0;
+  for (const q of purchaseQtyByColor.values()) purchaseQtyTotal += q;
+
+  /** 同色多元素合并为一行；保留全部 elementId 供展示与锚点跳转 */
+  type ColorGroup = {
+    colorId: number;
+    colorName: string;
+    rgb: string;
+    elementIds: string[];
+    designIds: string[];
+  };
+  const colorGroups: ColorGroup[] = [];
+  const colorGroupIndex = new Map<number, number>();
+  for (const e of elemRows) {
+    const idx = colorGroupIndex.get(e.colorId);
+    if (idx == null) {
+      colorGroupIndex.set(e.colorId, colorGroups.length);
+      colorGroups.push({
+        colorId: e.colorId,
+        colorName: e.colorName,
+        rgb: e.rgb,
+        elementIds: [e.elementId],
+        designIds: e.designId ? [e.designId] : [],
+      });
+      continue;
+    }
+    const g = colorGroups[idx]!;
+    g.elementIds.push(e.elementId);
+    if (e.designId && !g.designIds.includes(e.designId)) {
+      g.designIds.push(e.designId);
+    }
   }
 
   return (
@@ -177,18 +220,34 @@ export default async function PartDetailPage({ params }: Props) {
                 <p className="mt-1 text-lg">{row.name}</p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <PartFavoriteToggle
-                  partNum={row.partNum}
-                  initialFavorite={favorite}
-                />
-                {favorite ? (
-                  <Link
-                    href="/parts/favorites"
-                    className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
-                  >
-                    查看收藏
-                  </Link>
-                ) : null}
+                <div className="flex items-center gap-1.5">
+                  <PurchaseListAddToggle
+                    partNum={row.partNum}
+                    initialInList={inPurchaseList}
+                  />
+                  <PartFavoriteToggle
+                    partNum={row.partNum}
+                    initialFavorite={favorite}
+                  />
+                </div>
+                <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5">
+                  {inPurchaseList ? (
+                    <Link
+                      href="/parts/purchase"
+                      className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
+                    >
+                      查看购买清单
+                    </Link>
+                  ) : null}
+                  {favorite ? (
+                    <Link
+                      href="/parts/favorites"
+                      className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
+                    >
+                      查看收藏
+                    </Link>
+                  ) : null}
+                </div>
               </div>
             </div>
             <dl className="meta-row mt-4 text-sm">
@@ -204,84 +263,145 @@ export default async function PartDetailPage({ params }: Props) {
                   <dd className="inline">{row.material}</dd>
                 </div>
               ) : null}
-              {ownedQty > 0 ? (
-                <div>
-                  <dt className="inline text-[var(--text)]">零件库：</dt>
-                  <dd className="inline tabular-nums">
-                    {ownedQty.toLocaleString("zh-CN")} 粒 ·{" "}
-                    <Link href="/parts/owned" className="text-[var(--accent)] underline underline-offset-2">
-                      查看清单
-                    </Link>
-                  </dd>
-                </div>
-              ) : null}
+              <div>
+                <dt className="inline text-[var(--text)]">待购：</dt>
+                <dd className="inline tabular-nums">
+                  {purchaseQtyTotal.toLocaleString("zh-CN")} 粒
+                  {inPurchaseList || purchaseQtyTotal > 0 ? (
+                    <>
+                      {" · "}
+                      <Link
+                        href="/parts/purchase"
+                        className="text-[var(--accent)] underline underline-offset-2"
+                      >
+                        购买清单
+                      </Link>
+                    </>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-[var(--text)]">零件库：</dt>
+                <dd className="inline tabular-nums">
+                  {ownedQty.toLocaleString("zh-CN")} 粒
+                  {ownedQty > 0 ? (
+                    <>
+                      {" · "}
+                      <Link
+                        href="/parts/owned"
+                        className="text-[var(--accent)] underline underline-offset-2"
+                      >
+                        查看清单
+                      </Link>
+                    </>
+                  ) : null}
+                </dd>
+              </div>
             </dl>
           </div>
         </div>
       </section>
 
       <section className="space-y-2">
-        <h2 className="section-title">颜色 / 元素</h2>
+        <h2 className="section-title">颜色</h2>
         <ul className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-          {elemRows.map((e) => {
-            const colorThumb = thumbByColor.get(e.colorId);
+          {colorGroups.map((g) => {
+            const colorThumb = thumbByColor.get(g.colorId);
+            const purchaseQty = purchaseQtyByColor.get(g.colorId) ?? 0;
+            const ownedQtyForColor = ownedQtyByColor.get(g.colorId) ?? 0;
             return (
               <li
-                key={e.elementId}
-                id={elementDomId(e.elementId)}
-                className="result-card items-center scroll-mt-24 text-sm"
+                key={g.colorId}
+                className="result-card relative flex-col scroll-mt-24 text-sm"
               >
-                <div className="media-box media-box-sm">
-                  {colorThumb ? (
-                    <Image
-                      src={colorThumb}
-                      alt=""
-                      width={56}
-                      height={56}
-                      className="box-border h-full w-full object-contain p-0.5"
-                      sizes="56px"
-                    />
-                  ) : (
-                    <div
-                      className="flex h-full w-full items-center justify-center text-[10px] leading-tight text-[var(--muted)]"
-                      title="库存中暂无图片"
-                    >
-                      无图
+                {g.elementIds.map((id) => (
+                  <span
+                    key={id}
+                    id={elementDomId(id)}
+                    className="absolute top-0"
+                    aria-hidden
+                  />
+                ))}
+                <div className="flex w-full items-center gap-2.5">
+                  <div className="media-box media-box-sm">
+                    {colorThumb ? (
+                      <Image
+                        src={colorThumb}
+                        alt=""
+                        width={56}
+                        height={56}
+                        className="box-border h-full w-full object-contain p-0.5"
+                        sizes="56px"
+                      />
+                    ) : (
+                      <div
+                        className="flex h-full w-full items-center justify-center text-[10px] leading-tight text-[var(--muted)]"
+                        title="库存中暂无图片"
+                      >
+                        无图
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    className="color-swatch h-8 w-8 shrink-0"
+                    style={{ background: `#${g.rgb}` }}
+                    title={g.rgb}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{g.colorName}</div>
+                    <div className="mt-0.5 font-mono text-xs text-[var(--muted)]">
+                      color {g.colorId}
+                      {g.designIds.length > 0
+                        ? ` · design ${g.designIds.join(", ")}`
+                        : ""}
                     </div>
-                  )}
-                </div>
-                <span
-                  className="color-swatch h-8 w-8 shrink-0"
-                  style={{ background: `#${e.rgb}` }}
-                  title={e.rgb}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium">{e.colorName}</div>
-                  <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1 font-mono text-xs text-[var(--muted)]">
-                    <CopyableId
-                      value={e.elementId}
-                      kind="element_id"
-                      className="shrink-0 whitespace-nowrap text-[var(--text)]"
-                    >
-                      {e.elementId}
-                    </CopyableId>
-                    <span className="min-w-0">
-                      {" · "}color {e.colorId}
-                      {e.designId ? ` · design ${e.designId}` : ""}
-                    </span>
+                  </div>
+                  <div className="flex shrink-0 flex-row items-start justify-end gap-1">
+                    <PurchaseColorQtyInput
+                      partNum={partNum}
+                      colorId={g.colorId}
+                      initialQuantity={purchaseQty}
+                    />
+                    <div className="inline-flex flex-col items-center gap-0.5">
+                      <span
+                        className="text-[9px] leading-none text-[var(--muted)]"
+                        title="零件库"
+                      >
+                        库
+                      </span>
+                      <OwnedElementQtyInput
+                        partNum={partNum}
+                        colorId={g.colorId}
+                        initialQuantity={ownedQtyForColor}
+                      />
+                    </div>
                   </div>
                 </div>
-                <OwnedElementQtyInput
-                  partNum={partNum}
-                  colorId={e.colorId}
-                  initialQuantity={ownedQtyByColor.get(e.colorId) ?? 0}
-                />
+                <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 border-t border-[var(--border)]/60 pt-2 font-mono text-xs text-[var(--muted)]">
+                  <span className="shrink-0 text-[var(--muted-2)]">元素</span>
+                  {g.elementIds.map((id, i) => (
+                    <span key={id} className="inline-flex min-w-0 items-baseline">
+                      {i > 0 ? (
+                        <span className="mr-1.5 text-[var(--muted-2)]" aria-hidden>
+                          ·
+                        </span>
+                      ) : null}
+                      <CopyableId
+                        value={id}
+                        kind="element_id"
+                        className="shrink-0 whitespace-nowrap text-[var(--text)]"
+                      >
+                        {id}
+                      </CopyableId>
+                    </span>
+                  ))}
+                </div>
               </li>
             );
           })}
         </ul>
-        {elemRows.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">暂无元素记录。</p>
+        {colorGroups.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">暂无颜色记录。</p>
         ) : null}
       </section>
 

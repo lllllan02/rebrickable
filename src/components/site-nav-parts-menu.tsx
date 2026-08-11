@@ -8,6 +8,10 @@ function isFavoritesPath(path: string): boolean {
   return path === "/parts/favorites" || path.startsWith("/parts/favorites/");
 }
 
+function isPurchasePath(path: string): boolean {
+  return path === "/parts/purchase" || path.startsWith("/parts/purchase/");
+}
+
 function isOwnedPath(path: string): boolean {
   return path === "/parts/owned" || path.startsWith("/parts/owned/");
 }
@@ -15,13 +19,17 @@ function isOwnedPath(path: string): boolean {
 function isCatalogPath(path: string): boolean {
   return (
     path === "/parts" ||
-    (path.startsWith("/parts/") && !isFavoritesPath(path) && !isOwnedPath(path))
+    (path.startsWith("/parts/") &&
+      !isFavoritesPath(path) &&
+      !isPurchasePath(path) &&
+      !isOwnedPath(path))
   );
 }
 
 const PARTS_ITEMS = [
   { href: "/parts", label: "零件目录", match: isCatalogPath },
   { href: "/parts/favorites", label: "收藏", match: isFavoritesPath },
+  { href: "/parts/purchase", label: "购买清单", match: isPurchasePath },
   { href: "/parts/owned", label: "零件库", match: isOwnedPath },
 ] as const;
 

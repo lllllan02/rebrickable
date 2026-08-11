@@ -413,6 +413,26 @@ export const buildFavoriteParts = sqliteTable(
   (t) => [index("build_favorite_parts_marked_idx").on(t.markedAt)]
 );
 
+/**
+ * 购买清单：浏览时按零件号加入；清单页再填数量、可选颜色。
+ * 同一 partNum 可有多行（拆色）；colorId 为 null 表示未选色。
+ */
+export const buildPurchaseListItems = sqliteTable(
+  "build_purchase_list_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    partNum: text("part_num").notNull(),
+    colorId: integer("color_id"),
+    quantity: integer("quantity").notNull(),
+    addedAt: text("added_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    index("build_purchase_list_part_idx").on(t.partNum),
+    index("build_purchase_list_updated_idx").on(t.updatedAt),
+  ]
+);
+
 /** 官方套装用户记录的可购买好价（元）；与高砖参考价无关 */
 export const buildSetGoodPrices = sqliteTable(
   "build_set_good_prices",

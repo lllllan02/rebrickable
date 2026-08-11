@@ -3,12 +3,14 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { SavedSubjectListRow } from "@/app/build/saved-subject-list-row";
+import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { ColorSwatchResultCard } from "@/components/subject-result-card";
 import { buildImagePublicPath } from "@/lib/build-image-public-path";
 import { BUILD_SUBJECT_MOC, BUILD_SUBJECT_SET } from "@/lib/build-subject";
 import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { runGlobalSearch } from "@/lib/global-search-server";
+import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
 import { mocListHref } from "@/lib/moc-list-href";
 import { likeFragment } from "@/lib/search";
 
@@ -90,6 +92,10 @@ export default async function SearchPage({ searchParams }: Props) {
   ];
 
   const enrich = await enrichSearchSubjectHits(mocIds, setNums);
+  const purchasePartNums = await loadPurchaseListPartNums([
+    ...data.parts.map((h) => h.title),
+    ...data.elements.map((h) => h.partNum),
+  ]);
 
   return (
     <div className="page-stack">
@@ -226,6 +232,15 @@ export default async function SearchPage({ searchParams }: Props) {
                       titleAttr={`${h.title} · ${h.subtitle}`}
                       partNum={h.title}
                       thumbUrl={h.imgUrl}
+                      topRight={
+                        <span className="absolute left-0.5 top-0.5 z-[2]">
+                          <PurchaseListAddToggle
+                            partNum={h.title}
+                            initialInList={purchasePartNums.has(h.title)}
+                            compact
+                          />
+                        </span>
+                      }
                     >
                       {h.subtitle ? (
                         <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-snug text-[var(--muted-2)]">
@@ -282,6 +297,15 @@ export default async function SearchPage({ searchParams }: Props) {
                         titleAttr={titleTip}
                         partNum={h.partNum}
                         thumbUrl={h.imgUrl}
+                        topRight={
+                          <span className="absolute left-0.5 top-0.5 z-[2]">
+                            <PurchaseListAddToggle
+                              partNum={h.partNum}
+                              initialInList={purchasePartNums.has(h.partNum)}
+                              compact
+                            />
+                          </span>
+                        }
                       >
                         <p className="mt-0.5 line-clamp-2 px-0.5 text-center font-mono text-[8px] leading-tight text-[var(--accent)]">
                           {h.title}

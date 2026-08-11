@@ -1,12 +1,12 @@
-import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
-import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
+"use client";
+
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { elementDomId } from "@/lib/dom-anchors";
 import type {
-  OwnedElementPageRow,
-  OwnedPartPageRow,
-  OwnedViewMode,
-} from "@/lib/load-owned-parts";
+  PurchaseElementPageRow,
+  PurchasePartPageRow,
+  PurchaseViewMode,
+} from "@/lib/load-purchase-list";
 
 function QtyBadge({ qty }: { qty: number }) {
   return (
@@ -16,21 +16,33 @@ function QtyBadge({ qty }: { qty: number }) {
   );
 }
 
-export function OwnedPartsTiles({
+function PendingDot() {
+  return (
+    <span
+      className="pointer-events-none absolute left-1 top-1 z-[2] h-2 w-2 rounded-full bg-amber-300/90 ring-1 ring-[var(--border)]"
+      title="待选色"
+      aria-label="待选色"
+    />
+  );
+}
+
+export function PurchaseListTiles({
   view,
   partRows,
   elementRows,
-  purchasePartNums,
+  selectedIds,
+  onToggleSelect,
 }: {
-  view: OwnedViewMode;
-  partRows: OwnedPartPageRow[];
-  elementRows: OwnedElementPageRow[];
-  purchasePartNums?: Set<string>;
+  view: PurchaseViewMode;
+  partRows: PurchasePartPageRow[];
+  elementRows: PurchaseElementPageRow[];
+  selectedIds: Set<number>;
+  onToggleSelect: (id: number) => void;
 }) {
   if (view === "part") {
     if (partRows.length === 0) {
       return (
-        <p className="text-sm text-[var(--muted)]">当前分类下没有零件库记录。</p>
+        <p className="text-sm text-[var(--muted)]">当前分类下没有购买清单记录。</p>
       );
     }
     return (
@@ -39,9 +51,11 @@ export function OwnedPartsTiles({
           const title = [
             r.partNum,
             r.name,
-            `${r.totalQty} 粒`,
+            r.pendingColor ? "待选色" : `${r.totalQty} 粒`,
             r.isPrinted ? "印刷件" : "普通零件",
-          ].join(" · ");
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
             <li key={r.partNum} className="min-w-0">
               <PartGridTileLink
@@ -52,16 +66,8 @@ export function OwnedPartsTiles({
                 isPrinted={r.isPrinted}
                 topRight={
                   <>
-                    {purchasePartNums ? (
-                      <span className="absolute left-0.5 top-0.5 z-[2]">
-                        <PurchaseListAddToggle
-                          partNum={r.partNum}
-                          initialInList={purchasePartNums.has(r.partNum)}
-                          compact
-                        />
-                      </span>
-                    ) : null}
-                    <QtyBadge qty={r.totalQty} />
+                    {r.pendingColor ? <PendingDot /> : null}
+                    {r.totalQty > 0 ? <QtyBadge qty={r.totalQty} /> : null}
                   </>
                 }
               >
@@ -78,7 +84,9 @@ export function OwnedPartsTiles({
 
   if (elementRows.length === 0) {
     return (
-      <p className="text-sm text-[var(--muted)]">当前分类下没有元素库存记录。</p>
+      <p className="text-sm text-[var(--muted)]">
+        暂无已选色的待购行。请到零件详情为颜色填写待购数量。
+      </p>
     );
   }
 
@@ -97,16 +105,14 @@ export function OwnedPartsTiles({
           `${r.quantity} 粒`,
         ].join(" · ");
         return (
-          <li
-            key={`${r.partNum}-${r.colorId}-${r.elementId ?? "x"}`}
-            className="relative min-w-0"
-          >
+          <li key={r.id} className="relative min-w-0">
             <PartGridTileLink
               href={href}
               titleAttr={title}
               partNum={label}
               thumbUrl={r.thumbUrl}
               isPrinted={r.isPrinted}
+              topRight={<QtyBadge qty={r.quantity} />}
             >
               <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-[var(--muted-2)]">
                 <span
@@ -117,15 +123,19 @@ export function OwnedPartsTiles({
                 {r.colorName}
               </p>
             </PartGridTileLink>
-            {/* 放在 Link 外，避免点击输入框触发详情跳转 */}
-            <div className="absolute right-0.5 top-0.5 z-[3]">
-              <OwnedElementQtyInput
-                partNum={r.partNum}
-                colorId={r.colorId}
-                initialQuantity={r.quantity}
-                compact
+            <label
+              className="absolute left-0.5 top-0.5 z-[3] inline-flex"
+              title="选中以转入零件库"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.has(r.id)}
+                aria-label="选中以转入零件库"
+                className="h-3.5 w-3.5 accent-[var(--accent)]"
+                onChange={() => onToggleSelect(r.id)}
+                onClick={(e) => e.stopPropagation()}
               />
-            </div>
+            </label>
           </li>
         );
       })}

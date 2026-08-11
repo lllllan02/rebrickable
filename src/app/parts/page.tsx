@@ -21,6 +21,7 @@ import { AutoSubmitSelect } from "@/components/auto-submit-select";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { RemoteCoverImage } from "@/components/remote-cover-image";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { getCatalogDb } from "@/db/client";
 import {
   elements,
@@ -30,6 +31,7 @@ import {
   parts,
 } from "@/db/schema";
 import { loadFavoritePartNums } from "@/lib/load-favorite-parts";
+import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 import { likeFragment } from "@/lib/search";
 
@@ -238,6 +240,15 @@ export default async function PartsPage({ searchParams }: Props) {
                 <span className="text-xs text-[var(--muted)]">已收藏的零件清单</span>
               </Link>
               <Link
+                href="/parts/purchase"
+                className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
+              >
+                <span className="text-sm font-semibold text-[var(--text)]">购买清单</span>
+                <span className="text-xs text-[var(--muted)]">
+                  待购零件（填数量/颜色后再转入零件库）
+                </span>
+              </Link>
+              <Link
                 href="/parts/owned"
                 className="result-card inline-flex min-w-[min(100%,14rem)] flex-col gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-3)]"
               >
@@ -353,8 +364,9 @@ export default async function PartsPage({ searchParams }: Props) {
   const matchedElementsByPart = new Map<string, string[]>();
   const elementMatchTruncated = new Set<string>();
   let favoritePartNums = new Set<string>();
+  let purchasePartNums = new Set<string>();
   if (partNums.length > 0) {
-    const [thumbRows, countRows, colorRows, printedRows, matchRows, favSet] =
+    const [thumbRows, countRows, colorRows, printedRows, matchRows, favSet, purchaseSet] =
       await Promise.all([
         db
           .select({
@@ -415,8 +427,10 @@ export default async function PartsPage({ searchParams }: Props) {
               [] as { partNum: string; elementId: string }[]
             ),
         loadFavoritePartNums(partNums),
+        loadPurchaseListPartNums(partNums),
       ]);
     favoritePartNums = favSet;
+    purchasePartNums = purchaseSet;
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
@@ -470,6 +484,12 @@ export default async function PartsPage({ searchParams }: Props) {
               className="text-[var(--accent)] underline-offset-2 hover:underline"
             >
               收藏
+            </Link>
+            <Link
+              href="/parts/purchase"
+              className="text-[var(--accent)] underline-offset-2 hover:underline"
+            >
+              购买清单
             </Link>
             <Link
               href="/parts"
@@ -559,13 +579,22 @@ export default async function PartsPage({ searchParams }: Props) {
                 thumbUrl={thumb}
                 isPrinted={isPrinted}
                 topRight={
-                  <span className="absolute right-0.5 top-0.5 z-[2]">
-                    <PartFavoriteToggle
-                      partNum={r.partNum}
-                      initialFavorite={favoritePartNums.has(r.partNum)}
-                      compact
-                    />
-                  </span>
+                  <>
+                    <span className="absolute left-0.5 top-0.5 z-[2]">
+                      <PurchaseListAddToggle
+                        partNum={r.partNum}
+                        initialInList={purchasePartNums.has(r.partNum)}
+                        compact
+                      />
+                    </span>
+                    <span className="absolute right-0.5 top-0.5 z-[2]">
+                      <PartFavoriteToggle
+                        partNum={r.partNum}
+                        initialFavorite={favoritePartNums.has(r.partNum)}
+                        compact
+                      />
+                    </span>
+                  </>
                 }
               >
                 {colorCount > 0 || elemCount > 0 ? (

@@ -55,6 +55,8 @@ import {
   sortFulfillmentSheetItems,
   type FulfillmentSheetSortState,
 } from "@/lib/fulfillment-sheet-list-sort";
+import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
+import { loadPurchaseListPartNumsAction } from "@/app/parts/purchase/purchase-list-actions";
 
 function substituteRelBadgeLabel(t: "A" | "M"): string {
   return t === "A" ? "替代" : "模具";
@@ -1524,6 +1526,32 @@ export function MocPartsList({
     return sortFulfillmentSheetItems(listFiltered, fulfillmentSortState);
   }, [fulfillmentSortEnabled, listFiltered, fulfillmentSortState]);
 
+  const [purchasePartNums, setPurchasePartNums] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  useEffect(() => {
+    const partNums = [
+      ...new Set(
+        listDisplayed
+          .map((r) => r.partNum.trim())
+          .filter((pn) => pn.length > 0)
+      ),
+    ];
+    if (partNums.length === 0) {
+      setPurchasePartNums(new Set());
+      return;
+    }
+    let cancelled = false;
+    void loadPurchaseListPartNumsAction({ partNums }).then((res) => {
+      if (cancelled || !res.ok) return;
+      setPurchasePartNums(new Set(res.partNums));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [listDisplayed]);
+
   const totalPartQty = useMemo(() => {
     if (!shortageListMode && typeof totalPartQtyProp === "number" && Number.isFinite(totalPartQtyProp)) {
       return totalPartQtyProp;
@@ -1828,15 +1856,25 @@ export function MocPartsList({
             }
 
             return (
-              <button
-                key={key}
-                type="button"
-                title={title}
-                className={tileClass}
-                onClick={openDetail}
-              >
-                {inner}
-              </button>
+              <div key={key} className="relative min-w-0">
+                <button
+                  type="button"
+                  title={title}
+                  className={tileClass}
+                  onClick={openDetail}
+                >
+                  {inner}
+                </button>
+                {r.partFound && r.partNum.trim() ? (
+                  <span className="absolute bottom-0.5 left-0.5 z-[3]">
+                    <PurchaseListAddToggle
+                      partNum={r.partNum.trim()}
+                      initialInList={purchasePartNums.has(r.partNum.trim())}
+                      compact
+                    />
+                  </span>
+                ) : null}
+              </div>
             );
           })}
         </div>

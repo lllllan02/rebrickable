@@ -1,25 +1,24 @@
 import Link from "next/link";
 
-import { OwnedPartsCategoryNav } from "@/app/parts/owned/owned-parts-category-nav";
-import { OwnedPartsSortControl } from "@/app/parts/owned/owned-parts-sort-control";
-import { OwnedPartsTiles } from "@/app/parts/owned/owned-parts-tiles";
-import { ownedPartsHref } from "@/lib/owned-parts-href";
+import { PurchaseListCategoryNav } from "@/app/parts/purchase/purchase-list-category-nav";
+import { PurchaseListClient } from "@/app/parts/purchase/purchase-list-client";
+import { PurchaseListSortControl } from "@/app/parts/purchase/purchase-list-sort-control";
+import { purchaseListHref } from "@/lib/purchase-list-href";
 import {
-  OWNED_PARTS_PAGE_SIZE,
-  loadOwnedCategoryLabel,
-  loadOwnedCategorySummary,
-  loadOwnedElementsPage,
-  loadOwnedPartsPage,
-  parseOwnedSortState,
-  parseOwnedViewParam,
-  type OwnedElementPageRow,
-  type OwnedPartPageRow,
-} from "@/lib/load-owned-parts";
-import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
+  PURCHASE_LIST_PAGE_SIZE,
+  loadPurchaseCategoryLabel,
+  loadPurchaseCategorySummary,
+  loadPurchaseElementsPage,
+  loadPurchasePartsPage,
+  parsePurchaseViewParam,
+  type PurchaseElementPageRow,
+  type PurchasePartPageRow,
+} from "@/lib/load-purchase-list";
 import {
   parseOwnedCategoryParam,
   type OwnedCategoryFilter,
 } from "@/lib/owned-parts-category";
+import { parseOwnedSortState } from "@/lib/owned-parts-sort";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 
 export const dynamic = "force-dynamic";
@@ -40,45 +39,41 @@ function parseCatFilter(raw: string | undefined): OwnedCategoryFilter {
   return parsed;
 }
 
-export default async function OwnedPartsPage({ searchParams }: Props) {
+export default async function PurchaseListPage({ searchParams }: Props) {
   const sp = await searchParams;
   const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   const catFilter = parseCatFilter(sp.cat);
-  const view = parseOwnedViewParam(sp.view);
+  const view = parsePurchaseViewParam(sp.view);
   const sort = parseOwnedSortState(sp.sort, sp.dir);
 
   const [summary, categoryLabel, partPage, elementPage] = await Promise.all([
-    loadOwnedCategorySummary(),
-    loadOwnedCategoryLabel(catFilter),
+    loadPurchaseCategorySummary(),
+    loadPurchaseCategoryLabel(catFilter),
     view === "part"
-      ? loadOwnedPartsPage(
+      ? loadPurchasePartsPage(
           requestedPage,
-          OWNED_PARTS_PAGE_SIZE,
+          PURCHASE_LIST_PAGE_SIZE,
           catFilter,
           sort
         )
-      : Promise.resolve({ total: 0, page: 1, rows: [] as OwnedPartPageRow[] }),
+      : Promise.resolve({ total: 0, page: 1, rows: [] as PurchasePartPageRow[] }),
     view === "element"
-      ? loadOwnedElementsPage(
+      ? loadPurchaseElementsPage(
           requestedPage,
-          OWNED_PARTS_PAGE_SIZE,
+          PURCHASE_LIST_PAGE_SIZE,
           catFilter,
           sort
         )
       : Promise.resolve({
           total: 0,
           page: 1,
-          rows: [] as OwnedElementPageRow[],
+          rows: [] as PurchaseElementPageRow[],
         }),
   ]);
 
   const total = view === "element" ? elementPage.total : partPage.total;
   const page = view === "element" ? elementPage.page : partPage.page;
-  const totalPages = Math.max(1, Math.ceil(total / OWNED_PARTS_PAGE_SIZE));
-  const purchasePartNums =
-    view === "part"
-      ? await loadPurchaseListPartNums(partPage.rows.map((r) => r.partNum))
-      : new Set<string>();
+  const totalPages = Math.max(1, Math.ceil(total / PURCHASE_LIST_PAGE_SIZE));
 
   return (
     <div className="page-stack">
@@ -87,7 +82,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <div className="min-w-0">
               <h1 className="text-base font-semibold text-[var(--text)] sm:text-lg">
-                零件库
+                购买清单
                 {summary.total > 0 ? (
                   <span className="ml-2 text-sm font-normal tabular-nums text-[var(--muted)]">
                     · {summary.total.toLocaleString("zh-CN")} 种
@@ -96,8 +91,8 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                       : null}
                     {view === "element" && total > 0
                       ? catFilter !== "all"
-                        ? ` / 本类 ${total.toLocaleString("zh-CN")} 元素`
-                        : ` · ${total.toLocaleString("zh-CN")} 元素`
+                        ? ` / 本类 ${total.toLocaleString("zh-CN")} 行`
+                        : ` · ${total.toLocaleString("zh-CN")} 行`
                       : catFilter !== "all" && total !== summary.total
                         ? ` / 本类 ${total.toLocaleString("zh-CN")}`
                         : null}
@@ -124,7 +119,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                 aria-label="展示粒度"
               >
                 <Link
-                  href={ownedPartsHref({ view: "part", cat: catFilter, sort })}
+                  href={purchaseListHref({ view: "part", cat: catFilter, sort })}
                   aria-current={view === "part" ? "page" : undefined}
                   className={`rounded px-2.5 py-1 transition-colors ${
                     view === "part"
@@ -135,7 +130,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                   零件
                 </Link>
                 <Link
-                  href={ownedPartsHref({
+                  href={purchaseListHref({
                     view: "element",
                     cat: catFilter,
                     sort,
@@ -150,7 +145,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                   元素
                 </Link>
               </div>
-              <OwnedPartsSortControl
+              <PurchaseListSortControl
                 view={view}
                 cat={catFilter}
                 sortState={sort}
@@ -160,39 +155,33 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
 
           {summary.total === 0 ? (
             <p className="text-sm text-[var(--muted)]">
-              零件库尚无记录。可在
-              <Link
-                href="/parts"
-                className="mx-1 text-[var(--accent)] underline underline-offset-2"
-              >
-                零件详情
-              </Link>
-              的元素旁填写购入数量，或对已「拥有」的官方套装执行「杀肉」。
-            </p>
-          ) : total === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              当前分类下没有零件库记录。
-              <Link
-                href={ownedPartsHref({ view, cat: "all", sort })}
-                className="ml-1 text-[var(--accent)] underline underline-offset-2"
-              >
-                查看全部
-              </Link>
+              购买清单尚无记录。可在零件目录、收藏、零件详情或零件表上点击「购」加入；再到零件详情为颜色填写待购数量。
             </p>
           ) : (
             <>
-              <OwnedPartsTiles
-                view={view}
-                partRows={partPage.rows}
-                elementRows={elementPage.rows}
-                purchasePartNums={purchasePartNums}
-              />
+              {view === "part" && total === 0 ? (
+                <p className="text-sm text-[var(--muted)]">
+                  当前分类下没有购买清单记录。
+                  <Link
+                    href={purchaseListHref({ view, cat: "all", sort })}
+                    className="ml-1 text-[var(--accent)] underline underline-offset-2"
+                  >
+                    查看全部
+                  </Link>
+                </p>
+              ) : (
+                <PurchaseListClient
+                  view={view}
+                  partRows={partPage.rows}
+                  elementRows={elementPage.rows}
+                />
+              )}
               {totalPages > 1 ? (
                 <div className="flex justify-end">
                   <nav aria-label="分页" className="pagination-shell">
                     {page > 1 ? (
                       <Link
-                        href={ownedPartsHref({
+                        href={purchaseListHref({
                           view,
                           cat: catFilter,
                           sort,
@@ -226,7 +215,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                         ) : (
                           <Link
                             key={`p-${item}`}
-                            href={ownedPartsHref({
+                            href={purchaseListHref({
                               view,
                               cat: catFilter,
                               sort,
@@ -241,7 +230,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                     </div>
                     {page < totalPages ? (
                       <Link
-                        href={ownedPartsHref({
+                        href={purchaseListHref({
                           view,
                           cat: catFilter,
                           sort,
@@ -263,7 +252,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
 
         <aside className="space-y-3 lg:sticky lg:top-20">
           {summary.total > 0 ? (
-            <OwnedPartsCategoryNav
+            <PurchaseListCategoryNav
               total={summary.total}
               categories={summary.categories}
               uncategorizedCount={summary.uncategorizedCount}

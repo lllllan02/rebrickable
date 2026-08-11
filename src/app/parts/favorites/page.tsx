@@ -3,6 +3,7 @@ import Link from "next/link";
 import { FavoritePartsCategoryNav } from "@/app/parts/favorites/favorite-parts-category-nav";
 import { FavoritePartsQuickAdd } from "@/app/parts/favorites/favorite-parts-quick-add";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import {
   FAVORITE_PARTS_PAGE_SIZE,
@@ -10,6 +11,7 @@ import {
   loadFavoriteCategorySummary,
   loadFavoritePartsPage,
 } from "@/lib/load-favorite-parts";
+import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
 import {
   ownedCategoryQueryValue,
   parseOwnedCategoryParam,
@@ -42,6 +44,9 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
 
   const { total, page, rows } = pageResult;
   const totalPages = Math.max(1, Math.ceil(total / FAVORITE_PARTS_PAGE_SIZE));
+  const purchasePartNums = await loadPurchaseListPartNums(
+    rows.map((r) => r.partNum)
+  );
 
   const qs = (p: number) => {
     const u = new URLSearchParams();
@@ -121,13 +126,22 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
                         thumbUrl={r.thumbUrl}
                         isPrinted={r.isPrinted}
                         topRight={
-                          <span className="absolute right-0.5 top-0.5 z-[2]">
-                            <PartFavoriteToggle
-                              partNum={r.partNum}
-                              initialFavorite
-                              compact
-                            />
-                          </span>
+                          <>
+                            <span className="absolute left-0.5 top-0.5 z-[2]">
+                              <PurchaseListAddToggle
+                                partNum={r.partNum}
+                                initialInList={purchasePartNums.has(r.partNum)}
+                                compact
+                              />
+                            </span>
+                            <span className="absolute right-0.5 top-0.5 z-[2]">
+                              <PartFavoriteToggle
+                                partNum={r.partNum}
+                                initialFavorite
+                                compact
+                              />
+                            </span>
+                          </>
                         }
                       >
                         <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-[var(--muted-2)]">

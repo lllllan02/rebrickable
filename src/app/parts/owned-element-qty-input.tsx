@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { QtySpinInput } from "@/components/qty-spin-input";
 import { setOwnedPartColorQuantityAction } from "@/app/parts/owned-part-quantity-actions";
 
 type Props = {
@@ -41,21 +42,7 @@ export function OwnedElementQtyInput({
     setError(null);
   }, [initialQuantity, partNum, colorId]);
 
-  function commit() {
-    const trimmed = value.trim();
-    let nextQty: number;
-    if (trimmed === "") {
-      nextQty = 0;
-    } else {
-      const parsed = Number.parseInt(trimmed, 10);
-      if (!Number.isFinite(parsed) || parsed < 0 || String(parsed) !== trimmed) {
-        setError("请输入非负整数");
-        setValue(displayValue(savedQty));
-        return;
-      }
-      nextQty = parsed;
-    }
-
+  function persist(nextQty: number) {
     if (nextQty === savedQty) {
       setValue(displayValue(savedQty));
       setError(null);
@@ -88,43 +75,52 @@ export function OwnedElementQtyInput({
     });
   }
 
-  const inputClass = compact
-    ? "h-4 w-7 rounded border border-[var(--border)] bg-[rgba(7,10,18,0.9)] px-0.5 text-center text-[9px] font-semibold tabular-nums leading-none text-[var(--text)] shadow-sm outline-none focus:border-[var(--accent)] disabled:opacity-50"
-    : "field w-16 px-1.5 py-1 text-center text-xs tabular-nums disabled:opacity-50";
+  function commit() {
+    const trimmed = value.trim();
+    let nextQty: number;
+    if (trimmed === "") {
+      nextQty = 0;
+    } else {
+      const parsed = Number.parseInt(trimmed, 10);
+      if (!Number.isFinite(parsed) || parsed < 0 || String(parsed) !== trimmed) {
+        setError("请输入非负整数");
+        setValue(displayValue(savedQty));
+        return;
+      }
+      nextQty = parsed;
+    }
+    persist(nextQty);
+  }
+
+  function step(delta: 1 | -1) {
+    persist(Math.max(0, savedQty + delta));
+  }
 
   return (
-    <label
+    <div
       className={`inline-flex shrink-0 flex-col items-end gap-0.5 ${className}`.trim()}
     >
       <span className="sr-only">购入数量</span>
-      <input
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        disabled={pending}
+      <QtySpinInput
         value={value}
+        disabled={pending}
         placeholder="0"
         title="购入零件总数"
         aria-label="购入零件总数"
-        className={inputClass}
-        onChange={(e) => {
-          const next = e.target.value.replace(/[^\d]/g, "");
-          setValue(next);
+        compact={compact}
+        canDecrement={savedQty > 0}
+        onChange={(digits) => {
+          setValue(digits);
           if (error) setError(null);
         }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
+        onCommit={commit}
+        onStep={step}
       />
       {error ? (
         <span className="max-w-[8rem] text-right text-[10px] leading-tight text-red-600">
           {error}
         </span>
       ) : null}
-    </label>
+    </div>
   );
 }
