@@ -11,6 +11,7 @@ import {
   PartRelatedTiles,
   type PartRelatedTile,
 } from "@/app/parts/part-related-tiles";
+import { PartUpgradePanel } from "@/app/parts/part-upgrade-panel";
 import { PurchaseColorQtyInput } from "@/app/parts/purchase/purchase-color-qty-input";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { getCatalogDb } from "@/db/client";
@@ -26,6 +27,7 @@ import {
   loadPurchaseQtyByColorForPart,
 } from "@/lib/load-purchase-list";
 import { loadGroupsForPart } from "@/lib/part-groups";
+import { loadPartUpgradeDetail } from "@/lib/part-upgrades";
 import {
   colors,
   elements,
@@ -121,6 +123,7 @@ export default async function PartDetailPage({ params }: Props) {
     inPurchaseList,
     purchaseQtyByColor,
     partGroups,
+    upgradeDetail,
   ] = await Promise.all([
     catalogDb
       .select({
@@ -184,6 +187,7 @@ export default async function PartDetailPage({ params }: Props) {
     isPartInPurchaseList(partNum),
     loadPurchaseQtyByColorForPart(partNum),
     loadGroupsForPart(partNum),
+    loadPartUpgradeDetail(partNum),
   ]);
 
   const relatedMeta = await loadRelatedPartMeta([
@@ -280,7 +284,7 @@ export default async function PartDetailPage({ params }: Props) {
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <h1 className="min-w-0">
+              <h1 className="inline-flex min-w-0 flex-wrap items-baseline gap-x-1.5">
                 <CopyableId
                   value={row.partNum}
                   kind="零件号"
@@ -288,6 +292,24 @@ export default async function PartDetailPage({ params }: Props) {
                 >
                   {row.partNum}
                 </CopyableId>
+                <PartUpgradePanel
+                  partNum={partNum}
+                  outbound={
+                    upgradeDetail.outbound
+                      ? {
+                          toPartNum: upgradeDetail.outbound.toPartNum,
+                          name: upgradeDetail.outbound.to.name,
+                          thumbUrl: upgradeDetail.outbound.to.thumbUrl,
+                        }
+                      : null
+                  }
+                  inbound={upgradeDetail.inbound.map((e) => ({
+                    fromPartNum: e.fromPartNum,
+                    name: e.from.name,
+                    thumbUrl: e.from.thumbUrl,
+                  }))}
+                  latestPartNum={upgradeDetail.latestPartNum}
+                />
               </h1>
               <p className="inline-flex min-w-0 max-w-full items-baseline gap-1.5 text-sm text-[var(--muted)] sm:text-base">
                 <span className="min-w-0">{row.name}</span>

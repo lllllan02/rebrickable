@@ -32,6 +32,7 @@ import {
   resolveGroupPartNumConstraint,
   type PartGroupFilter,
 } from "@/lib/part-groups";
+import { loadUpgradeTargetsForParts } from "@/lib/part-upgrades";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
 
 export const dynamic = "force-dynamic";
@@ -127,10 +128,16 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
   const total = view === "element" ? elementPage.total : partPage.total;
   const page = view === "element" ? elementPage.page : partPage.page;
   const totalPages = Math.max(1, Math.ceil(total / OWNED_PARTS_PAGE_SIZE));
-  const purchasePartNums =
+  const pagePartNums =
     view === "part"
-      ? await loadPurchaseListPartNums(partPage.rows.map((r) => r.partNum))
-      : new Set<string>();
+      ? partPage.rows.map((r) => r.partNum)
+      : elementPage.rows.map((r) => r.partNum);
+  const [purchasePartNums, upgradeMap] = await Promise.all([
+    view === "part"
+      ? loadPurchaseListPartNums(pagePartNums)
+      : Promise.resolve(new Set<string>()),
+    loadUpgradeTargetsForParts(pagePartNums),
+  ]);
 
   const groupLabel =
     navMode !== "group"
@@ -270,6 +277,7 @@ export default async function OwnedPartsPage({ searchParams }: Props) {
                 partRows={partPage.rows}
                 elementRows={elementPage.rows}
                 purchasePartNums={purchasePartNums}
+                upgradeToByPart={upgradeMap}
                 dragEnabled={navMode === "group"}
               />
               {totalPages > 1 ? (

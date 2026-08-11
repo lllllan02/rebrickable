@@ -32,6 +32,7 @@ import {
   type PartGroupFilter,
 } from "@/lib/part-groups";
 import { pageNavSequence } from "@/lib/page-nav-sequence";
+import { loadUpgradeTargetsForParts } from "@/lib/part-upgrades";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,13 @@ export default async function PurchaseListPage({ searchParams }: Props) {
   const total = view === "element" ? elementPage.total : partPage.total;
   const page = view === "element" ? elementPage.page : partPage.page;
   const totalPages = Math.max(1, Math.ceil(total / PURCHASE_LIST_PAGE_SIZE));
+
+  const pagePartNums =
+    view === "part"
+      ? partPage.rows.map((r) => r.partNum)
+      : elementPage.rows.map((r) => r.partNum);
+  const upgradeMap = await loadUpgradeTargetsForParts(pagePartNums);
+  const upgradeToByPart = Object.fromEntries(upgradeMap);
 
   const groupLabel =
     navMode !== "group"
@@ -262,6 +270,7 @@ export default async function PurchaseListPage({ searchParams }: Props) {
                   view={view}
                   partRows={partPage.rows}
                   elementRows={elementPage.rows}
+                  upgradeToByPart={upgradeToByPart}
                   dragEnabled={navMode === "group"}
                 />
               )}

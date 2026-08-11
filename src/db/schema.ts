@@ -463,6 +463,22 @@ export const buildPurchaseListItems = sqliteTable(
   ]
 );
 
+/**
+ * 用户手动维护的零件升级替代：有向 from → to（旧件 → 升级件）。
+ * 不写入目录库 part_relationships，避免被 db:import 冲掉。
+ */
+export const buildPartUpgrades = sqliteTable(
+  "build_part_upgrades",
+  {
+    fromPartNum: text("from_part_num").primaryKey(),
+    toPartNum: text("to_part_num").notNull(),
+    note: text("note"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("build_part_upgrades_to_idx").on(t.toPartNum)]
+);
+
 /** 官方套装用户记录的可购买好价（元）；与高砖参考价无关 */
 export const buildSetGoodPrices = sqliteTable(
   "build_set_good_prices",

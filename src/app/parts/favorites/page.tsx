@@ -3,6 +3,7 @@ import Link from "next/link";
 import { FavoritePartsCategoryNav } from "@/app/parts/favorites/favorite-parts-category-nav";
 import { FavoritePartsQuickAdd } from "@/app/parts/favorites/favorite-parts-quick-add";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
+import { PartUpgradeReplaceButton } from "@/app/parts/part-upgrade-replace-button";
 import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
 import { PartsGroupNav } from "@/app/parts/parts-group-nav";
 import { PartsNavModeSwitch } from "@/app/parts/parts-nav-mode-switch";
@@ -16,6 +17,7 @@ import {
   loadFavoritePartsPage,
 } from "@/lib/load-favorite-parts";
 import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
+import { loadUpgradeTargetsForParts } from "@/lib/part-upgrades";
 import {
   ownedCategoryQueryValue,
   parseOwnedCategoryParam,
@@ -125,9 +127,11 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
 
   const { total, page, rows } = pageResult;
   const totalPages = Math.max(1, Math.ceil(total / FAVORITE_PARTS_PAGE_SIZE));
-  const purchasePartNums = await loadPurchaseListPartNums(
-    rows.map((r) => r.partNum)
-  );
+  const rowPartNums = rows.map((r) => r.partNum);
+  const [purchasePartNums, upgradeMap] = await Promise.all([
+    loadPurchaseListPartNums(rowPartNums),
+    loadUpgradeTargetsForParts(rowPartNums),
+  ]);
 
   const groupLabel =
     navMode !== "group"
@@ -230,6 +234,15 @@ export default async function FavoritePartsPage({ searchParams }: Props) {
                         partNum={r.partNum}
                         thumbUrl={r.thumbUrl}
                         isPrinted={r.isPrinted}
+                        upgradeSlot={
+                          upgradeMap.has(r.partNum) ? (
+                            <PartUpgradeReplaceButton
+                              partNum={r.partNum}
+                              toPartNum={upgradeMap.get(r.partNum)!}
+                              scope="favorites"
+                            />
+                          ) : null
+                        }
                         topRight={
                           <>
                             <span className="absolute left-0.5 top-0.5 z-[2]">

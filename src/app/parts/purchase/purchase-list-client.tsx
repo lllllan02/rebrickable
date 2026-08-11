@@ -15,11 +15,13 @@ export function PurchaseListClient({
   view,
   partRows,
   elementRows,
+  upgradeToByPart = {},
   dragEnabled = false,
 }: {
   view: PurchaseViewMode;
   partRows: PurchasePartPageRow[];
   elementRows: PurchaseElementPageRow[];
+  upgradeToByPart?: Record<string, string>;
   dragEnabled?: boolean;
 }) {
   const router = useRouter();
@@ -129,6 +131,7 @@ export function PurchaseListClient({
         view={view}
         partRows={partRows}
         elementRows={elementRows}
+        upgradeToByPart={upgradeToByPart}
         selectedIds={selectedIds}
         onToggleSelect={toggleSelect}
         dragEnabled={dragEnabled}

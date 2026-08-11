@@ -12,6 +12,7 @@ import { buildSubjectDetailPath } from "@/lib/build-subject-paths";
 import { runGlobalSearch } from "@/lib/global-search-server";
 import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
 import { mocListHref } from "@/lib/moc-list-href";
+import { loadUpgradeTargetsForParts } from "@/lib/part-upgrades";
 import { likeFragment } from "@/lib/search";
 
 import { enrichSearchSubjectHits, subjectIdFromListHref } from "./search-subject-hit-enrich";
@@ -92,9 +93,13 @@ export default async function SearchPage({ searchParams }: Props) {
   ];
 
   const enrich = await enrichSearchSubjectHits(mocIds, setNums);
-  const purchasePartNums = await loadPurchaseListPartNums([
+  const searchPartNums = [
     ...data.parts.map((h) => h.title),
     ...data.elements.map((h) => h.partNum),
+  ];
+  const [purchasePartNums, upgradeMap] = await Promise.all([
+    loadPurchaseListPartNums(searchPartNums),
+    loadUpgradeTargetsForParts(searchPartNums),
   ]);
 
   return (
@@ -232,6 +237,7 @@ export default async function SearchPage({ searchParams }: Props) {
                       titleAttr={`${h.title} · ${h.subtitle}`}
                       partNum={h.title}
                       thumbUrl={h.imgUrl}
+                      upgradeToPartNum={upgradeMap.get(h.title)}
                       topRight={
                         <span className="absolute left-0.5 top-0.5 z-[2]">
                           <PurchaseListAddToggle
@@ -297,6 +303,7 @@ export default async function SearchPage({ searchParams }: Props) {
                         titleAttr={titleTip}
                         partNum={h.partNum}
                         thumbUrl={h.imgUrl}
+                        upgradeToPartNum={upgradeMap.get(h.partNum)}
                         topRight={
                           <span className="absolute left-0.5 top-0.5 z-[2]">
                             <PurchaseListAddToggle

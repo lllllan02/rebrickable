@@ -15,6 +15,8 @@ export function PartGridTileLink({
   partNum,
   thumbUrl,
   isPrinted,
+  upgradeToPartNum,
+  upgradeSlot,
   extraTileClass = "",
   topRight,
   children,
@@ -24,10 +26,29 @@ export function PartGridTileLink({
   partNum: string;
   thumbUrl: string | null | undefined;
   isPrinted?: boolean;
+  /** 有升级出边时，在零件号左侧显示 ↑ */
+  upgradeToPartNum?: string | null;
+  /** 零件号左侧自定义升级控件（如一键替换）；优先于默认标识 */
+  upgradeSlot?: ReactNode;
   extraTileClass?: string;
   topRight?: ReactNode;
   children?: ReactNode;
 }) {
+  const toNum = upgradeToPartNum?.trim() || "";
+  const upgradeMark = upgradeSlot ? (
+    <span className="inline-flex shrink-0 font-sans normal-case tracking-normal">
+      {upgradeSlot}
+    </span>
+  ) : toNum ? (
+    <span
+      className="inline-block shrink-0 text-[10px] font-bold leading-none !text-emerald-400"
+      title={`有升级替代 → ${toNum}`}
+      aria-label={`有升级替代 ${toNum}`}
+    >
+      ↑
+    </span>
+  ) : null;
+
   return (
     <Link
       href={href}
@@ -55,8 +76,9 @@ export function PartGridTileLink({
           <span className="absolute inset-0 flex items-center justify-center text-[9px] text-[var(--muted)]">无图</span>
         )}
       </div>
-      <p className="mt-1 truncate px-0.5 text-center font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
-        {partNum}
+      <p className="mt-1 flex items-center justify-center gap-0.5 px-0.5 font-mono text-[10px] font-semibold leading-tight text-[#b8e632] sm:text-[11px]">
+        {upgradeMark}
+        <span className="min-w-0 truncate">{partNum}</span>
       </p>
       {children}
     </Link>

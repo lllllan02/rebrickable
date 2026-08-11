@@ -1,5 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
+
+import { PartUpgradeReplaceButton } from "@/app/parts/part-upgrade-replace-button";
 import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
 import { formatCatalogBilingualColorLabel } from "@/lib/color-zh-names";
@@ -18,10 +21,10 @@ function QtyBadge({ qty }: { qty: number }) {
   );
 }
 
-function PendingDot() {
+function PendingDot({ className = "" }: { className?: string }) {
   return (
     <span
-      className="pointer-events-none absolute left-1 top-1 z-[2] h-2 w-2 rounded-full bg-amber-300/90 ring-1 ring-[var(--border)]"
+      className={`pointer-events-none h-2 w-2 rounded-full bg-amber-300/90 ring-1 ring-[var(--border)] ${className}`.trim()}
       title="待选色"
       aria-label="待选色"
     />
@@ -32,6 +35,7 @@ export function PurchaseListTiles({
   view,
   partRows,
   elementRows,
+  upgradeToByPart = {},
   selectedIds,
   onToggleSelect,
   dragEnabled = false,
@@ -39,10 +43,17 @@ export function PurchaseListTiles({
   view: PurchaseViewMode;
   partRows: PurchasePartPageRow[];
   elementRows: PurchaseElementPageRow[];
+  /** fromPartNum → toPartNum */
+  upgradeToByPart?: Record<string, string>;
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
   dragEnabled?: boolean;
 }) {
+  const upgradeMap = useMemo(
+    () => new Map(Object.entries(upgradeToByPart)),
+    [upgradeToByPart]
+  );
+
   if (view === "part") {
     if (partRows.length === 0) {
       return (
@@ -60,6 +71,7 @@ export function PurchaseListTiles({
           ]
             .filter(Boolean)
             .join(" · ");
+          const toPartNum = upgradeMap.get(r.partNum);
           return (
             <li
               key={r.partNum}
@@ -72,9 +84,22 @@ export function PurchaseListTiles({
                 partNum={r.partNum}
                 thumbUrl={r.thumbUrl}
                 isPrinted={r.isPrinted}
+                upgradeSlot={
+                  toPartNum ? (
+                    <PartUpgradeReplaceButton
+                      partNum={r.partNum}
+                      toPartNum={toPartNum}
+                      scope="purchase"
+                    />
+                  ) : null
+                }
                 topRight={
                   <>
-                    {r.pendingColor ? <PendingDot /> : null}
+                    {r.pendingColor ? (
+                      <span className="absolute left-0.5 top-0.5 z-[2]">
+                        <PendingDot className="m-1" />
+                      </span>
+                    ) : null}
                     {r.totalQty > 0 ? <QtyBadge qty={r.totalQty} /> : null}
                   </>
                 }
@@ -117,6 +142,7 @@ export function PurchaseListTiles({
         ]
           .filter(Boolean)
           .join(" · ");
+        const toPartNum = upgradeMap.get(r.partNum);
         return (
           <li key={r.id} className="relative min-w-0">
             <PartGridTileLink
@@ -125,6 +151,15 @@ export function PurchaseListTiles({
               partNum={r.partNum}
               thumbUrl={r.thumbUrl}
               isPrinted={r.isPrinted}
+              upgradeSlot={
+                toPartNum ? (
+                  <PartUpgradeReplaceButton
+                    partNum={r.partNum}
+                    toPartNum={toPartNum}
+                    scope="purchase"
+                  />
+                ) : null
+              }
               topRight={<QtyBadge qty={r.quantity} />}
             >
               <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-[var(--muted-2)]">

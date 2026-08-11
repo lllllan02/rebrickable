@@ -32,6 +32,7 @@ export const userSchema = {
   buildPartGroups: schema.buildPartGroups,
   buildPartGroupMembers: schema.buildPartGroupMembers,
   buildPurchaseListItems: schema.buildPurchaseListItems,
+  buildPartUpgrades: schema.buildPartUpgrades,
   buildSetGoodPrices: schema.buildSetGoodPrices,
   buildBricktimeConfig: schema.buildBricktimeConfig,
 };

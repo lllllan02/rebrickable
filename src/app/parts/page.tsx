@@ -36,6 +36,7 @@ import {
 } from "@/db/schema";
 import { loadFavoritePartNums } from "@/lib/load-favorite-parts";
 import { loadPurchaseListPartNums } from "@/lib/load-purchase-list";
+import { loadUpgradeTargetsForParts } from "@/lib/part-upgrades";
 import {
   isPartGroupFilterValid,
   loadPartGroupById,
@@ -236,6 +237,7 @@ export default async function PartsPage({ searchParams }: Props) {
   const elementMatchTruncated = new Set<string>();
   let favoritePartNums = new Set<string>();
   let purchasePartNums = new Set<string>();
+  let upgradeToByPart = new Map<string, string>();
   if (partNums.length > 0) {
     const [
       thumbRows,
@@ -245,6 +247,7 @@ export default async function PartsPage({ searchParams }: Props) {
       matchRows,
       favSet,
       purchaseSet,
+      upgradeMap,
     ] = await Promise.all([
         db
           .select({
@@ -306,9 +309,11 @@ export default async function PartsPage({ searchParams }: Props) {
             ),
         loadFavoritePartNums(partNums),
         loadPurchaseListPartNums(partNums),
+        loadUpgradeTargetsForParts(partNums),
       ]);
     favoritePartNums = favSet;
     purchasePartNums = purchaseSet;
+    upgradeToByPart = upgradeMap;
     for (const t of thumbRows) {
       if (t.thumb) thumbByPart.set(t.partNum, t.thumb);
     }
@@ -464,6 +469,7 @@ export default async function PartsPage({ searchParams }: Props) {
                     partNum={r.partNum}
                     thumbUrl={thumb}
                     isPrinted={isPrinted}
+                    upgradeToPartNum={upgradeToByPart.get(r.partNum)}
                     topRight={
                       <>
                         <span className="absolute left-0.5 top-0.5 z-[2]">

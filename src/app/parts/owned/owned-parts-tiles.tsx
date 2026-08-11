@@ -1,4 +1,5 @@
 import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
+import { PartUpgradeReplaceButton } from "@/app/parts/part-upgrade-replace-button";
 import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
@@ -23,14 +24,18 @@ export function OwnedPartsTiles({
   partRows,
   elementRows,
   purchasePartNums,
+  upgradeToByPart,
   dragEnabled = false,
 }: {
   view: OwnedViewMode;
   partRows: OwnedPartPageRow[];
   elementRows: OwnedElementPageRow[];
   purchasePartNums?: Set<string>;
+  upgradeToByPart?: Map<string, string>;
   dragEnabled?: boolean;
 }) {
+  const upgradeTo = (partNum: string) => upgradeToByPart?.get(partNum);
+
   if (view === "part") {
     if (partRows.length === 0) {
       return (
@@ -58,6 +63,15 @@ export function OwnedPartsTiles({
                 partNum={r.partNum}
                 thumbUrl={r.thumbUrl}
                 isPrinted={r.isPrinted}
+                upgradeSlot={
+                  upgradeTo(r.partNum) ? (
+                    <PartUpgradeReplaceButton
+                      partNum={r.partNum}
+                      toPartNum={upgradeTo(r.partNum)!}
+                      scope="owned"
+                    />
+                  ) : null
+                }
                 topRight={
                   <>
                     {purchasePartNums ? (
@@ -120,6 +134,15 @@ export function OwnedPartsTiles({
               partNum={r.partNum}
               thumbUrl={r.thumbUrl}
               isPrinted={r.isPrinted}
+              upgradeSlot={
+                upgradeTo(r.partNum) ? (
+                  <PartUpgradeReplaceButton
+                    partNum={r.partNum}
+                    toPartNum={upgradeTo(r.partNum)!}
+                    scope="owned"
+                  />
+                ) : null
+              }
             >
               <p className="mt-0.5 line-clamp-2 px-0.5 text-center text-[9px] leading-tight text-[var(--muted-2)]">
                 <span
