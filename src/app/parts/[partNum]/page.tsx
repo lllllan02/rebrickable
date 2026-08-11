@@ -1,12 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, eq, isNotNull, min, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, min, ne } from "drizzle-orm";
 
 import { CopyableId } from "@/components/copyable-id";
 import { OwnedElementQtyInput } from "@/app/parts/owned-element-qty-input";
 import { PartFavoriteToggle } from "@/app/parts/part-favorite-toggle";
 import { PartGroupAssign } from "@/app/parts/part-group-assign";
+import {
+  PartRelatedTiles,
+  type PartRelatedTile,
+} from "@/app/parts/part-related-tiles";
 import { PurchaseColorQtyInput } from "@/app/parts/purchase/purchase-color-qty-input";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { getCatalogDb } from "@/db/client";
@@ -20,7 +24,7 @@ import {
   isPartInPurchaseList,
   loadPurchaseQtyByColorForPart,
 } from "@/lib/load-purchase-list";
-import { loadGroupIdsForPart } from "@/lib/part-groups";
+import { loadGroupsForPart } from "@/lib/part-groups";
 import {
   colors,
   elements,
@@ -34,6 +38,48 @@ import {
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ partNum: string }> };
+
+async function loadRelatedPartMeta(
+  partNums: string[]
+): Promise<Map<string, { name: string; thumbUrl: string | null }>> {
+  const unique = [...new Set(partNums.filter(Boolean))];
+  const map = new Map<string, { name: string; thumbUrl: string | null }>();
+  if (unique.length === 0) return map;
+
+  const catalogDb = getCatalogDb();
+  const [nameRows, thumbRows] = await Promise.all([
+    catalogDb
+      .select({ partNum: parts.partNum, name: parts.name })
+      .from(parts)
+      .where(inArray(parts.partNum, unique)),
+    catalogDb
+      .select({
+        partNum: inventoryParts.partNum,
+        thumb: min(inventoryParts.imgUrl),
+      })
+      .from(inventoryParts)
+      .where(
+        and(
+          inArray(inventoryParts.partNum, unique),
+          isNotNull(inventoryParts.imgUrl),
+          ne(inventoryParts.imgUrl, "")
+        )
+      )
+      .groupBy(inventoryParts.partNum),
+  ]);
+
+  const thumbBy = new Map<string, string>();
+  for (const t of thumbRows) {
+    if (t.thumb) thumbBy.set(t.partNum, t.thumb);
+  }
+  for (const n of nameRows) {
+    map.set(n.partNum, {
+      name: n.name,
+      thumbUrl: thumbBy.get(n.partNum) ?? null,
+    });
+  }
+  return map;
+}
 
 export default async function PartDetailPage({ params }: Props) {
   const { partNum: raw } = await params;
@@ -62,8 +108,8 @@ export default async function PartDetailPage({ params }: Props) {
   );
 
   const [
-    asParent,
-    asChild,
+    asParentRels,
+    asChildRels,
     elemRows,
     setRows,
     heroThumbRow,
@@ -73,74 +119,95 @@ export default async function PartDetailPage({ params }: Props) {
     favorite,
     inPurchaseList,
     purchaseQtyByColor,
-    partGroupIds,
+    partGroups,
   ] = await Promise.all([
-      catalogDb
-        .select({
-          relType: partRelationships.relType,
-          child: partRelationships.childPartNum,
-        })
-        .from(partRelationships)
-        .where(eq(partRelationships.parentPartNum, partNum))
-        .orderBy(
-          asc(partRelationships.relType),
-          asc(partRelationships.childPartNum)
-        )
-        .limit(200),
-      catalogDb
-        .select({
-          relType: partRelationships.relType,
-          parent: partRelationships.parentPartNum,
-        })
-        .from(partRelationships)
-        .where(eq(partRelationships.childPartNum, partNum))
-        .orderBy(
-          asc(partRelationships.relType),
-          asc(partRelationships.parentPartNum)
-        )
-        .limit(200),
-      catalogDb
-        .select({
-          elementId: elements.elementId,
-          colorId: elements.colorId,
-          colorName: colors.name,
-          rgb: colors.rgb,
-          designId: elements.designId,
-        })
-        .from(elements)
-        .innerJoin(colors, eq(elements.colorId, colors.id))
-        .where(eq(elements.partNum, partNum))
-        .orderBy(asc(elements.colorId))
-        .limit(120),
-      catalogDb
-        .selectDistinct({ setNum: inventories.setNum })
-        .from(inventoryParts)
-        .innerJoin(
-          inventories,
-          eq(inventoryParts.inventoryId, inventories.id)
-        )
-        .where(eq(inventoryParts.partNum, partNum))
-        .orderBy(asc(inventories.setNum))
-        .limit(80),
-      catalogDb
-        .select({ thumb: min(inventoryParts.imgUrl) })
-        .from(inventoryParts)
-        .where(imgClause),
-      catalogDb
-        .select({
-          colorId: inventoryParts.colorId,
-          thumb: min(inventoryParts.imgUrl),
-        })
-        .from(inventoryParts)
-        .where(imgClause)
-        .groupBy(inventoryParts.colorId),
-      loadOwnedQtyForPart(partNum),
-      loadOwnedQtyByColorForPart(partNum),
-      isPartFavorite(partNum),
-      isPartInPurchaseList(partNum),
-      loadPurchaseQtyByColorForPart(partNum),
-      loadGroupIdsForPart(partNum),
-    ]);
+    catalogDb
+      .select({
+        relType: partRelationships.relType,
+        child: partRelationships.childPartNum,
+      })
+      .from(partRelationships)
+      .where(eq(partRelationships.parentPartNum, partNum))
+      .orderBy(
+        asc(partRelationships.relType),
+        asc(partRelationships.childPartNum)
+      )
+      .limit(200),
+    catalogDb
+      .select({
+        relType: partRelationships.relType,
+        parent: partRelationships.parentPartNum,
+      })
+      .from(partRelationships)
+      .where(eq(partRelationships.childPartNum, partNum))
+      .orderBy(
+        asc(partRelationships.relType),
+        asc(partRelationships.parentPartNum)
+      )
+      .limit(200),
+    catalogDb
+      .select({
+        elementId: elements.elementId,
+        colorId: elements.colorId,
+        colorName: colors.name,
+        rgb: colors.rgb,
+        designId: elements.designId,
+      })
+      .from(elements)
+      .innerJoin(colors, eq(elements.colorId, colors.id))
+      .where(eq(elements.partNum, partNum))
+      .orderBy(asc(elements.colorId))
+      .limit(120),
+    catalogDb
+      .selectDistinct({ setNum: inventories.setNum })
+      .from(inventoryParts)
+      .innerJoin(inventories, eq(inventoryParts.inventoryId, inventories.id))
+      .where(eq(inventoryParts.partNum, partNum))
+      .orderBy(asc(inventories.setNum))
+      .limit(80),
+    catalogDb
+      .select({ thumb: min(inventoryParts.imgUrl) })
+      .from(inventoryParts)
+      .where(imgClause),
+    catalogDb
+      .select({
+        colorId: inventoryParts.colorId,
+        thumb: min(inventoryParts.imgUrl),
+      })
+      .from(inventoryParts)
+      .where(imgClause)
+      .groupBy(inventoryParts.colorId),
+    loadOwnedQtyForPart(partNum),
+    loadOwnedQtyByColorForPart(partNum),
+    isPartFavorite(partNum),
+    isPartInPurchaseList(partNum),
+    loadPurchaseQtyByColorForPart(partNum),
+    loadGroupsForPart(partNum),
+  ]);
+
+  const relatedMeta = await loadRelatedPartMeta([
+    ...asParentRels.map((r) => r.child),
+    ...asChildRels.map((r) => r.parent),
+  ]);
+
+  const childTiles: PartRelatedTile[] = asParentRels.map((r) => {
+    const meta = relatedMeta.get(r.child);
+    return {
+      partNum: r.child,
+      name: meta?.name ?? r.child,
+      relType: r.relType,
+      thumbUrl: meta?.thumbUrl ?? null,
+    };
+  });
+  const parentTiles: PartRelatedTile[] = asChildRels.map((r) => {
+    const meta = relatedMeta.get(r.parent);
+    return {
+      partNum: r.parent,
+      name: meta?.name ?? r.parent,
+      relType: r.relType,
+      thumbUrl: meta?.thumbUrl ?? null,
+    };
+  });
 
   const heroThumb = heroThumbRow[0]?.thumb ?? null;
   const thumbByColor = new Map<number, string>();
@@ -183,82 +250,59 @@ export default async function PartDetailPage({ params }: Props) {
 
   return (
     <div className="page-stack">
-      <section className="hero-panel">
+      <section className="hero-panel !px-3 !py-3 sm:!px-4 sm:!py-3.5">
         <Link href="/parts" className="back-link">
           ← 零件列表
         </Link>
-        <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-          <div className="media-box media-box-lg mx-auto shrink-0 sm:mx-0 sm:w-56">
+
+        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+          <div className="media-box mx-auto h-[4.75rem] w-[4.75rem] shrink-0 sm:mx-0">
             {heroThumb ? (
               <Image
                 src={heroThumb}
                 alt={`${row.partNum} 零件图`}
-                width={224}
-                height={224}
-                className="box-border h-full w-full object-contain p-3"
-                sizes="(max-width: 640px) 100vw, 224px"
+                width={76}
+                height={76}
+                className="box-border h-full w-full object-contain p-1"
+                sizes="76px"
                 priority
               />
             ) : (
               <div
-                className="flex aspect-square h-full min-h-[12rem] w-full items-center justify-center px-4 text-center text-sm text-[var(--muted)]"
+                className="flex h-full w-full items-center justify-center text-[10px] text-[var(--muted)]"
                 title="库存中暂无图片"
               >
                 无图
               </div>
             )}
           </div>
+
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="page-kicker">Part detail</p>
-                <h1 className="mt-1">
-                  <CopyableId
-                    value={row.partNum}
-                    kind="零件号"
-                    className="font-mono text-3xl font-extrabold tracking-tight text-[var(--accent)]"
-                  >
-                    {row.partNum}
-                  </CopyableId>
-                </h1>
-                <p className="mt-1 text-lg">{row.name}</p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <div className="flex items-center gap-1.5">
-                  <PurchaseListAddToggle
-                    partNum={row.partNum}
-                    initialInList={inPurchaseList}
-                  />
-                  <PartFavoriteToggle
-                    partNum={row.partNum}
-                    initialFavorite={favorite}
-                  />
-                </div>
-                <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5">
-                  <PartGroupAssign
-                    partNum={row.partNum}
-                    initialGroupIds={partGroupIds}
-                  />
-                  {inPurchaseList ? (
-                    <Link
-                      href="/parts/purchase"
-                      className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
-                    >
-                      查看购买清单
-                    </Link>
-                  ) : null}
-                  {favorite ? (
-                    <Link
-                      href="/parts/favorites"
-                      className="text-xs text-[var(--accent)] underline-offset-2 hover:underline"
-                    >
-                      查看收藏
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <h1 className="min-w-0">
+                <CopyableId
+                  value={row.partNum}
+                  kind="零件号"
+                  className="font-mono text-xl font-extrabold tracking-tight text-[var(--accent)] sm:text-2xl"
+                >
+                  {row.partNum}
+                </CopyableId>
+              </h1>
+              <p className="inline-flex min-w-0 max-w-full items-baseline gap-1.5 text-sm text-[var(--muted)] sm:text-base">
+                <span className="min-w-0">{row.name}</span>
+                <a
+                  href={`https://rebrickable.com/parts/${encodeURIComponent(row.partNum)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-5 shrink-0 items-center rounded border border-[var(--border)] px-1 text-[10px] font-semibold leading-none text-[var(--accent)] no-underline hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                  title="在 Rebrickable 打开"
+                  aria-label="在 Rebrickable 打开"
+                >
+                  RB
+                </a>
+              </p>
             </div>
-            <dl className="meta-row mt-4 text-sm">
+            <dl className="meta-row mt-1.5 text-sm">
               {row.catName ? (
                 <div>
                   <dt className="inline text-[var(--text)]">分类：</dt>
@@ -271,41 +315,88 @@ export default async function PartDetailPage({ params }: Props) {
                   <dd className="inline">{row.material}</dd>
                 </div>
               ) : null}
-              <div>
-                <dt className="inline text-[var(--text)]">待购：</dt>
-                <dd className="inline tabular-nums">
-                  {purchaseQtyTotal.toLocaleString("zh-CN")} 粒
-                  {inPurchaseList || purchaseQtyTotal > 0 ? (
-                    <>
-                      {" · "}
-                      <Link
-                        href="/parts/purchase"
-                        className="text-[var(--accent)] underline underline-offset-2"
-                      >
-                        购买清单
-                      </Link>
-                    </>
-                  ) : null}
-                </dd>
-              </div>
-              <div>
-                <dt className="inline text-[var(--text)]">零件库：</dt>
-                <dd className="inline tabular-nums">
-                  {ownedQty.toLocaleString("zh-CN")} 粒
-                  {ownedQty > 0 ? (
-                    <>
-                      {" · "}
-                      <Link
-                        href="/parts/owned"
-                        className="text-[var(--accent)] underline underline-offset-2"
-                      >
-                        查看清单
-                      </Link>
-                    </>
-                  ) : null}
-                </dd>
-              </div>
             </dl>
+            <PartGroupAssign
+              partNum={row.partNum}
+              initialGroups={partGroups}
+              className="mt-1.5"
+            />
+          </div>
+
+          <div className="flex w-full shrink-0 flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+            <div className="flex flex-wrap justify-center gap-2 sm:justify-end">
+              <Link
+                href="/parts/purchase"
+                className={`inline-flex items-baseline gap-1.5 rounded-lg border px-2.5 py-1.5 no-underline transition-colors ${
+                  purchaseQtyTotal > 0
+                    ? "border-amber-400/50 bg-amber-400/12 text-[var(--text)] hover:border-amber-400/70"
+                    : "border-[var(--border-soft)] bg-[rgba(255,255,255,0.03)] text-[var(--muted)] hover:border-[var(--border)]"
+                }`}
+                title="查看购买清单"
+              >
+                <span className="text-[11px] font-semibold leading-none">
+                  待购
+                </span>
+                <span
+                  className={`text-xl font-extrabold tabular-nums leading-none tracking-tight ${
+                    purchaseQtyTotal > 0
+                      ? "text-amber-200"
+                      : "text-[var(--text)]"
+                  }`}
+                >
+                  {purchaseQtyTotal.toLocaleString("zh-CN")}
+                </span>
+                <span className="text-[11px] leading-none">粒</span>
+              </Link>
+              <Link
+                href="/parts/owned"
+                className={`inline-flex items-baseline gap-1.5 rounded-lg border px-2.5 py-1.5 no-underline transition-colors ${
+                  ownedQty > 0
+                    ? "border-[var(--accent)]/45 bg-[var(--accent)]/10 text-[var(--text)] hover:border-[var(--accent)]/65"
+                    : "border-[var(--border-soft)] bg-[rgba(255,255,255,0.03)] text-[var(--muted)] hover:border-[var(--border)]"
+                }`}
+                title="查看零件库"
+              >
+                <span className="text-[11px] font-semibold leading-none">
+                  零件库
+                </span>
+                <span
+                  className={`text-xl font-extrabold tabular-nums leading-none tracking-tight ${
+                    ownedQty > 0
+                      ? "text-[var(--accent)]"
+                      : "text-[var(--text)]"
+                  }`}
+                >
+                  {ownedQty.toLocaleString("zh-CN")}
+                </span>
+                <span className="text-[11px] leading-none">粒</span>
+              </Link>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-end">
+              <PurchaseListAddToggle
+                partNum={row.partNum}
+                initialInList={inPurchaseList}
+              />
+              <PartFavoriteToggle
+                partNum={row.partNum}
+                initialFavorite={favorite}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+        <div className="section-panel">
+          <h2 className="section-title">子零件（本件为父）</h2>
+          <div className="mt-2">
+            <PartRelatedTiles items={childTiles} />
+          </div>
+        </div>
+        <div className="section-panel">
+          <h2 className="section-title">父零件（本件为子）</h2>
+          <div className="mt-2">
+            <PartRelatedTiles items={parentTiles} />
           </div>
         </div>
       </section>
@@ -411,47 +502,6 @@ export default async function PartDetailPage({ params }: Props) {
         {colorGroups.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">暂无颜色记录。</p>
         ) : null}
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="section-panel">
-          <h2 className="section-title">子零件（本件为父）</h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {asParent.map((r) => (
-              <li key={`${r.relType}-${r.child}`}>
-                <span className="text-[var(--muted)]">{r.relType}</span>{" "}
-                <Link
-                  href={`/parts/${encodeURIComponent(r.child)}`}
-                  className="font-mono no-underline"
-                >
-                  {r.child}
-                </Link>
-              </li>
-            ))}
-            {asParent.length === 0 ? (
-              <li className="text-[var(--muted)]">无</li>
-            ) : null}
-          </ul>
-        </div>
-        <div className="section-panel">
-          <h2 className="section-title">父零件（本件为子）</h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {asChild.map((r) => (
-              <li key={`${r.relType}-${r.parent}`}>
-                <span className="text-[var(--muted)]">{r.relType}</span>{" "}
-                <Link
-                  href={`/parts/${encodeURIComponent(r.parent)}`}
-                  className="font-mono no-underline"
-                >
-                  {r.parent}
-                </Link>
-              </li>
-            ))}
-            {asChild.length === 0 ? (
-              <li className="text-[var(--muted)]">无</li>
-            ) : null}
-          </ul>
-        </div>
       </section>
 
       <section className="section-panel">

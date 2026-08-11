@@ -116,14 +116,29 @@ export async function isPartGroupFilterValid(
 export async function loadGroupIdsForPart(
   partNum: string
 ): Promise<number[]> {
+  const rows = await loadGroupsForPart(partNum);
+  return rows.map((r) => r.id);
+}
+
+/** 零件所属自定义分组（按侧栏排序），含名称供详情标签展示 */
+export async function loadGroupsForPart(
+  partNum: string
+): Promise<{ id: number; name: string }[]> {
   const trimmed = partNum.trim();
   if (!trimmed) return [];
   const userDb = getUserDb();
-  const rows = await userDb
-    .select({ groupId: buildPartGroupMembers.groupId })
+  return userDb
+    .select({
+      id: buildPartGroups.id,
+      name: buildPartGroups.name,
+    })
     .from(buildPartGroupMembers)
-    .where(eq(buildPartGroupMembers.partNum, trimmed));
-  return rows.map((r) => r.groupId);
+    .innerJoin(
+      buildPartGroups,
+      eq(buildPartGroupMembers.groupId, buildPartGroups.id)
+    )
+    .where(eq(buildPartGroupMembers.partNum, trimmed))
+    .orderBy(asc(buildPartGroups.sortOrder), asc(buildPartGroups.id));
 }
 
 export async function loadGroupIdsByPartNums(

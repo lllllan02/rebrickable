@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -8,21 +9,33 @@ import {
   loadPartGroupAssignStateAction,
   setPartGroupMembershipAction,
 } from "@/app/parts/part-group-actions";
-import { PART_GROUP_NAME_MAX_LEN } from "@/lib/part-groups-shared";
+import {
+  PART_GROUP_NAME_MAX_LEN,
+  partGroupFilterQueryValue,
+} from "@/lib/part-groups-shared";
+
+export type PartGroupAssignItem = { id: number; name: string };
 
 type GroupState = { id: number; name: string; member: boolean };
 
 type Props = {
   partNum: string;
-  /** 初始已加入的分组 id（SSR 传入，避免首屏闪烁） */
-  initialGroupIds?: readonly number[];
+  /** 初始已加入的分组（含名称，SSR 传入） */
+  initialGroups?: readonly PartGroupAssignItem[];
   className?: string;
 };
 
-/** 零件详情用：文字入口打开复选弹层（列表归组请用拖拽） */
+function groupCatalogHref(groupId: number): string {
+  const u = new URLSearchParams();
+  u.set("by", "group");
+  u.set("group", partGroupFilterQueryValue(groupId));
+  return `/parts?${u.toString()}`;
+}
+
+/** 零件详情用：分组信息行（名称+删除）与加号弹层 */
 export function PartGroupAssign({
   partNum,
-  initialGroupIds = [],
+  initialGroups = [],
   className = "",
 }: Props) {
   const router = useRouter();
@@ -30,13 +43,13 @@ export function PartGroupAssign({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [groups, setGroups] = useState<GroupState[]>(() =>
-    initialGroupIds.map((id) => ({ id, name: "", member: true }))
+    initialGroups.map((g) => ({ id: g.id, name: g.name, member: true }))
   );
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const memberCount = groups.filter((g) => g.member).length;
-  const hasMembership = memberCount > 0 || initialGroupIds.length > 0;
+
+  const memberGroups = groups.filter((g) => g.member && g.name);
 
   useEffect(() => {
     if (!open) return;
@@ -69,25 +82,24 @@ export function PartGroupAssign({
     };
   }, [open, loaded, partNum]);
 
-  const initialKey = [...initialGroupIds].sort((a, b) => a - b).join(",");
   useEffect(() => {
     setLoaded(false);
     setOpen(false);
     setGroups(
-      initialKey
-        ? initialKey.split(",").map((id) => ({
-            id: Number(id),
-            name: "",
-            member: true,
-          }))
-        : []
+      initialGroups.map((g) => ({ id: g.id, name: g.name, member: true }))
     );
-  }, [partNum, initialKey]);
+  }, [partNum, initialGroups]);
 
-  const toggleMember = (groupId: number, next: boolean) => {
-    setGroups((prev) =>
-      prev.map((g) => (g.id === groupId ? { ...g, member: next } : g))
-    );
+  const setMembership = (groupId: number, next: boolean) => {
+    setGroups((prev) => {
+      const exists = prev.some((g) => g.id === groupId);
+      if (!exists) {
+        return next
+          ? [...prev, { id: groupId, name: "", member: true }]
+          : prev;
+      }
+      return prev.map((g) => (g.id === groupId ? { ...g, member: next } : g));
+    });
     setError(null);
     startTransition(async () => {
       const res = await setPartGroupMembershipAction({
@@ -138,24 +150,51 @@ export function PartGroupAssign({
 
   return (
     <div ref={rootRef} className={`relative ${className}`.trim()}>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        disabled={pending && !open}
-        className="text-xs text-[var(--accent)] underline-offset-2 hover:underline disabled:opacity-50"
-        onClick={() => setOpen((v) => !v)}
-      >
-        {hasMembership
-          ? `编辑分组${memberCount > 0 ? ` (${memberCount})` : ""}`
-          : "编辑分组"}
-      </button>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
+        <span className="shrink-0 text-[var(--text)]">分组：</span>
+        {memberGroups.map((g) => (
+          <span
+            key={g.id}
+            className="badge inline-flex max-w-full items-center gap-0.5 py-0.5 pl-1.5 pr-0.5 text-xs"
+          >
+            <Link
+              href={groupCatalogHref(g.id)}
+              className="min-w-0 truncate no-underline hover:text-[var(--accent)]"
+              title={`查看分组「${g.name}」`}
+            >
+              {g.name}
+            </Link>
+            <button
+              type="button"
+              disabled={pending}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] disabled:opacity-50"
+              aria-label={`移出分组「${g.name}」`}
+              title="移出分组"
+              onClick={() => setMembership(g.id, false)}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label="加入分组"
+          title="加入分组"
+          disabled={pending && !open}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--border)] text-base leading-none text-[var(--accent)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+          onClick={() => setOpen((v) => !v)}
+        >
+          +
+        </button>
+      </div>
 
       {open ? (
         <div
           role="dialog"
-          aria-label="编辑自定义分组归属"
-          className="absolute right-0 z-30 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 shadow-lg"
+          aria-label="加入自定义分组"
+          className="absolute left-0 right-0 z-30 mt-1 w-full min-w-[14rem] max-w-xs rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2 shadow-lg sm:left-auto sm:right-0 sm:w-56"
         >
           {!loaded && pending ? (
             <p className="px-1 py-2 text-xs text-[var(--muted)]">加载中…</p>
@@ -172,7 +211,7 @@ export function PartGroupAssign({
                       type="checkbox"
                       checked={g.member}
                       disabled={pending || !g.name}
-                      onChange={(e) => toggleMember(g.id, e.target.checked)}
+                      onChange={(e) => setMembership(g.id, e.target.checked)}
                       className="accent-[var(--accent)]"
                     />
                     <span className="min-w-0 truncate">
