@@ -1,6 +1,7 @@
 import { asc } from "drizzle-orm";
 
 import { getCatalogDb } from "@/db/client";
+import { formatCatalogBilingualColorLabel } from "@/lib/color-zh-names";
 import { colorDomId } from "@/lib/dom-anchors";
 import { colors } from "@/db/schema";
 
@@ -47,7 +48,9 @@ export default async function ColorsPage() {
                     style={{ background: `#${c.rgb}` }}
                   />
                 </td>
-                <td className="px-2 py-1.5">{c.name}</td>
+                <td className="px-2 py-1.5">
+                  {formatCatalogBilingualColorLabel(c.id, c.name)}
+                </td>
                 <td className="px-2 py-1.5 font-mono text-[var(--muted)]">
                   #{c.rgb}
                 </td>

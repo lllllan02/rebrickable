@@ -14,6 +14,7 @@ import {
 import { PurchaseColorQtyInput } from "@/app/parts/purchase/purchase-color-qty-input";
 import { PurchaseListAddToggle } from "@/app/parts/purchase/purchase-list-add-toggle";
 import { getCatalogDb } from "@/db/client";
+import { formatCatalogBilingualColorLabel } from "@/lib/color-zh-names";
 import { elementDomId } from "@/lib/dom-anchors";
 import { isPartFavorite } from "@/lib/load-favorite-parts";
 import {
@@ -447,7 +448,9 @@ export default async function PartDetailPage({ params }: Props) {
                     title={g.rgb}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium">{g.colorName}</div>
+                    <div className="font-medium">
+                      {formatCatalogBilingualColorLabel(g.colorId, g.colorName)}
+                    </div>
                     <div className="mt-0.5 font-mono text-xs text-[var(--muted)]">
                       color {g.colorId}
                       {g.designIds.length > 0

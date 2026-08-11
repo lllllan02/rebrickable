@@ -2,6 +2,7 @@
 
 import { PartsDraggableGrid } from "@/app/parts/parts-draggable-grid";
 import { PartGridTileLink } from "@/components/part-grid-tile-link";
+import { formatCatalogBilingualColorLabel } from "@/lib/color-zh-names";
 import { elementDomId } from "@/lib/dom-anchors";
 import type {
   PurchaseElementPageRow,
@@ -100,23 +101,28 @@ export function PurchaseListTiles({
   return (
     <ul className="tiles-grid" role="list">
       {elementRows.map((r) => {
-        const label = r.elementId ?? `${r.partNum}/${r.colorId}`;
+        const colorLabel = formatCatalogBilingualColorLabel(
+          r.colorId,
+          r.colorName
+        );
         const href = r.elementId
           ? `/parts/${encodeURIComponent(r.partNum)}#${elementDomId(r.elementId)}`
           : `/parts/${encodeURIComponent(r.partNum)}`;
         const title = [
-          label,
-          r.colorName,
           r.partNum,
+          colorLabel,
           r.partName,
           `${r.quantity} 粒`,
-        ].join(" · ");
+          r.elementId,
+        ]
+          .filter(Boolean)
+          .join(" · ");
         return (
           <li key={r.id} className="relative min-w-0">
             <PartGridTileLink
               href={href}
               titleAttr={title}
-              partNum={label}
+              partNum={r.partNum}
               thumbUrl={r.thumbUrl}
               isPrinted={r.isPrinted}
               topRight={<QtyBadge qty={r.quantity} />}
@@ -127,7 +133,7 @@ export function PurchaseListTiles({
                   style={{ background: `#${r.rgb}` }}
                   aria-hidden
                 />
-                {r.colorName}
+                {colorLabel}
               </p>
             </PartGridTileLink>
             <label
